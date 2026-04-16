@@ -1,0 +1,137 @@
+// This file defines one objects that travels trhough all 6 onboarding screens
+
+enum Gender { male, female, nonBinary }
+enum FitnessGoal { muscleGain, weightLoss, endurance, flexibility}
+enum ExperienceLevel { beginner, intermediate, advanced }
+enum EquipmentType { gym, homeWithEquipment, noEquipment }
+enum BodyRegion {
+  head,
+  neck,
+  leftShoulder,
+  rightShoulder,
+  chest,
+  upperBack,
+  leftArm,
+  rightArm,
+  core,
+  lowerBack,
+  leftHip,
+  rightHip,
+  leftKnee,
+  rightKnee,
+  leftAnkle,
+  rightAnkle,
+}
+
+// Each injury has a body region + specific label and optional description
+class InjuryEntry {
+  final BodyRegion region;
+  final String label;     
+  final bool isCustom;     // true if user typed it themselves
+
+  const InjuryEntry({
+    required this.region,
+    required this.label,
+    this.isCustom = false,
+  });
+}
+
+// The main data object, one instance created at splash, pass through all steps
+class OnboardingData {
+  // Step 1: Personal Bio
+  String? name;
+  Gender? gender;
+  int? age;
+  double? heightCm;
+  double? weightKg;
+  bool isMetric; // Track which measuring system user prefers
+
+  // Step 2: Fitness Goals
+  FitnessGoal? fitnessGoal;
+
+  // Step 3: Experience
+  ExperienceLevel? experienceLevel;
+
+  // Step 4: Workout Preferences
+  Set<int> workoutDays;
+
+  // Step 5: Environment
+  Set<EquipmentType> equipment;
+
+  // Step 6: Injuries
+  List<InjuryEntry> injuries;
+
+  OnboardingData({
+    this.name,
+    this.gender,
+    this.age,
+    this.heightCm,
+    this.weightKg,
+    this.isMetric = true,   // default to metric
+    this.fitnessGoal,
+    this.experienceLevel,
+    Set<int>? workoutDays,
+    Set<EquipmentType>? equipment,
+    List<InjuryEntry>? injuries,
+  })  : workoutDays = workoutDays ?? {},
+        equipment = equipment ?? {},
+        injuries = injuries ?? [];
+
+  // Height conversion
+  double? get heightInFeet =>
+      heightCm != null ? heightCm! / 30.48 : null;
+
+  double? get heightInInches =>
+      heightCm != null ? (heightCm! / 2.54) % 12 : null;
+
+  void setHeightFromImperial(int feet, double inches) {
+    heightCm = (feet * 30.48) + (inches * 2.54);
+  }
+
+  // Weight conversion
+  double? get weightInLbs =>
+      weightKg != null ? weightKg! * 2.20462 : null;
+
+  void setWeightFromLbs(double lbs) {
+    weightKg = lbs / 2.20462;
+  }
+
+  // Step validation
+  bool get isStep1Valid =>
+      name != null &&
+      name!.trim().isNotEmpty &&
+      gender != null &&
+      age != null &&
+      heightCm != null &&
+      weightKg != null;
+
+  bool get isStep2Valid => fitnessGoal != null;
+
+  bool get isStep3Valid => experienceLevel != null;
+
+  bool get isStep4Valid => workoutDays.isNotEmpty;
+
+  bool get isStep5Valid => equipment.isNotEmpty;
+
+  // Step 6 (injuries) is optional
+  bool get isStep6Valid => true;
+
+  // Debug helper
+  @override
+  String toString() {
+    return '''
+OnboardingData:
+  name: $name
+  gender: $gender
+  age: $age
+  heightCm: $heightCm
+  weightKg: $weightKg
+  isMetric: $isMetric
+  fitnessGoal: $fitnessGoal
+  experienceLevel: $experienceLevel
+  workoutDays: $workoutDays
+  equipment: $equipment
+  injuries: ${injuries.map((i) => i.label).toList()}
+''';
+  }
+}
