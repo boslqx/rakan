@@ -45,13 +45,10 @@ class SplashScreen extends StatelessWidget {
                 ),
                 child: Center(
                   // Placeholder for logo
-                  child: Text(
-                    'R',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 72,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
+                  child: Image.asset(
+                    'assets/images/Rakan_Logo.png',
+                    width: 100,
+                    height: 100,
                   ),
                 ),
               ),
