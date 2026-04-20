@@ -1,0 +1,25 @@
+import 'package:flutter/material.dart';
+import '../../models/onboarding_data.dart';
+
+class Step5Environment extends StatelessWidget {
+  final OnboardingData data;
+  final VoidCallback onNext;
+  const Step5Environment({super.key, required this.data, required this.onNext});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Spacer(),
+          ElevatedButton(
+            onPressed: onNext,
+            child: const Text('CONTINUE >'),
+          ),
+        ],
+      ),
+    );
+  }
+}
