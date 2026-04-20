@@ -22,6 +22,20 @@ enum BodyRegion {
   leftAnkle,
   rightAnkle,
 }
+enum ActivityLevel {
+  sedentary,        
+  lightlyActive,   
+  moderatelyActive, 
+  veryActive,       
+  athlete, 
+}        
+
+enum SessionDuration {
+  thirtyMin,        
+  fortyFiveMin,    
+  sixtyMin,        
+  ninetyPlusMin,   
+}
 
 // Each injury has a body region + specific label and optional description
 class InjuryEntry {
@@ -45,6 +59,7 @@ class OnboardingData {
   double? heightCm;
   double? weightKg;
   bool isMetric; // Track which measuring system user prefers
+  ActivityLevel? activityLevel;
 
   // Step 2: Fitness Goals
   FitnessGoal? fitnessGoal;
@@ -54,6 +69,7 @@ class OnboardingData {
 
   // Step 4: Workout Preferences
   Set<int> workoutDays;
+  SessionDuration? sessionDuration;
 
   // Step 5: Environment
   Set<EquipmentType> equipment;
@@ -70,6 +86,8 @@ class OnboardingData {
     this.isMetric = true,   // default to metric
     this.fitnessGoal,
     this.experienceLevel,
+    this.activityLevel,
+    this.sessionDuration,
     Set<int>? workoutDays,
     Set<EquipmentType>? equipment,
     List<InjuryEntry>? injuries,
@@ -103,13 +121,16 @@ class OnboardingData {
       gender != null &&
       age != null &&
       heightCm != null &&
-      weightKg != null;
+      weightKg != null &&
+      activityLevel != null;
 
   bool get isStep2Valid => fitnessGoal != null;
 
   bool get isStep3Valid => experienceLevel != null;
 
-  bool get isStep4Valid => workoutDays.isNotEmpty;
+  bool get isStep4Valid =>
+    workoutDays.isNotEmpty &&
+    sessionDuration != null; 
 
   bool get isStep5Valid => equipment.isNotEmpty;
 
@@ -131,6 +152,8 @@ OnboardingData:
   experienceLevel: $experienceLevel
   workoutDays: $workoutDays
   equipment: $equipment
+  activityLevel: $activityLevel
+  sessionDuration: $sessionDuration
   injuries: ${injuries.map((i) => i.label).toList()}
 ''';
   }

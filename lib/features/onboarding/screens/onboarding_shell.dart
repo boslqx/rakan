@@ -135,7 +135,7 @@ class _OnboardingShellState extends State<OnboardingShell> {
 
                   // App name
                   Text(
-                    'RAKAN AI',
+                    'RAKAN',
                     style: GoogleFonts.spaceGrotesk(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
