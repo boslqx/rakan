@@ -3,7 +3,17 @@
 enum Gender { male, female, nonBinary }
 enum FitnessGoal { muscleGain, weightLoss, endurance, flexibility}
 enum ExperienceLevel { beginner, intermediate, advanced }
-enum EquipmentType { gym, homeWithEquipment, noEquipment }
+enum EquipmentType {
+  fullGym,       
+  barbell,        
+  dumbbell,       
+  kettlebell,    
+  resistanceBand, 
+  pullUpBar,     
+  bench,          
+  machines,       
+  noEquipment,    
+}
 enum BodyRegion {
   head,
   neck,

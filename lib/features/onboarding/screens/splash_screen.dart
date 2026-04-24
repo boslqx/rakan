@@ -46,9 +46,9 @@ class SplashScreen extends StatelessWidget {
                 child: Center(
                   // Placeholder for logo
                   child: Image.asset(
-                    'assets/images/Rakan_Logo.png',
-                    width: 100,
-                    height: 100,
+                    'assets/images/transparent_bg.png',
+                    width: 200,
+                    height: 200,
                   ),
                 ),
               ),
@@ -129,17 +129,7 @@ class SplashScreen extends StatelessWidget {
                       color: AppColors.outlineVariant,
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      'NEURAL EVOLUTION',
-                      style: GoogleFonts.manrope(
-                        fontSize: 10,
-                        letterSpacing: 3,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
+                  
                   Expanded(
                     child: Container(
                       height: 1,
