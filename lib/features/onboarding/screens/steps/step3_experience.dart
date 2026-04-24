@@ -119,19 +119,6 @@ class _Step3ExperienceState extends State<Step3Experience> {
             ),
           ),
 
-          // AI initialising label ─────────────────────────────────────
-          const SizedBox(height: 16),
-          Center(
-            child: Text(
-              'PRECISION AI TRAINING ALGORITHM INITIALISING...',
-              style: GoogleFonts.manrope(
-                fontSize: 10,
-                letterSpacing: 1.5,
-                color: AppColors.onSurfaceVariant.withOpacity(0.4),
-              ),
-            ),
-          ),
-
           const SizedBox(height: 16),
         ],
       ),
