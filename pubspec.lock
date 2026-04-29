@@ -102,6 +102,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_body_heatmap:
+    dependency: "direct main"
+    description:
+      name: flutter_body_heatmap
+      sha256: fab77295cee4a9f65967e825957be7dac116598f11e263e4d4d1ba4bbaf65d94
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
   flutter_lints:
     dependency: "direct dev"
     description:
