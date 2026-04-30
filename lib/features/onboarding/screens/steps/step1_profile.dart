@@ -464,41 +464,105 @@ class _AgeSelectorState extends State<_AgeSelector> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 80,
+      height: 160,           // taller so 3 items are clearly visible
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: ListWheelScrollView.useDelegate(
-        controller: _controller,
-        itemExtent: 48,
-        perspective: 0.003,
-        diameterRatio: 2.5,
-        physics: const FixedExtentScrollPhysics(),
-        onSelectedItemChanged: (index) {
-          widget.onChanged(index + _minAge);
-        },
-        childDelegate: ListWheelChildBuilderDelegate(
-          builder: (context, index) {
-            final age = index + _minAge;
-            final isSelected = age == widget.selectedAge;
-            return Center(
-              child: Text(
-                '$age',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: isSelected ? 32 : 18,
-                  fontWeight: isSelected
-                      ? FontWeight.w700
-                      : FontWeight.w400,
-                  color: isSelected
-                      ? AppColors.onSurface
-                      : AppColors.onSurfaceVariant.withOpacity(0.4),
+      child: Stack(
+        children: [
+          // The scroll wheel
+          ListWheelScrollView.useDelegate(
+            controller: _controller,
+            itemExtent: 52,
+            perspective: 0.003,
+            diameterRatio: 1.8,   // tighter = more curve effect
+            physics: const FixedExtentScrollPhysics(),
+            onSelectedItemChanged: (index) {
+              widget.onChanged(index + _minAge);
+            },
+            childDelegate: ListWheelChildBuilderDelegate(
+              builder: (context, index) {
+                final age = index + _minAge;
+                final isSelected = age == widget.selectedAge;
+                return Center(
+                  child: Text(
+                    '$age',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: isSelected ? 36 : 22,
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                      color: isSelected
+                          ? AppColors.onSurface
+                          : AppColors.onSurfaceVariant.withOpacity(0.35),
+                    ),
+                  ),
+                );
+              },
+              childCount: _maxAge - _minAge + 1,
+            ),
+          ),
+
+          // Top fade — fades out items above selected
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 52,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.surfaceContainerLowest,
+                    AppColors.surfaceContainerLowest.withOpacity(0),
+                  ],
                 ),
               ),
-            );
-          },
-          childCount: _maxAge - _minAge + 1,
-        ),
+            ),
+          ),
+
+          // Bottom fade — fades out items below selected
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 52,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    AppColors.surfaceContainerLowest,
+                    AppColors.surfaceContainerLowest.withOpacity(0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Center highlight line — shows exactly where selected item is
+          Center(
+            child: Container(
+              height: 52,
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: AppColors.primary.withOpacity(0.3),
+                    width: 1,
+                  ),
+                  bottom: BorderSide(
+                    color: AppColors.primary.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
