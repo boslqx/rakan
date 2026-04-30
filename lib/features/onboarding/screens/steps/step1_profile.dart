@@ -443,6 +443,7 @@ class _AgeSelector extends StatefulWidget {
 
 class _AgeSelectorState extends State<_AgeSelector> {
   late FixedExtentScrollController _controller;
+  late int _currentAge;  // ← track locally
 
   static const int _minAge = 13;
   static const int _maxAge = 80;
@@ -450,8 +451,9 @@ class _AgeSelectorState extends State<_AgeSelector> {
   @override
   void initState() {
     super.initState();
+    _currentAge = widget.selectedAge;
     _controller = FixedExtentScrollController(
-      initialItem: widget.selectedAge - _minAge,
+      initialItem: _currentAge - _minAge,
     );
   }
 
@@ -464,7 +466,7 @@ class _AgeSelectorState extends State<_AgeSelector> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 160,           // taller so 3 items are clearly visible
+      height: 160,
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
@@ -476,15 +478,18 @@ class _AgeSelectorState extends State<_AgeSelector> {
             controller: _controller,
             itemExtent: 52,
             perspective: 0.003,
-            diameterRatio: 1.8,   // tighter = more curve effect
+            diameterRatio: 1.8,
             physics: const FixedExtentScrollPhysics(),
             onSelectedItemChanged: (index) {
-              widget.onChanged(index + _minAge);
+              setState(() {
+                _currentAge = index + _minAge;  // ← update local state
+              });
+              widget.onChanged(_currentAge);    // ← notify parent
             },
             childDelegate: ListWheelChildBuilderDelegate(
               builder: (context, index) {
                 final age = index + _minAge;
-                final isSelected = age == widget.selectedAge;
+                final isSelected = age == _currentAge;  // ← use local state
                 return Center(
                   child: Text(
                     '$age',
@@ -504,59 +509,65 @@ class _AgeSelectorState extends State<_AgeSelector> {
             ),
           ),
 
-          // Top fade — fades out items above selected
+          // Top fade
           Positioned(
             top: 0,
             left: 0,
             right: 0,
             height: 52,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.surfaceContainerLowest,
-                    AppColors.surfaceContainerLowest.withOpacity(0),
-                  ],
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.surfaceContainerLowest,
+                      AppColors.surfaceContainerLowest.withOpacity(0),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
 
-          // Bottom fade — fades out items below selected
+          // Bottom fade
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
             height: 52,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    AppColors.surfaceContainerLowest,
-                    AppColors.surfaceContainerLowest.withOpacity(0),
-                  ],
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      AppColors.surfaceContainerLowest,
+                      AppColors.surfaceContainerLowest.withOpacity(0),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
 
-          // Center highlight line — shows exactly where selected item is
-          Center(
-            child: Container(
-              height: 52,
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: AppColors.primary.withOpacity(0.3),
-                    width: 1,
-                  ),
-                  bottom: BorderSide(
-                    color: AppColors.primary.withOpacity(0.3),
-                    width: 1,
+          // Center highlight lines
+          IgnorePointer(
+            child: Center(
+              child: Container(
+                height: 52,
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: AppColors.primary.withOpacity(0.3),
+                      width: 1,
+                    ),
+                    bottom: BorderSide(
+                      color: AppColors.primary.withOpacity(0.3),
+                      width: 1,
+                    ),
                   ),
                 ),
               ),
