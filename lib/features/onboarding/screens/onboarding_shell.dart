@@ -8,6 +8,7 @@ import 'steps/step3_experience.dart';
 import 'steps/step4_preference.dart';
 import 'steps/step5_environment.dart';
 import 'steps/step6_safety.dart';
+import 'plan_generation_screen.dart';
 
 class OnboardingShell extends StatefulWidget {
   const OnboardingShell({super.key});
@@ -57,18 +58,17 @@ class _OnboardingShellState extends State<OnboardingShell> {
 
   // Called when user taps FINISH ONBOARDING
   void _finishOnboarding() {
-    // Debug: print collected data to console
-    // You'll see this in your VSCode terminal
     debugPrint(_data.toString());
 
-    // TO BE CONTINUED
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Onboarding complete! Data collected.',
-          style: GoogleFonts.manrope(),
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, animation, __) => PlanGenerationScreen(
+          data: _data,
         ),
-        backgroundColor: AppColors.surfaceContainerHigh,
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 500),
       ),
     );
   }
