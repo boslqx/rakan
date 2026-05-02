@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../models/onboarding_data.dart';
+import 'plan_generation_screen.dart';
 import 'steps/step1_profile.dart';
 import 'steps/step2_goal.dart';
 import 'steps/step3_experience.dart';
 import 'steps/step4_preference.dart';
 import 'steps/step5_environment.dart';
-import 'steps/step6_safety.dart';
-import 'plan_generation_screen.dart';
+import 'steps/step6_motivation.dart';
+import 'steps/step7_focus_areas.dart';
+import 'steps/step8_safety.dart';
 
 class OnboardingShell extends StatefulWidget {
   const OnboardingShell({super.key});
@@ -18,26 +20,21 @@ class OnboardingShell extends StatefulWidget {
 }
 
 class _OnboardingShellState extends State<OnboardingShell> {
-  // The single OnboardingData object here passed to each step
   final OnboardingData _data = OnboardingData();
-
-  // Steps that we are currently on
   int _currentStep = 0;
+  static const int _totalSteps = 8;
 
-  // Total number of steps
-  static const int _totalSteps = 6;
-
-  // Step titles shown on the progress header
   static const List<String> _stepTitles = [
     'Personal Profile',
     'Primary Focus',
     'Workout Experience',
     'Workout Preference',
     'Training Resources',
+    'Your Motivation',
+    'Focus Areas',
     'Safety Profile',
   ];
 
-  // Move to next step
   void _nextStep() {
     if (_currentStep < _totalSteps - 1) {
       setState(() => _currentStep++);
@@ -46,34 +43,26 @@ class _OnboardingShellState extends State<OnboardingShell> {
     }
   }
 
-  // Move to previous step
   void _previousStep() {
     if (_currentStep > 0) {
       setState(() => _currentStep--);
     } else {
-      // On step 0, back goes to splash
       Navigator.of(context).pop();
     }
   }
 
-  // Called when user taps FINISH ONBOARDING
   void _finishOnboarding() {
     debugPrint(_data.toString());
-
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (_, animation, __) => PlanGenerationScreen(
-          data: _data,
-        ),
-        transitionsBuilder: (_, animation, __, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
+        pageBuilder: (_, animation, __) => PlanGenerationScreen(data: _data),
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 500),
       ),
     );
   }
 
-  // Returns the correct step widget for the current step index
   Widget _buildCurrentStep() {
     switch (_currentStep) {
       case 0:
@@ -87,7 +76,11 @@ class _OnboardingShellState extends State<OnboardingShell> {
       case 4:
         return Step5Environment(data: _data, onNext: _nextStep);
       case 5:
-        return Step6Safety(data: _data, onNext: _nextStep);
+        return Step6Motivation(data: _data, onNext: _nextStep);
+      case 6:
+        return Step7FocusAreas(data: _data, onNext: _nextStep);
+      case 7:
+        return Step8Safety(data: _data, onNext: _nextStep);
       default:
         return const SizedBox.shrink();
     }
@@ -95,10 +88,7 @@ class _OnboardingShellState extends State<OnboardingShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Progress as a value between 0.0 and 1.0
     final double progress = (_currentStep + 1) / _totalSteps;
-
-    // Percentage string shown on the right
     final String progressLabel = _currentStep == _totalSteps - 1
         ? '100% COMPLETE'
         : '${((_currentStep + 1) / _totalSteps * 100).round()}%';
@@ -113,7 +103,6 @@ class _OnboardingShellState extends State<OnboardingShell> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Row(
                 children: [
-                  // Back button
                   GestureDetector(
                     onTap: _previousStep,
                     child: Container(
@@ -130,12 +119,9 @@ class _OnboardingShellState extends State<OnboardingShell> {
                       ),
                     ),
                   ),
-
                   const Spacer(),
-
-                  // App name
                   Text(
-                    'RAKAN',
+                    'RAKAN AI',
                     style: GoogleFonts.spaceGrotesk(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -143,22 +129,18 @@ class _OnboardingShellState extends State<OnboardingShell> {
                       color: AppColors.onSurfaceVariant,
                     ),
                   ),
-
                   const Spacer(),
-
-                  // Spacer to balance the back button
                   const SizedBox(width: 40),
                 ],
               ),
             ),
 
-            // Progress section
+            // Progress
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Step label + percentage
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -181,29 +163,19 @@ class _OnboardingShellState extends State<OnboardingShell> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 8),
-
-                  // Progress bar
                   ClipRRect(
                     borderRadius: BorderRadius.circular(4),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeInOut,
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        backgroundColor: AppColors.surfaceContainerHigh,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          AppColors.primary,
-                        ),
-                        minHeight: 3,
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: AppColors.surfaceContainerHigh,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppColors.primary,
                       ),
+                      minHeight: 3,
                     ),
                   ),
-
                   const SizedBox(height: 4),
-
-                  // Step title
                   Text(
                     _stepTitles[_currentStep],
                     style: GoogleFonts.spaceGrotesk(
@@ -216,24 +188,17 @@ class _OnboardingShellState extends State<OnboardingShell> {
               ),
             ),
 
-            // Expanded makes the step fill all remaining space
+            // Step content
             Expanded(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
-                transitionBuilder: (child, animation) {
-                  // Slide + fade transition between steps
-                  return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0.05, 0),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: FadeTransition(
-                      opacity: animation,
-                      child: child,
-                    ),
-                  );
-                },
-                // Key tells AnimatedSwitcher that the child changed
+                transitionBuilder: (child, animation) => SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0.05, 0),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: FadeTransition(opacity: animation, child: child),
+                ),
                 child: KeyedSubtree(
                   key: ValueKey(_currentStep),
                   child: _buildCurrentStep(),
