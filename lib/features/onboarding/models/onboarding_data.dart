@@ -47,6 +47,26 @@ enum SessionDuration {
   ninetyPlusMin,   
 }
 
+enum Motivation {
+  lookBetter,
+  buildStrength,
+  improveHealth,
+  boostEnergy,
+  reduceStress,
+  athleticPerformance,
+}
+
+enum FocusArea {
+  chest,
+  back,
+  arms,
+  shoulders,
+  abs,
+  legs,
+  glutes,
+  fullBody,
+}
+
 // Each injury has a body region + specific label and optional description
 class InjuryEntry {
   final BodyRegion region;
@@ -83,8 +103,14 @@ class OnboardingData {
 
   // Step 5: Environment
   Set<EquipmentType> equipment;
+  
+  // Step 6: Motivation
+  Motivation? motivation;
 
-  // Step 6: Injuries
+  // Step 7: Focus Areas
+  Set<FocusArea> focusAreas;
+
+  // Step 8: Injuries
   List<InjuryEntry> injuries;
 
   OnboardingData({
@@ -98,12 +124,16 @@ class OnboardingData {
     this.experienceLevel,
     this.activityLevel,
     this.sessionDuration,
+    this.motivation,
     Set<int>? workoutDays,
     Set<EquipmentType>? equipment,
     List<InjuryEntry>? injuries,
+    Set<FocusArea>? focusAreas,
   })  : workoutDays = workoutDays ?? {},
         equipment = equipment ?? {},
-        injuries = injuries ?? [];
+        injuries = injuries ?? [],
+        focusAreas = focusAreas ?? {};
+      
 
   // Height conversion
   double? get heightInFeet =>
@@ -144,8 +174,11 @@ class OnboardingData {
 
   bool get isStep5Valid => equipment.isNotEmpty;
 
-  // Step 6 (injuries) is optional
-  bool get isStep6Valid => true;
+  bool get isStep6Valid => motivation != null;
+  bool get isStep7Valid => focusAreas.isNotEmpty;
+
+  // Step 8 valid always true
+  bool get isStep8Valid => true;
 
   // Debug helper
   @override
@@ -164,6 +197,8 @@ OnboardingData:
   equipment: $equipment
   activityLevel: $activityLevel
   sessionDuration: $sessionDuration
+  motivation: $motivation
+  focusAreas: $focusAreas
   injuries: ${injuries.map((i) => i.label).toList()}
 ''';
   }
