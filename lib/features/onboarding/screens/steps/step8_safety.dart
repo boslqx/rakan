@@ -40,12 +40,12 @@ class _Step8SafetyState extends State<Step8Safety> {
     {'region': BodyRegion.neck, 'x': 0.50, 'y': 0.145},
     {'region': BodyRegion.leftShoulder, 'x': 0.41, 'y': 0.195},
     {'region': BodyRegion.rightShoulder, 'x': 0.59, 'y': 0.195},
-    {'region': BodyRegion.upperBack, 'x': 0.50, 'y': 0.245},
+    {'region': BodyRegion.upperBack, 'x': 0.50, 'y': 0.235},
     {'region': BodyRegion.leftArm, 'x': 0.37, 'y': 0.360},
     {'region': BodyRegion.rightArm, 'x': 0.63, 'y': 0.360},
-    {'region': BodyRegion.lowerBack, 'x': 0.50, 'y': 0.340},
-    {'region': BodyRegion.leftHip, 'x': 0.45, 'y': 0.478},
-    {'region': BodyRegion.rightHip, 'x': 0.55, 'y': 0.478},
+    {'region': BodyRegion.lowerBack, 'x': 0.50, 'y': 0.320},
+    {'region': BodyRegion.leftHip, 'x': 0.46, 'y': 0.415},
+    {'region': BodyRegion.rightHip, 'x': 0.54, 'y': 0.415},
     {'region': BodyRegion.leftKnee, 'x': 0.45, 'y': 0.550},
     {'region': BodyRegion.rightKnee, 'x': 0.55, 'y': 0.550},
     {'region': BodyRegion.leftAnkle, 'x': 0.45, 'y': 0.740},
@@ -407,6 +407,7 @@ class _Step8SafetyState extends State<Step8Safety> {
                       width: mapWidth,
                       height: mapHeight,
                       child: Stack(
+                        key: ValueKey(_showFront),
                         children: dots.map((dot) {
                           final region = dot['region'] as BodyRegion;
                           final isInjured =
