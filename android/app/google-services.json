@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "566388150386",
+    "project_id": "rakan-10680",
+    "storage_bucket": "rakan-10680.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:566388150386:android:8dcd71001c4eb198ed32eb",
+        "android_client_info": {
+          "package_name": "com.example.rakan"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "566388150386-grle8d81gmkh4roju1vqnlhhj7urodbm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAm959cO5eMAfzJNmt9TOcv7BJt9rlBPD4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "566388150386-grle8d81gmkh4roju1vqnlhhj7urodbm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
