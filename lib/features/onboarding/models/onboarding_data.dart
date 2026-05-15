@@ -202,4 +202,30 @@ OnboardingData:
   injuries: ${injuries.map((i) => i.label).toList()}
 ''';
   }
+
+  // Converts OnboardingData to a plain Map for Firestore storage
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'gender': gender?.name,               
+      'age': age,
+      'heightCm': heightCm,
+      'weightKg': weightKg,
+      'isMetric': isMetric,
+      'activityLevel': activityLevel?.name, 
+      'fitnessGoal': fitnessGoal?.name,
+      'experienceLevel': experienceLevel?.name,
+      'workoutDays': workoutDays.toList(),  
+      'sessionDuration': sessionDuration?.name,
+      'equipment': equipment.map((e) => e.name).toList(), 
+      'motivation': motivation?.name,
+      'focusAreas': focusAreas.map((f) => f.name).toList(),
+      'injuries': injuries.map((i) => {                   
+        'region': i.region.name,
+        'label': i.label,
+        'isCustom': i.isCustom,
+      }).toList(),
+      'onboardingCompleted': true, 
+    };
+  }
 }

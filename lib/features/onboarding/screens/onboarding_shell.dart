@@ -11,6 +11,8 @@ import 'steps/step5_environment.dart';
 import 'steps/step6_motivation.dart';
 import 'steps/step7_focus_areas.dart';
 import 'steps/step8_safety.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/user_profile_service.dart';
 
 class OnboardingShell extends StatefulWidget {
   const OnboardingShell({super.key});
@@ -39,7 +41,7 @@ class _OnboardingShellState extends State<OnboardingShell> {
     if (_currentStep < _totalSteps - 1) {
       setState(() => _currentStep++);
     } else {
-      _finishOnboarding();
+      _finishOnboarding(); // no await needed here, fire and forget is fine
     }
   }
 
@@ -51,16 +53,42 @@ class _OnboardingShellState extends State<OnboardingShell> {
     }
   }
 
-  void _finishOnboarding() {
-    debugPrint(_data.toString());
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (_, animation, __) => PlanGenerationScreen(data: _data),
-        transitionsBuilder: (_, animation, __, child) =>
-            FadeTransition(opacity: animation, child: child),
-        transitionDuration: const Duration(milliseconds: 500),
-      ),
-    );
+  Future<void> _finishOnboarding() async {
+    // Get the currently logged-in user's uid
+    // This is safe to call here because the user must be
+    // authenticated before they can reach onboarding
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    if (uid == null) {
+      // Safety check: if somehow no user is logged in, don't crash
+      debugPrint('ERROR: No user logged in during onboarding finish');
+      return;
+    }
+
+    try {
+      // Save to Firestore before navigating
+      await UserProfileService().saveOnboardingProfile(
+        uid: uid,
+        data: _data,
+      );
+      debugPrint('✅ Onboarding data saved for user: $uid');
+    } catch (e) {
+      // Log the error but still navigate — don't block the user
+      debugPrint('❌ Failed to save onboarding data: $e');
+    }
+
+    // Navigate regardless of save success
+    // (we can retry saves later if needed)
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (_, animation, __) => PlanGenerationScreen(data: _data),
+          transitionsBuilder: (_, animation, __, child) =>
+              FadeTransition(opacity: animation, child: child),
+          transitionDuration: const Duration(milliseconds: 500),
+        ),
+      );
+    }
   }
 
   Widget _buildCurrentStep() {
