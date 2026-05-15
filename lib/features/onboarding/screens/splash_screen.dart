@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import 'onboarding_shell.dart';
+import '../../auth/screens/login_screen.dart';
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
@@ -130,7 +131,9 @@ class SplashScreen extends StatelessWidget {
                       ),
                       GestureDetector(
                         onTap: () {
-                          // TODO: navigate to login screen (Phase 3)
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const LoginScreen()),
+                          );
                         },
                         child: Text(
                           'LOG IN',
