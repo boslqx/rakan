@@ -41,7 +41,7 @@ class _OnboardingShellState extends State<OnboardingShell> {
     if (_currentStep < _totalSteps - 1) {
       setState(() => _currentStep++);
     } else {
-      _finishOnboarding(); // no await needed here, fire and forget is fine
+      _finishOnboarding(); // no await needed here, fire and forget
     }
   }
 
@@ -55,8 +55,6 @@ class _OnboardingShellState extends State<OnboardingShell> {
 
   Future<void> _finishOnboarding() async {
     // Get the currently logged-in user's uid
-    // This is safe to call here because the user must be
-    // authenticated before they can reach onboarding
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
     if (uid == null) {
@@ -73,12 +71,11 @@ class _OnboardingShellState extends State<OnboardingShell> {
       );
       debugPrint('✅ Onboarding data saved for user: $uid');
     } catch (e) {
-      // Log the error but still navigate — don't block the user
+      // Log the error but still navigate
       debugPrint('❌ Failed to save onboarding data: $e');
     }
 
     // Navigate regardless of save success
-    // (we can retry saves later if needed)
     if (mounted) {
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(

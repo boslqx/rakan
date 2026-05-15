@@ -4,6 +4,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../services/auth_service.dart';
 import '../../onboarding/screens/onboarding_shell.dart';
 import '../../../shared/widgets/main_shell.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../../features/onboarding/services/user_profile_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -73,14 +75,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       // New Google user → onboarding
       // Existing Google user → home
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const OnboardingShell()),
-        (_) => false,
-      );
+      await _routeAfterLogin();
     } catch (e) {
       _showError(e.toString());
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _routeAfterLogin() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final hasProfile = await UserProfileService().hasCompletedOnboarding(uid);
+    if (!mounted) return;
+
+    if (hasProfile) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainShell()),
+        (_) => false,
+      );
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const OnboardingShell()),
+        (_) => false,
+      );
     }
   }
 

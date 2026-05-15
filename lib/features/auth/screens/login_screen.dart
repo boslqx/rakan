@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_colors.dart';
 import '../services/auth_service.dart';
 import '../../../shared/widgets/main_shell.dart';
 import 'register_screen.dart';
@@ -207,9 +207,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: AppColors.onSurfaceVariant,
                     size: 20,
                   ),
-                  onPressed: () => setState(
-                    () => _obscurePassword = !_obscurePassword,
-                  ),
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
                 ),
               ),
 
@@ -242,8 +241,11 @@ class _LoginScreenState extends State<LoginScreen> {
               Row(
                 children: [
                   Expanded(
-                      child: Container(
-                          height: 1, color: AppColors.outlineVariant)),
+                    child: Container(
+                      height: 1,
+                      color: AppColors.outlineVariant,
+                    ),
+                  ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
@@ -256,8 +258,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   Expanded(
-                      child: Container(
-                          height: 1, color: AppColors.outlineVariant)),
+                    child: Container(
+                      height: 1,
+                      color: AppColors.outlineVariant,
+                    ),
+                  ),
                 ],
               ),
 
@@ -275,8 +280,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: BoxDecoration(
                           color: AppColors.surfaceContainerLow,
                           borderRadius: BorderRadius.circular(48),
-                          border:
-                              Border.all(color: AppColors.outlineVariant),
+                          border: Border.all(color: AppColors.outlineVariant),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -322,9 +326,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   GestureDetector(
                     onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const RegisterScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
                     ),
                     child: Text(
                       'Join Rakan AI',
@@ -356,20 +358,14 @@ class _LoginScreenState extends State<LoginScreen> {
     return Container(
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: AppColors.outlineVariant,
-            width: 1,
-          ),
+          bottom: BorderSide(color: AppColors.outlineVariant, width: 1),
         ),
       ),
       child: TextField(
         controller: controller,
         obscureText: obscure,
         keyboardType: inputType,
-        style: GoogleFonts.manrope(
-          fontSize: 16,
-          color: AppColors.onSurface,
-        ),
+        style: GoogleFonts.manrope(fontSize: 16, color: AppColors.onSurface),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: GoogleFonts.manrope(

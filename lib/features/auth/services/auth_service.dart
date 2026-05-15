@@ -49,6 +49,7 @@ class AuthService {
   Future<UserCredential?> signInWithGoogle() async {
     try {
       // Trigger the Google Sign In flow
+      await _googleSignIn.signOut();
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       // User cancelled the sign in
@@ -82,8 +83,7 @@ class AuthService {
 
   // Sign Out
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
-    await _auth.signOut();
+    await FirebaseAuth.instance.signOut();
   }
 
   // Error Handler

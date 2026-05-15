@@ -1,27 +1,72 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_colors.dart';
-import 'onboarding_shell.dart';
+import '../../../shared/widgets/main_shell.dart';
 import '../../auth/screens/login_screen.dart';
+import '../../auth/screens/register_screen.dart';
 
-class SplashScreen extends StatelessWidget {
+class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
   @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  bool _isCheckingAuth = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthAndRoute();
+  }
+
+  Future<void> _checkAuthAndRoute() async {
+    // Wait for Firebase to restore persisted session.
+    final user = await FirebaseAuth.instance.authStateChanges().first;
+
+    if (!mounted) return;
+
+    if (user == null) {
+      // Not logged in → show splash UI
+      setState(() => _isCheckingAuth = false);
+      return;
+    }
+
+    // Already logged in -> go straight home.
+    // New registrations still enter onboarding from RegisterScreen.
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => const MainShell()));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Show minimal spinner while checking auth
+    if (_isCheckingAuth) {
+      return Scaffold(
+        backgroundColor: AppColors.surfaceBright,
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: AppColors.primary,
+            strokeWidth: 1.5,
+          ),
+        ),
+      );
+    }
+
+    // Auth check done — no logged in user — show splash UI
     return Scaffold(
       backgroundColor: AppColors.surfaceBright,
       body: Stack(
         children: [
-          // ── Background image ─────────────────────────────────────────
           Positioned.fill(
             child: Image.asset(
               'assets/images/welcome_bg.jpg',
               fit: BoxFit.cover,
             ),
           ),
-
-          // ── Dark overlay — keeps text readable ───────────────────────
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -36,14 +81,11 @@ class SplashScreen extends StatelessWidget {
               ),
             ),
           ),
-
-          // ── Your existing content ─────────────────────────────────────
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 children: [
-                  // Top label
                   const SizedBox(height: 24),
                   Text(
                     'R A K A N',
@@ -54,8 +96,6 @@ class SplashScreen extends StatelessWidget {
                       color: AppColors.onSurfaceVariant,
                     ),
                   ),
-
-                  // Logo circle
                   const Spacer(),
                   Container(
                     width: 220,
@@ -79,8 +119,6 @@ class SplashScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
-                  // Headline 
                   const Spacer(),
                   Text(
                     'Start working\nout your way\nwith Rakan',
@@ -92,19 +130,11 @@ class SplashScreen extends StatelessWidget {
                       height: 1.15,
                     ),
                   ),
-
-                  // Buttons
                   const Spacer(),
-                  
-                  // Get Started button
                   ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const OnboardingShell(),
-                        ),
-                      );
-                    },
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                    ),
                     child: Text(
                       'Get Started',
                       style: GoogleFonts.spaceGrotesk(
@@ -114,10 +144,7 @@ class SplashScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 24),
-
-                  // Already a member row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -130,11 +157,11 @@ class SplashScreen extends StatelessWidget {
                         ),
                       ),
                       GestureDetector(
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const LoginScreen()),
-                          );
-                        },
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const LoginScreen(),
+                          ),
+                        ),
                         child: Text(
                           'LOG IN',
                           style: GoogleFonts.manrope(
@@ -147,10 +174,7 @@ class SplashScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 24),
-
-                  // Neural Evolution divider
                   Row(
                     children: [
                       Expanded(
@@ -167,7 +191,6 @@ class SplashScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 32),
                 ],
               ),
