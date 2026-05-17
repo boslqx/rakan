@@ -1,0 +1,6 @@
+# Never commit these
+serviceAccountKey.json
+.env
+venv/
+__pycache__/
+*.pyc
