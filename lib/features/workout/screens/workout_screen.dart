@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../services/workout_plan_service.dart';
+import 'workout_preview_screen.dart';
 
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
@@ -605,6 +606,27 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                     ),
                   );
                 },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => WorkoutPreviewScreen(day: day),
+                    ),
+                  );
+                },
+                child: Text(
+                  'START THIS WORKOUT →',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.5,
+                  ),
+                ),
               ),
             ),
           ],

@@ -3,6 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../onboarding/services/user_profile_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../workout/screens/workout_active_screen.dart';
+import '../../workout/services/workout_plan_service.dart';
+import '../../workout/screens/workout_preview_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -33,6 +37,95 @@ class _HomeScreenState extends State<HomeScreen> {
         _profile = profile;
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _startTodaysWorkout() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final todayNumber = DateTime.now().weekday;
+    debugPrint('TODAY WEEKDAY: $todayNumber'); 
+
+    final plan = await WorkoutPlanService().getActivePlan(uid);
+    if (plan == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No active plan found.',
+                style: GoogleFonts.manrope()),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    final days = (plan['days'] as List).cast<Map<String, dynamic>>();
+    final todayDay = days.firstWhere(
+      (d) => d['dayNumber'] == todayNumber,
+      orElse: () => {},
+    );
+
+    if (todayDay.isEmpty || todayDay['dayType'] == 'rest') {
+      if (mounted) {
+        showModalBottomSheet(
+          context: context,
+          backgroundColor: AppColors.surfaceContainerLow,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          builder: (_) => Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.primary.withOpacity(0.1),
+                  ),
+                  child: const Icon(Icons.bedtime_rounded,
+                      color: AppColors.primary, size: 32),
+                ),
+                const SizedBox(height: 20),
+                Text('Rest Day',
+                    style: GoogleFonts.spaceGrotesk(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface)),
+                const SizedBox(height: 8),
+                Text(
+                  'Today is your recovery day. Your muscles grow during rest — this is part of the plan.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.manrope(
+                      fontSize: 14,
+                      color: AppColors.onSurfaceVariant,
+                      height: 1.5),
+                ),
+                const SizedBox(height: 24),
+                Text('Check the Schedule tab to see your next workout.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.manrope(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceVariant.withOpacity(0.6))),
+                const SizedBox(height: 32),
+              ],
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => WorkoutPreviewScreen(day: todayDay),
+        ),
+      );
     }
   }
 
@@ -249,9 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // Start Workout CTA
           ElevatedButton(
-            onPressed: () {
-              // Phase 4 will wire this to the workout logging screen
-            },
+          onPressed: () => _startTodaysWorkout(),
             child: Text(
               'START WORKOUT →',
               style: GoogleFonts.spaceGrotesk(
