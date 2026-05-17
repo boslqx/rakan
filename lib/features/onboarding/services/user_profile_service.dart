@@ -30,4 +30,16 @@ class UserProfileService {
     if (!doc.exists) return false;
     return doc.data()?['onboardingCompleted'] == true;
   }
+
+  Future<Map<String, dynamic>?> getUserProfile(String uid) async {
+    final doc = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('profile')
+        .doc('data')
+        .get();
+
+    if (!doc.exists) return null;
+    return doc.data();
+  }
 }
