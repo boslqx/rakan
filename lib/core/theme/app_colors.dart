@@ -6,6 +6,7 @@ class AppColors {
 
   // Background 
   static const Color background = Color(0xFF0C0E10); // Main app background color
+  static const Color surface = Color(0xFF0C0E10); 
   static const Color surfaceContainerLow = Color(0xFF13161A); // Backgfround for cards, sections
   static const Color surfaceContainerHigh = Color(0xFF1C2026); // Active cards, modal
   static const Color surfaceContainerLowest = Color(0xFF000000); // Photo Background
