@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "566388150386",
+    "project_id": "rakan-10680",
+    "storage_bucket": "rakan-10680.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:566388150386:android:8dcd71001c4eb198ed32eb",
+        "android_client_info": {
+          "package_name": "com.example.rakan"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "566388150386-10b3dk7n8j59vd71foc9qcl62tqegfr0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.rakan",
+            "certificate_hash": "83f789fb305f0ef570dfc7cea55e1f838caac67f"
+          }
+        },
+        {
+          "client_id": "566388150386-grle8d81gmkh4roju1vqnlhhj7urodbm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAm959cO5eMAfzJNmt9TOcv7BJt9rlBPD4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "566388150386-grle8d81gmkh4roju1vqnlhhj7urodbm.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "566388150386-cni7d9vgsqu805cn4jnu7ad0l3bbmo9f.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.rakan"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
