@@ -1,7 +1,11 @@
 from fastapi import FastAPI
-from firebase_config import db  # this triggers Firebase initialization
+from firebase_config import db
+from routers.plan_router import router as plan_router
 
 app = FastAPI(title="Rakan AI Backend")
+
+# Register routers — all plan endpoints are now available
+app.include_router(plan_router)
 
 @app.get("/")
 def root():
@@ -9,7 +13,5 @@ def root():
 
 @app.get("/test-firebase")
 def test_firebase():
-    # Try writing a test document to Firestore
-    # If this works, Firebase connection is confirmed
     db.collection("_test").document("ping").set({"status": "connected"})
     return {"status": "Firebase connected successfully"}
