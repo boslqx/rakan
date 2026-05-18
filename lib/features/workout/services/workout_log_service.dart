@@ -41,14 +41,22 @@ class WorkoutLogService {
   /// Fetches recent workout logs for the home screen activity feed.
   Future<List<Map<String, dynamic>>> getRecentLogs(String uid,
       {int limit = 10}) async {
+    // Fetch all logs and sort in Dart to avoid Firestore index requirement
     final snapshot = await _db
         .collection('users')
         .doc(uid)
         .collection('workoutLogs')
-        .orderBy('completedAt', descending: true)
-        .limit(limit)
         .get();
 
-    return snapshot.docs.map((d) => d.data()).toList();
+    final logs = snapshot.docs.map((d) => d.data()).toList();
+
+    // Sort by completedAt descending in Dart
+    logs.sort((a, b) {
+      final aDate = a['completedAt'] as String? ?? '';
+      final bDate = b['completedAt'] as String? ?? '';
+      return bDate.compareTo(aDate);
+    });
+
+    return logs.take(limit).toList();
   }
 }
