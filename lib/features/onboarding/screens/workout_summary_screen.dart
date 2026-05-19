@@ -70,7 +70,7 @@ class WorkoutSummaryScreen extends StatelessWidget {
     );
 
     return Scaffold(
-      backgroundColor: AppColors.surfaceBright,
+      backgroundColor: AppColors.surface,
       body: SafeArea(
         child: Column(
           children: [
@@ -145,7 +145,7 @@ class WorkoutSummaryScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
               decoration: BoxDecoration(
-                color: AppColors.surfaceBright,
+                color: AppColors.surface,
                 border: Border(
                   top: BorderSide(
                     color: AppColors.outlineVariant,

@@ -164,7 +164,7 @@ class _PlanGenerationScreenState extends State<PlanGenerationScreen>
     final int percentage = (_totalProgress * 100).round();
 
     return Scaffold(
-      backgroundColor: AppColors.surfaceBright,
+      backgroundColor: AppColors.surface,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),

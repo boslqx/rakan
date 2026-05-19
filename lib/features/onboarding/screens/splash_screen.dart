@@ -46,7 +46,7 @@ class _SplashScreenState extends State<SplashScreen> {
     // Show minimal spinner while checking auth
     if (_isCheckingAuth) {
       return Scaffold(
-        backgroundColor: AppColors.surfaceBright,
+        backgroundColor: AppColors.surface,
         body: const Center(
           child: CircularProgressIndicator(
             color: AppColors.primary,
@@ -58,7 +58,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     // Auth check done — no logged in user — show splash UI
     return Scaffold(
-      backgroundColor: AppColors.surfaceBright,
+      backgroundColor: AppColors.surface,
       body: Stack(
         children: [
           Positioned.fill(
@@ -74,8 +74,8 @@ class _SplashScreenState extends State<SplashScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    AppColors.surfaceBright.withOpacity(0.6),
-                    AppColors.surfaceBright.withOpacity(0.95),
+                    AppColors.surface.withOpacity(0.6),
+                    AppColors.surface.withOpacity(0.95),
                   ],
                 ),
               ),

@@ -27,7 +27,7 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.surfaceBright,
+      backgroundColor: AppColors.surface,
       // When switching tabs, we keep the state of each screen alive using IndexedStack
       body: IndexedStack(
         index: _currentIndex,

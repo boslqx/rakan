@@ -119,7 +119,7 @@ class _OnboardingShellState extends State<OnboardingShell> {
         : '${((_currentStep + 1) / _totalSteps * 100).round()}%';
 
     return Scaffold(
-      backgroundColor: AppColors.surfaceBright,
+      backgroundColor: AppColors.surface,
       body: SafeArea(
         child: Column(
           children: [

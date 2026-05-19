@@ -179,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.surfaceBright,
+      backgroundColor: AppColors.surface,
       // No AppBar — matches your design spec
       body: SafeArea(
         child: _isLoading
