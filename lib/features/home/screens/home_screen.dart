@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../onboarding/services/user_profile_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../workout/screens/workout_active_screen.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../../workout/screens/workout_preview_screen.dart';
@@ -22,7 +21,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _profile;
   bool _isLoading = true;
   List<Map<String, dynamic>> _recentLogs = [];
-  Map<String, dynamic>? _todayDay; 
+  Map<String, dynamic>? _todayDay;
+  String? _loadError;
+  String? _debugUid;
 
   @override
   void initState() {
@@ -34,16 +35,40 @@ class _HomeScreenState extends State<HomeScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
+    _debugUid = uid;
     final todayNumber = DateTime.now().weekday; // Mon=1 ... Sun=7
 
-    final results = await Future.wait([
-      UserProfileService().getUserProfile(uid),
-      WorkoutLogService().getRecentLogs(uid, limit: 5),
-      WorkoutPlanService().getActivePlan(uid),
-    ]);
+    Map<String, dynamic>? profile;
+    List<Map<String, dynamic>> recentLogs = [];
+    Map<String, dynamic>? plan;
+    String? loadError;
+
+    try {
+      profile = await UserProfileService().getUserProfile(uid);
+    } catch (e, st) {
+      debugPrint('HomeScreen: profile load failed for uid=$uid: $e');
+      debugPrint(st.toString());
+      loadError = 'Unable to load your profile. Please check your network.';
+    }
+
+    try {
+      recentLogs = await WorkoutLogService().getRecentLogs(uid, limit: 5);
+    } catch (e, st) {
+      debugPrint('HomeScreen: recent logs load failed for uid=$uid: $e');
+      debugPrint(st.toString());
+      loadError ??= 'Unable to load workout history. Please try again.';
+    }
+
+    try {
+      plan = await WorkoutPlanService().getActivePlan(uid);
+      debugPrint('HomeScreen: current uid=$uid activePlanExists=${plan != null}');
+    } catch (e, st) {
+      debugPrint('HomeScreen: plan load failed for uid=$uid: $e');
+      debugPrint(st.toString());
+      loadError ??= 'Unable to load your workout plan. Please try again.';
+    }
 
     Map<String, dynamic>? todayDay;
-    final plan = results[2] as Map<String, dynamic>?;
     if (plan != null) {
       final days = (plan['days'] as List).cast<Map<String, dynamic>>();
       todayDay = days.firstWhere(
@@ -55,9 +80,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (mounted) {
       setState(() {
-        _profile = results[0] as Map<String, dynamic>?;
-        _recentLogs = (results[1] as List).cast<Map<String, dynamic>>();
+        _profile = profile;
+        _recentLogs = recentLogs;
         _todayDay = todayDay;
+        _loadError = loadError;
         _isLoading = false;
       });
     }
@@ -206,6 +232,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _buildHeader(),
+                            if (_loadError != null) ...[
+                              const SizedBox(height: 16),
+                              _buildLoadErrorCard(_loadError!),
+                            ],
                             const SizedBox(height: 24),
                             _buildHeroCard(),
                             const SizedBox(height: 32),
@@ -509,6 +539,33 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.5)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadErrorCard(String message) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.error.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.error.withOpacity(0.2)),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, color: Colors.redAccent),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: GoogleFonts.manrope(
+                fontSize: 13,
+                color: AppColors.onSurface,
+              ),
+            ),
           ),
         ],
       ),

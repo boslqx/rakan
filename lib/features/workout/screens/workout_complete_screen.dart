@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/main_shell.dart';
+import '../services/adapt_service.dart';
 
-class WorkoutCompleteScreen extends StatelessWidget {
+class WorkoutCompleteScreen extends StatefulWidget {
   final String workoutName;
   final int durationMins;
   final double totalVolume;
   final int exerciseCount;
+  final String uid;
+  final double avgRpe;
+  final double maxRpe;
+  final double completionRate;
 
   const WorkoutCompleteScreen({
     super.key,
@@ -15,7 +20,61 @@ class WorkoutCompleteScreen extends StatelessWidget {
     required this.durationMins,
     required this.totalVolume,
     required this.exerciseCount,
+    required this.uid,
+    required this.avgRpe,
+    required this.maxRpe,
+    required this.completionRate,
   });
+
+  @override
+  State<WorkoutCompleteScreen> createState() => _WorkoutCompleteScreenState();
+}
+
+class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
+
+  // Adaptation status — shown as a small banner at the bottom
+  String _adaptStatus = 'loading';
+  String _adaptMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _runAdaptation();
+  }
+
+  Future<void> _runAdaptation() async {
+    try {
+      final message = await AdaptService().predictAndAdapt(
+        uid: widget.uid,
+        avgRpe: widget.avgRpe,
+        maxRpe: widget.maxRpe,
+        sessionDuration: widget.durationMins.toDouble(),
+        exercisesCount: widget.exerciseCount,
+        completionRate: widget.completionRate,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _adaptStatus = 'done';
+        // Use API message if available, fallback to local derivation
+        _adaptMessage = message.isNotEmpty ? message : _buildAdaptMessage();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _adaptStatus = 'error');
+    }
+  }
+  
+  // Build a user-friendly message based on their RPE
+  String _buildAdaptMessage() {
+    if (widget.avgRpe > 7.5) {
+      return '🔄 Next workout adjusted for recovery';
+    } else if (widget.avgRpe < 4.0) {
+      return '📈 Next workout intensity increased';
+    } else {
+      return '✅ Plan stays on track';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +117,7 @@ class WorkoutCompleteScreen extends StatelessWidget {
               const SizedBox(height: 8),
 
               Text(
-                workoutName.toUpperCase(),
+                widget.workoutName.toUpperCase(),
                 textAlign: TextAlign.center,
                 style: GoogleFonts.spaceGrotesk(
                   fontSize: 32,
@@ -79,25 +138,26 @@ class WorkoutCompleteScreen extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    _buildStat('DURATION',
-                        '$durationMins', 'MIN'),
+                    _buildStat('DURATION', '${widget.durationMins}', 'MIN'),
                     _buildDivider(),
-                    _buildStat('VOLUME',
-                        totalVolume.toStringAsFixed(0), 'KG'),
+                    _buildStat('VOLUME', widget.totalVolume.toStringAsFixed(0), 'KG'),
                     _buildDivider(),
-                    _buildStat('EXERCISES',
-                        '$exerciseCount', 'DONE'),
+                    _buildStat('EXERCISES', '${widget.exerciseCount}', 'DONE'),
                   ],
                 ),
               ),
+
+              const SizedBox(height: 16),
+
+              // Adaptation status banner
+              _buildAdaptBanner(),
 
               const Spacer(),
 
               ElevatedButton(
                 onPressed: () {
                   Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(
-                        builder: (_) => const MainShell()),
+                    MaterialPageRoute(builder: (_) => const MainShell()),
                     (_) => false,
                   );
                 },
@@ -117,6 +177,46 @@ class WorkoutCompleteScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildAdaptBanner() {
+    if (_adaptStatus == 'loading') {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Analysing your performance...',
+            style: GoogleFonts.manrope(
+              fontSize: 12,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_adaptStatus == 'done') {
+      return Text(
+        _adaptMessage,
+        style: GoogleFonts.manrope(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: AppColors.primary,
+        ),
+      );
+    }
+
+    // error state
+    return const SizedBox.shrink();
   }
 
   Widget _buildStat(String label, String value, String unit) {

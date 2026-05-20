@@ -120,6 +120,22 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
 
     if (!mounted) return;
 
+    // Compute RPE metrics for fatigue prediction
+    final rpeValues = _exerciseStates.map((ex) => ex.rpe.toDouble()).toList();
+    final avgRpe = rpeValues.reduce((a, b) => a + b) / rpeValues.length;
+    final maxRpe = rpeValues.reduce((a, b) => a > b ? a : b);
+
+    // Total completed sets across all exercises
+    final totalSets = _exerciseStates
+        .map((ex) => ex.sets.length)
+        .reduce((a, b) => a + b);
+    final completedSets = _exerciseStates
+        .map((ex) => ex.completedSets.length)
+        .reduce((a, b) => a + b);
+    final completionRate = totalSets > 0 ? completedSets / totalSets : 1.0;
+
+    if (!mounted) return;
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => WorkoutCompleteScreen(
@@ -127,6 +143,10 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
           durationMins: durationMins,
           totalVolume: _totalVolume,
           exerciseCount: _exerciseStates.length,
+          uid: uid,
+          avgRpe: avgRpe,
+          maxRpe: maxRpe,
+          completionRate: completionRate,
         ),
       ),
     );

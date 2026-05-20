@@ -6,32 +6,43 @@ class WorkoutPlanService {
   /// Fetches the active workout plan for a user.
   /// Returns null if no active plan exists.
   Future<Map<String, dynamic>?> getActivePlan(String uid) async {
-    // Fetch all plans then filter in Dart — avoids any index requirements.
-    // Each user realistically has very few plans (1-3), so this is fine.
-    final snapshot = await _db
-        .collection('users')
-        .doc(uid)
-        .collection('workoutPlans')
-        .get();
+    try {
+      final activePlansSnapshot = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('workoutPlans')
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
 
-    if (snapshot.docs.isEmpty) return null;
+      if (activePlansSnapshot.docs.isEmpty) {
+        print('WorkoutPlanService: no active plan found for uid=$uid');
+        return null;
+      }
 
-    // Find the active plan in Dart instead of Firestore query
-    final activeDocs = snapshot.docs
-        .where((doc) => doc.data()['status'] == 'active')
-        .toList();
+      final planDoc = activePlansSnapshot.docs.first;
+      final planData = planDoc.data();
+      print('WorkoutPlanService: loaded active plan ${planDoc.id} for uid=$uid');
 
-    if (activeDocs.isEmpty) return null;
+      return {
+        ...planData,
+        'days': await _loadDays(uid, planDoc.id),
+      };
+    } on FirebaseException catch (e) {
+      print('WorkoutPlanService: Firestore error for uid=$uid code=${e.code} message=${e.message}');
+      rethrow;
+    }
+  }
 
-    final planDoc = activeDocs.first;
-    final planData = planDoc.data();
-
-    // Fetch all 7 days ordered by dayNumber
+  Future<List<Map<String, dynamic>>> _loadDays(
+    String uid,
+    String planId,
+  ) async {
     final daysSnapshot = await _db
         .collection('users')
         .doc(uid)
         .collection('workoutPlans')
-        .doc(planDoc.id)
+        .doc(planId)
         .collection('days')
         .orderBy('dayNumber')
         .get();
@@ -45,7 +56,7 @@ class WorkoutPlanService {
           .collection('users')
           .doc(uid)
           .collection('workoutPlans')
-          .doc(planDoc.id)
+          .doc(planId)
           .collection('days')
           .doc(dayDoc.id)
           .collection('exercises')
@@ -58,6 +69,6 @@ class WorkoutPlanService {
       days.add({...dayData, 'exercises': exercises});
     }
 
-    return {...planData, 'days': days};
+    return days;
   }
 }

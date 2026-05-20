@@ -29,6 +29,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
     try {
       final plan = await WorkoutPlanService().getActivePlan(uid);
+      debugPrint('WorkoutScreen: current uid=$uid activePlanExists=${plan != null}');
       if (mounted) {
         setState(() {
           _plan = plan;
