@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../services/workout_log_service.dart';
 import 'workout_complete_screen.dart';
+import 'pose_detection_screen.dart';
 
 class WorkoutActiveScreen extends StatefulWidget {
   final Map<String, dynamic> day; // The plan day being worked out
@@ -281,6 +282,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                           color: AppColors.onSurface,
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         ex.muscleGroup.toUpperCase(),
                         style: GoogleFonts.manrope(
@@ -293,12 +295,64 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                     ],
                   ),
                 ),
-                Text(
-                  '${ex.restSeconds}s REST',
-                  style: GoogleFonts.manrope(
-                    fontSize: 11,
-                    color: AppColors.onSurfaceVariant,
-                    letterSpacing: 1,
+                // Rest timer
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text(
+                    '${ex.restSeconds}s REST',
+                    style: GoogleFonts.manrope(
+                      fontSize: 11,
+                      color: AppColors.onSurfaceVariant,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+                // ── POSTURE DETECTION BUTTON ──────────────────────────
+                GestureDetector(
+                  onTap: () async {
+                    final repsCompleted = await Navigator.of(context).push<int>(
+                      MaterialPageRoute(
+                        builder: (_) => PoseDetectionScreen(
+                          exerciseName: ex.exerciseName,
+                          targetReps: ex.sets.isNotEmpty ? ex.sets[0].reps : 10,
+                        ),
+                      ),
+                    );
+                    // If user completed reps via posture detection, auto-fill the first incomplete set
+                    if (repsCompleted != null && repsCompleted > 0) {
+                      setState(() {
+                        final firstIncomplete = ex.sets.indexWhere(
+                          (s) => !ex.completedSets.contains(ex.sets.indexOf(s)),
+                        );
+                        if (firstIncomplete != -1) {
+                          ex.completedSets.add(firstIncomplete);
+                        }
+                      });
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.camera_alt_rounded,
+                            color: AppColors.primary, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          'FORM',
+                          style: GoogleFonts.manrope(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
