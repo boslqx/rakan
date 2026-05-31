@@ -72,15 +72,18 @@ def adapt_plan(req: AdaptRequest):
     # Apply adaptation rules
     if fatigue_score > 0.7:
         fatigue_level = "high"
-        intensity_adjustment = -0.175  # reduce by 17.5% (midpoint of 15–20%)
+        # Bell et al. (2025) Strength & Conditioning Journal: reactive deload
+        intensity_adjustment = -0.175  
         message = "Your last session was very demanding. Next workout intensity reduced by 17.5% to allow recovery."
     elif fatigue_score >= 0.4:
         fatigue_level = "medium"
+        # ACSM (2026): RPE 6-7 or completion 70-90% → maintain intensity.
         intensity_adjustment = 0.0
         message = "Good effort! Your recovery looks on track. Keeping the same intensity."
     else:
         fatigue_level = "low"
-        intensity_adjustment = 0.10   # increase by 10% 
+        # ACSM (2026) & NASM: progressive overload = 5-10% volume/load increase
+        intensity_adjustment = 0.10  
         message = "You handled that well! Intensity increased by 10% for progressive overload."
 
     return AdaptResponse(

@@ -66,5 +66,5 @@ model_dir = os.path.dirname(__file__)
 joblib.dump(model, os.path.join(model_dir, "fatigue_model.pkl"))
 joblib.dump(scaler, os.path.join(model_dir, "fatigue_scaler.pkl"))
 
-print(f"\n✅ Model saved: ml/fatigue_model.pkl")
-print(f"✅ Scaler saved: ml/fatigue_scaler.pkl")
+print(f"\nModel saved: ml/fatigue_model.pkl")
+print(f"Scaler saved: ml/fatigue_scaler.pkl")
