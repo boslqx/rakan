@@ -6,6 +6,7 @@ import android.graphics.Matrix
 import android.util.Log
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.google.mediapipe.framework.image.BitmapImageBuilder
@@ -17,6 +18,7 @@ import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
 import io.flutter.plugin.common.EventChannel
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import androidx.camera.core.Preview
 
 class PoseDetectorHandler(
     private val context: Context,
@@ -27,6 +29,13 @@ class PoseDetectorHandler(
     private var poseLandmarker: PoseLandmarker? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+
+    // PreviewView is created here and shared with CameraPreviewFactory
+    // ensures they share the same camera session.
+    val previewView: PreviewView = PreviewView(context).apply {
+        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        scaleType = PreviewView.ScaleType.FILL_CENTER
+    }
 
     override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
         eventSink = sink
@@ -63,7 +72,7 @@ class PoseDetectorHandler(
                 .build()
 
             poseLandmarker = PoseLandmarker.createFromOptions(context, options)
-            Log.d("PoseDetector", "MediaPipe initialized successfully")
+            Log.d("PoseDetector", "MediaPipe initialized")
 
         } catch (e: Exception) {
             Log.e("PoseDetector", "Failed to initialize MediaPipe: ${e.message}")
@@ -77,7 +86,6 @@ class PoseDetectorHandler(
         }
 
         val personLandmarks = result.landmarks()[0]
-
         val landmarkList = personLandmarks.map { landmark ->
             mapOf(
                 "x" to landmark.x().toDouble(),
@@ -87,10 +95,7 @@ class PoseDetectorHandler(
             )
         }
 
-        sendEvent(mapOf(
-            "detected" to true,
-            "landmarks" to landmarkList
-        ))
+        sendEvent(mapOf("detected" to true, "landmarks" to landmarkList))
     }
 
     private fun startCamera(exerciseType: String) {
@@ -99,6 +104,12 @@ class PoseDetectorHandler(
         cameraProviderFuture.addListener({
             cameraProvider = cameraProviderFuture.get()
 
+            // Preview use case — shows camera feed in PreviewView
+            val preview = Preview.Builder().build().also { preview ->
+                preview.setSurfaceProvider(previewView.surfaceProvider)
+            }
+
+            // ImageAnalysis use case — sends frames to MediaPipe
             val imageAnalysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
@@ -110,12 +121,14 @@ class PoseDetectorHandler(
 
             try {
                 cameraProvider?.unbindAll()
+                // Bind BOTH use cases together — same camera session
                 cameraProvider?.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_FRONT_CAMERA,
-                    imageAnalysis
+                    preview,        // shows the feed
+                    imageAnalysis   // feeds MediaPipe
                 )
-                Log.d("PoseDetector", "Camera started for: $exerciseType")
+                Log.d("PoseDetector", "Camera started with preview for: $exerciseType")
             } catch (e: Exception) {
                 Log.e("PoseDetector", "Camera binding failed: ${e.message}")
             }
@@ -126,19 +139,16 @@ class PoseDetectorHandler(
     private fun processFrame(imageProxy: ImageProxy) {
         try {
             val bitmap = imageProxy.toBitmap()
-
             val matrix = Matrix().apply {
                 postScale(-1f, 1f, bitmap.width / 2f, bitmap.height / 2f)
             }
             val flippedBitmap = Bitmap.createBitmap(
                 bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
             )
-
             val mpImage = BitmapImageBuilder(flippedBitmap).build()
             poseLandmarker?.detectAsync(mpImage, imageProxy.imageInfo.timestamp)
-
         } catch (e: Exception) {
-            Log.e("PoseDetector", "Frame processing error: ${e.message}")
+            Log.e("PoseDetector", "Frame error: ${e.message}")
         } finally {
             imageProxy.close()
         }
@@ -153,9 +163,7 @@ class PoseDetectorHandler(
     fun cleanup() {
         cameraProvider?.unbindAll()
         poseLandmarker?.close()
-        if (!cameraExecutor.isShutdown) {
-            cameraExecutor.shutdown()
-        }
+        if (!cameraExecutor.isShutdown) cameraExecutor.shutdown()
         Log.d("PoseDetector", "Stopped")
     }
 }

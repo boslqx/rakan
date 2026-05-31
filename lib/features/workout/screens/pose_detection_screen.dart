@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../services/pose_service.dart';
 import '../services/angle_calculator.dart';
+import 'package:flutter/services.dart';
 
 class PoseDetectionScreen extends StatefulWidget {
   final String exerciseName;
@@ -139,40 +140,52 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
         child: Stack(
           children: [
             // Background: camera placeholder
-            // a dark background instead of real camera preview
-            // Showing camera via Flutter requires a platform view which conflicts with our EventChannel approach.
-            // Real camera preview integration is a Phase 7 enhancement.
-            Container(
-              width: double.infinity,
-              height: double.infinity,
-              color: const Color(0xFF0A0A0A),
-              child: _poseDetected
-                  ? CustomPaint(
-                      painter: SkeletonPainter(
-                        landmarks: _landmarks,
-                        isCorrect: _lastResult?.isCorrect ?? true,
-                      ),
+            Positioned.fill(
+              child: _permissionGranted
+                  ? AndroidView(
+                      // WHY AndroidView? Flutter can't directly render CameraX PreviewView.
+                      // AndroidView embeds the native Android view registered in MainActivity.
+                      viewType: 'com.example.rakan/camera_preview',
+                      layoutDirection: TextDirection.ltr,
+                      creationParamsCodec: const StandardMessageCodec(),
                     )
-                  : Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.accessibility_new_rounded,
-                              color: Colors.white24, size: 80),
-                          const SizedBox(height: 16),
-                          Text(
-                            _permissionChecked && !_permissionGranted
-                                ? 'Camera permission required'
-                                : 'Point camera at your full body',
-                            style: GoogleFonts.manrope(
-                              color: Colors.white38,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  : Container(color: Colors.black),
             ),
+
+            // Skeleton overlay on top of camera
+            if (_poseDetected)
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: SkeletonPainter(
+                    landmarks: _landmarks,
+                    isCorrect: _lastResult?.isCorrect ?? true,
+                  ),
+                ),
+              ),
+
+            //  No pose detected overlay
+            if (!_poseDetected)
+              Positioned.fill(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.accessibility_new_rounded,
+                          color: Colors.white24, size: 80),
+                      const SizedBox(height: 16),
+                      Text(
+                        _permissionChecked && !_permissionGranted
+                            ? 'Camera permission required'
+                            : 'Point camera at your full body',
+                        style: GoogleFonts.manrope(
+                          color: Colors.white38,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
             // Top bar
             Positioned(

@@ -21,13 +21,21 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        // Create pose handler first so previewView exists before factory is called
+        val handler = PoseDetectorHandler(this, this)
+        poseHandler = handler
+
+        // Register camera preview as a Flutter platform view
+        flutterEngine.platformViewsController.registry.registerViewFactory(
+            "com.example.rakan/camera_preview",
+            CameraPreviewFactory { handler.previewView }
+        )
+
         // Pose EventChannel
         EventChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             POSE_CHANNEL
-        ).setStreamHandler(
-            PoseDetectorHandler(this, this).also { poseHandler = it }
-        )
+        ).setStreamHandler(handler)
 
         // Permission MethodChannel
         MethodChannel(
@@ -39,10 +47,8 @@ class MainActivity : FlutterActivity() {
                         this, Manifest.permission.CAMERA
                     ) == PackageManager.PERMISSION_GRANTED
                 ) {
-                    // Already granted
                     result.success(true)
                 } else {
-                    // Store result to call back after user responds
                     permissionResult = result
                     ActivityCompat.requestPermissions(
                         this,
@@ -54,7 +60,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // Called by Android after user taps Allow/Deny on permission dialog
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
