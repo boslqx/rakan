@@ -193,8 +193,8 @@ class SquatAnalyser {
 // Push-up Analyser
 class PushUpAnalyser {
   // ensures full range of motion and pectoral activation.
-  static const double _bottomAngleMax = 100.0;  
-  static const double _topAngleMin = 150.0;     
+  static const double _bottomAngleMax = 110.0;  
+  static const double _topAngleMin = 145.0;     
 
   String _phase = 'up';
   int repCount = 0;
@@ -372,8 +372,9 @@ class ExerciseAnalyserFactory {
     final name = exerciseName.toLowerCase();
     if (name.contains('squat')) return SquatAnalyser();
     if (name.contains('push') || name.contains('pushup')) return PushUpAnalyser();
+    if (name.contains('bench')) return PushUpAnalyser(); // same elbow angle
     if (name.contains('press') || name.contains('shoulder')) return ShoulderPressAnalyser();
-    // Default to squat for unknown exercises
+    if (name.contains('curl')) return PushUpAnalyser(); // elbow flexion
     return SquatAnalyser();
   }
 
@@ -381,14 +382,23 @@ class ExerciseAnalyserFactory {
   static String getInstructions(String exerciseName) {
     final name = exerciseName.toLowerCase();
     if (name.contains('squat')) {
-      return 'Stand with feet shoulder-width apart. Face sideways to the camera for best detection.';
+      return '📱 Place phone 2–3m away at hip height.\n🧍 Stand sideways — your full body must be visible from head to ankles.';
     }
     if (name.contains('push')) {
-      return 'Get into push-up position. Face sideways to the camera.';
+      return '📱 Place phone on the floor 1m to your side.\n🧍 Face sideways — your full body from head to feet must be visible.';
     }
-    if (name.contains('press')) {
-      return 'Sit or stand upright. Face the camera directly.';
+    if (name.contains('press') || name.contains('shoulder')) {
+      return '📱 Place phone 2m away at chest height.\n🧍 Face the camera directly — both arms must be fully visible.';
     }
-    return 'Position yourself so your full body is visible to the camera.';
+    if (name.contains('deadlift')) {
+      return '📱 Place phone 2–3m away at hip height.\n🧍 Stand sideways — full body from head to floor must be visible.';
+    }
+    if (name.contains('lunge')) {
+      return '📱 Place phone 2–3m away at hip height.\n🧍 Stand sideways — full body visible.';
+    }
+    if (name.contains('curl')) {
+      return '📱 Place phone 1–2m away at shoulder height.\n🧍 Face the camera — both arms fully visible.';
+    }
+    return '📱 Place phone 2–3m away.\n🧍 Ensure your full body is visible in the frame before starting.';
   }
 }

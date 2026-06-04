@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../services/pose_service.dart';
 import '../services/angle_calculator.dart';
-import 'package:flutter/services.dart';
 
 class PoseDetectionScreen extends StatefulWidget {
   final String exerciseName;
@@ -39,6 +38,11 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
   // Camera permission state
   bool _permissionGranted = false;
   bool _permissionChecked = false;
+
+  // Image dimensions from Kotlin (updated field names)
+  int _frameWidth = 640;
+  int _frameHeight = 480;
+  int _frameRotation = 0;
 
   @override
   void initState() {
@@ -106,6 +110,11 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
           _poseDetected = true;
           _landmarks = landmarks;
           _lastResult = result;
+          _frameWidth = (data['frameWidth'] as int?) ?? 640;
+          _frameHeight = (data['frameHeight'] as int?) ?? 480;
+          _frameRotation = (data['frameRotation'] as int?) ?? 0;
+          
+          // Update rep count logic
           if (result.countRep) {
             _repCount = result.countRep
                 ? (_analyser is SquatAnalyser
@@ -139,12 +148,10 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // Background: camera placeholder
+            // Background: real camera preview
             Positioned.fill(
               child: _permissionGranted
                   ? AndroidView(
-                      // WHY AndroidView? Flutter can't directly render CameraX PreviewView.
-                      // AndroidView embeds the native Android view registered in MainActivity.
                       viewType: 'com.example.rakan/camera_preview',
                       layoutDirection: TextDirection.ltr,
                       creationParamsCodec: const StandardMessageCodec(),
@@ -153,17 +160,20 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
             ),
 
             // Skeleton overlay on top of camera
-            if (_poseDetected)
+            if (_poseDetected && _landmarks.isNotEmpty)
               Positioned.fill(
                 child: CustomPaint(
                   painter: SkeletonPainter(
                     landmarks: _landmarks,
                     isCorrect: _lastResult?.isCorrect ?? true,
+                    frameWidth: _frameWidth,
+                    frameHeight: _frameHeight,
+                    rotation: _frameRotation,
                   ),
                 ),
               ),
 
-            //  No pose detected overlay
+            // No pose detected overlay
             if (!_poseDetected)
               Positioned.fill(
                 child: Center(
@@ -187,7 +197,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
                 ),
               ),
 
-            // Top bar
+            // Top bar 
             Positioned(
               top: 0,
               left: 0,
@@ -195,7 +205,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
               child: _buildTopBar(),
             ),
 
-            // Rep counter 
+            // Rep counter
             Positioned(
               top: 80,
               left: 0,
@@ -203,7 +213,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
               child: _buildRepCounter(),
             ),
 
-            //  Feedback banner
+            // Feedback banner
             Positioned(
               bottom: 120,
               left: 24,
@@ -211,7 +221,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
               child: _buildFeedbackBanner(),
             ),
 
-            //  Instructions
+            // Instructions
             if (!_poseDetected && _permissionGranted)
               Positioned(
                 bottom: 200,
@@ -220,10 +230,10 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
                 child: _buildInstructions(),
               ),
 
-            //  Complete overlay 
+            // Complete overlay
             if (_workoutComplete) _buildCompleteOverlay(),
 
-            // Close button 
+            // Close button
             Positioned(
               bottom: 40,
               left: 24,
@@ -458,48 +468,82 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
   }
 }
 
-// Skeleton Painter
-// Draws the MediaPipe landmark skeleton on a Canvas overlay
+// Skeleton Painter — draws the MediaPipe landmark skeleton on Canvas
 class SkeletonPainter extends CustomPainter {
   final List<Landmark> landmarks;
   final bool isCorrect;
+  final int frameWidth;
+  final int frameHeight;
+  final int rotation;
 
   const SkeletonPainter({
     required this.landmarks,
     required this.isCorrect,
+    required this.frameWidth,
+    required this.frameHeight,
+    required this.rotation,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (landmarks.isEmpty) return;
 
-    final jointPaint = Paint()
-      ..color = isCorrect ? Colors.green : Colors.redAccent
-      ..strokeWidth = 3
-      ..style = PaintingStyle.fill;
+    final Color activeColor =
+        isCorrect ? Colors.greenAccent : Colors.redAccent;
 
     final bonePaint = Paint()
-      ..color = (isCorrect ? Colors.green : Colors.redAccent).withOpacity(0.7)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
+      ..color = activeColor.withOpacity(0.9)
+      ..strokeWidth = 3.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
 
-    // Draw bones (connections between landmarks)
+    final jointPaint = Paint()
+      ..color = activeColor
+      ..style = PaintingStyle.fill;
+
+    const double inputW = 480.0;
+    const double inputH = 640.0;
+
+    final double inputAspect = inputW / inputH;
+    final double screenAspect = size.width / size.height;
+
+    double scaleX, scaleY, offsetX, offsetY;
+
+    if (screenAspect >= inputAspect) {
+      scaleX = size.width;
+      scaleY = size.width / inputAspect;
+      offsetX = 0;
+      offsetY = (size.height - scaleY) / 2;
+    } else {
+      scaleY = size.height;
+      scaleX = size.height * inputAspect;
+      offsetX = (size.width - scaleX) / 2;
+      offsetY = 0;
+    }
+
+    Offset toScreen(Landmark l) {
+      // Swap x↔y to correct for landscape frame containing portrait person
+      // Mirror horizontally to match the camera preview (front camera flip)
+      final double mappedX = 1.0 - l.y; // landmark y → screen x (mirrored)
+      final double mappedY = 1.0 - l.x; // landmark x → screen y (inverted)
+
+      return Offset(
+        mappedX * scaleX + offsetX,
+        mappedY * scaleY + offsetY,
+      );
+    }
+
     final connections = [
-      // Torso
       [PoseLandmarkIndex.leftShoulder, PoseLandmarkIndex.rightShoulder],
       [PoseLandmarkIndex.leftShoulder, PoseLandmarkIndex.leftHip],
       [PoseLandmarkIndex.rightShoulder, PoseLandmarkIndex.rightHip],
       [PoseLandmarkIndex.leftHip, PoseLandmarkIndex.rightHip],
-      // Left arm
       [PoseLandmarkIndex.leftShoulder, PoseLandmarkIndex.leftElbow],
       [PoseLandmarkIndex.leftElbow, PoseLandmarkIndex.leftWrist],
-      // Right arm
       [PoseLandmarkIndex.rightShoulder, PoseLandmarkIndex.rightElbow],
       [PoseLandmarkIndex.rightElbow, PoseLandmarkIndex.rightWrist],
-      // Left leg
       [PoseLandmarkIndex.leftHip, PoseLandmarkIndex.leftKnee],
       [PoseLandmarkIndex.leftKnee, PoseLandmarkIndex.leftAnkle],
-      // Right leg
       [PoseLandmarkIndex.rightHip, PoseLandmarkIndex.rightKnee],
       [PoseLandmarkIndex.rightKnee, PoseLandmarkIndex.rightAnkle],
     ];
@@ -508,28 +552,20 @@ class SkeletonPainter extends CustomPainter {
       final a = landmarks[connection[0]];
       final b = landmarks[connection[1]];
       if (a.visibility < 0.3 || b.visibility < 0.3) continue;
-
-      canvas.drawLine(
-        Offset(a.x * size.width, a.y * size.height),
-        Offset(b.x * size.width, b.y * size.height),
-        bonePaint,
-      );
+      canvas.drawLine(toScreen(a), toScreen(b), bonePaint);
     }
 
-    // Draw joints (circles at each visible landmark)
     for (final landmark in landmarks) {
       if (landmark.visibility < 0.3) continue;
-      canvas.drawCircle(
-        Offset(landmark.x * size.width, landmark.y * size.height),
-        5,
-        jointPaint,
-      );
+      canvas.drawCircle(toScreen(landmark), 6, jointPaint);
     }
   }
 
   @override
-  bool shouldRepaint(SkeletonPainter oldDelegate) {
-    return oldDelegate.landmarks != landmarks ||
-        oldDelegate.isCorrect != isCorrect;
-  }
+  bool shouldRepaint(SkeletonPainter old) =>
+      old.landmarks != landmarks ||
+      old.isCorrect != isCorrect ||
+      old.rotation != rotation ||
+      old.frameWidth != frameWidth ||
+      old.frameHeight != frameHeight;
 }
