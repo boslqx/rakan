@@ -5,8 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../services/workout_log_service.dart';
-import 'workout_complete_screen.dart';
 import 'pose_detection_screen.dart';
+import 'workout_transition_screen.dart';
 
 class WorkoutActiveScreen extends StatefulWidget {
   final Map<String, dynamic> day; // The plan day being worked out
@@ -139,7 +139,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => WorkoutCompleteScreen(
+        builder: (_) => WorkoutTransitionScreen(
           workoutName: widget.day['workoutName'] as String? ?? '',
           durationMins: durationMins,
           totalVolume: _totalVolume,
@@ -148,10 +148,12 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
           avgRpe: avgRpe,
           maxRpe: maxRpe,
           completionRate: completionRate,
+          exerciseLogs: exerciseLogs,
+          logId: log['logId'] as String,
         ),
       ),
     );
-  }
+  } 
 
   @override
   Widget build(BuildContext context) {
