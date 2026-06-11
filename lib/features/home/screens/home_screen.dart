@@ -371,6 +371,8 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildWeeklyCalendar(),
+          const SizedBox(height: 16),
           _buildDailyEvolutionChip(goal),
           const SizedBox(height: 20),
           Text('YOUR PLAN IS\nBEING PREPARED',
@@ -409,6 +411,8 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildWeeklyCalendar(),
+          const SizedBox(height: 16),
           Row(
             children: [
               Container(
@@ -481,6 +485,8 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildWeeklyCalendar(),
+          const SizedBox(height: 16),
           _buildDailyEvolutionChip(goal),
           const SizedBox(height: 20),
 
@@ -709,6 +715,75 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildWeeklyCalendar() {
+    final today = DateTime.now();
+    final startDate = today.subtract(const Duration(days: 3));
+    final days = List.generate(7, (index) => startDate.add(Duration(days: index)));
+
+    return SizedBox(
+      height: 72,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: days.map((date) {
+            final isToday = date.year == today.year &&
+                date.month == today.month &&
+                date.day == today.day;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Container(
+                width: 44,
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                decoration: BoxDecoration(
+                  color: isToday
+                      ? AppColors.primary
+                      : AppColors.surface,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: isToday
+                        ? AppColors.primary
+                        : AppColors.outlineVariant,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '${date.day}',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: isToday ? Colors.white : AppColors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _weekdayLabel(date.weekday),
+                      style: GoogleFonts.manrope(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: isToday
+                            ? Colors.white.withOpacity(0.92)
+                            : AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  String _weekdayLabel(int weekday) {
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return labels[weekday - 1];
   }
 
   Widget _buildLogStat(String label, String value) {
