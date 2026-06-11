@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../services/workout_plan_service.dart';
 import 'workout_preview_screen.dart';
+import 'exercise_library_screen.dart';
 
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
@@ -13,6 +14,11 @@ class WorkoutScreen extends StatefulWidget {
 }
 
 class _WorkoutScreenState extends State<WorkoutScreen> {
+  // Segment state 
+  // 0 = Schedule, 1 = Exercise Library
+  int _segmentIndex = 0;
+
+  // Schedule state
   Map<String, dynamic>? _plan;
   bool _isLoading = true;
   String? _error;
@@ -29,7 +35,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
     try {
       final plan = await WorkoutPlanService().getActivePlan(uid);
-      debugPrint('WorkoutScreen: current uid=$uid activePlanExists=${plan != null}');
       if (mounted) {
         setState(() {
           _plan = plan;
@@ -51,23 +56,115 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       body: SafeArea(
-        child: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(
-                  color: AppColors.primary,
-                  strokeWidth: 1.5,
-                ),
-              )
-            : _error != null
-                ? _buildError()
-                : _plan == null
-                    ? _buildNoPlan()
-                    : _buildPlan(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with segment switcher
+            _buildHeader(),
+
+            // Content area
+            Expanded(
+              child: _segmentIndex == 0
+                  ? _buildScheduleContent()
+                  : const ExerciseLibraryScreen(),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // Error state
+  // Header
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Screen title
+          Text(
+            _segmentIndex == 0 ? 'SCHEDULE' : 'EXERCISE LIBRARY',
+            style: GoogleFonts.manrope(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 2,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _segmentIndex == 0 ? 'Your 7-Day Plan' : 'Master Your Mechanics',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+              height: 1.1,
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Segment switcher pills
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(48),
+            ),
+            padding: const EdgeInsets.all(4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSegmentPill('SCHEDULE', 0),
+                _buildSegmentPill('EXERCISE LIBRARY', 1),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSegmentPill(String label, int index) {
+    final isSelected = _segmentIndex == index;
+    return GestureDetector(
+      onTap: () => setState(() => _segmentIndex = index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(48),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.manrope(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1,
+            color: isSelected
+                ? AppColors.onPrimary
+                : AppColors.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Schedule content
+  Widget _buildScheduleContent() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: AppColors.primary,
+          strokeWidth: 1.5,
+        ),
+      );
+    }
+    if (_error != null) return _buildError();
+    if (_plan == null) return _buildNoPlan();
+    return _buildPlan();
+  }
+
   Widget _buildError() {
     return Center(
       child: Padding(
@@ -75,7 +172,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline_rounded,
+            const Icon(Icons.error_outline_rounded,
                 color: AppColors.error, size: 48),
             const SizedBox(height: 16),
             Text(
@@ -111,7 +208,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
   }
 
-  // No plan state
   Widget _buildNoPlan() {
     return Center(
       child: Padding(
@@ -119,7 +215,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.fitness_center_rounded,
+            const Icon(Icons.fitness_center_rounded,
                 color: AppColors.onSurfaceVariant, size: 48),
             const SizedBox(height: 16),
             Text(
@@ -146,7 +242,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
   }
 
-  // Main plan view
   Widget _buildPlan() {
     final days = (_plan!['days'] as List).cast<Map<String, dynamic>>();
     final planName = _plan!['planName'] as String? ?? '7-Day Plan';
@@ -157,10 +252,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       backgroundColor: AppColors.surfaceContainerLow,
       child: CustomScrollView(
         slivers: [
-          // Header
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 32, 24, 8),
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -174,23 +268,16 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          planName,
-                          style: GoogleFonts.spaceGrotesk(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.onSurface,
-                            height: 1.1,
-                          ),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    planName,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
+                      height: 1.1,
+                    ),
                   ),
                   const SizedBox(height: 4),
-                  // Quick stats row
                   Row(
                     children: [
                       _buildQuickStat(
@@ -208,8 +295,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               ),
             ),
           ),
-
-          // Day cards
           SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -222,7 +307,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               childCount: days.length,
             ),
           ),
-
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
         ],
       ),
@@ -232,29 +316,22 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   Widget _buildQuickStat(String value, String label) {
     return Row(
       children: [
-        Text(
-          value,
-          style: GoogleFonts.spaceGrotesk(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: AppColors.primary,
-          ),
-        ),
+        Text(value,
+            style: GoogleFonts.spaceGrotesk(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary)),
         const SizedBox(width: 6),
-        Text(
-          label,
-          style: GoogleFonts.manrope(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.5,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
+        Text(label,
+            style: GoogleFonts.manrope(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.5,
+                color: AppColors.onSurfaceVariant)),
       ],
     );
   }
 
-  // Individual day card
   Widget _buildDayCard(Map<String, dynamic> day) {
     final isRest = day['dayType'] == 'rest';
     final dayNumber = day['dayNumber'] as int;
@@ -270,17 +347,15 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          // Rest days are slightly darker to look visually quiet
           color: isRest
               ? AppColors.surfaceContainerLowest
               : AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
-          // Left accent border for workout days only
           border: Border(
             left: BorderSide(
               color: isRest
                   ? Colors.transparent
-                  : AppColors.primary.withOpacity(0.6),
+                  : AppColors.primary.withValues(alpha: 0.6),
               width: 3,
             ),
           ),
@@ -288,7 +363,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top row: day label + badge
             Row(
               children: [
                 Expanded(
@@ -299,19 +373,18 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1.5,
                       color: isRest
-                          ? AppColors.onSurfaceVariant.withOpacity(0.5)
+                          ? AppColors.onSurfaceVariant.withValues(alpha: 0.5)
                           : AppColors.onSurfaceVariant,
                     ),
                   ),
                 ),
-                // Workout / Rest badge
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: isRest
                         ? AppColors.surfaceContainerLow
-                        : AppColors.primary.withOpacity(0.12),
+                        : AppColors.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(48),
                   ),
                   child: Text(
@@ -321,76 +394,64 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1.5,
                       color: isRest
-                          ? AppColors.onSurfaceVariant.withOpacity(0.5)
+                          ? AppColors.onSurfaceVariant.withValues(alpha: 0.5)
                           : AppColors.primary,
                     ),
                   ),
                 ),
               ],
             ),
-
             const SizedBox(height: 8),
-
-            // Workout name
             Text(
               workoutName.toUpperCase(),
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: isRest
-                    ? AppColors.onSurfaceVariant.withOpacity(0.4)
+                    ? AppColors.onSurfaceVariant.withValues(alpha: 0.4)
                     : AppColors.onSurface,
                 height: 1.1,
               ),
             ),
-
             const SizedBox(height: 4),
-
-            // Focus description
             Text(
               focusDescription,
               style: GoogleFonts.manrope(
                 fontSize: 13,
                 color: isRest
-                    ? AppColors.onSurfaceVariant.withOpacity(0.3)
+                    ? AppColors.onSurfaceVariant.withValues(alpha: 0.3)
                     : AppColors.onSurfaceVariant,
               ),
             ),
-
-            // Duration + exercise chips
             if (!isRest) ...[
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(Icons.timer_outlined,
+                  const Icon(Icons.timer_outlined,
                       size: 14, color: AppColors.onSurfaceVariant),
                   const SizedBox(width: 4),
                   Text(
                     '$durationMinutes MIN',
                     style: GoogleFonts.manrope(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1,
-                      color: AppColors.onSurfaceVariant,
-                    ),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1,
+                        color: AppColors.onSurfaceVariant),
                   ),
                   const SizedBox(width: 16),
-                  Icon(Icons.fitness_center_rounded,
+                  const Icon(Icons.fitness_center_rounded,
                       size: 14, color: AppColors.onSurfaceVariant),
                   const SizedBox(width: 4),
                   Text(
                     '${exercises.length} EXERCISES',
                     style: GoogleFonts.manrope(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1,
-                      color: AppColors.onSurfaceVariant,
-                    ),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1,
+                        color: AppColors.onSurfaceVariant),
                   ),
                 ],
               ),
-
-              // Exercise name chips
               if (exercises.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Wrap(
@@ -400,23 +461,19 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                     ...exercises.take(3).map((ex) => _buildExerciseChip(
                         ex['exerciseName'] as String? ?? '')),
                     if (exercises.length > 3)
-                      _buildExerciseChip(
-                          '+${exercises.length - 3} MORE',
+                      _buildExerciseChip('+${exercises.length - 3} MORE',
                           isMore: true),
                   ],
                 ),
               ],
-
-              // Tap hint
               const SizedBox(height: 10),
               Text(
                 'TAP TO VIEW EXERCISES →',
                 style: GoogleFonts.manrope(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.5,
-                  color: AppColors.primary.withOpacity(0.6),
-                ),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.5,
+                    color: AppColors.primary.withValues(alpha: 0.6)),
               ),
             ],
           ],
@@ -429,24 +486,20 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: isMore
-            ? AppColors.surfaceContainerHigh
-            : AppColors.surfaceContainerHigh,
+        color: AppColors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(48),
       ),
       child: Text(
         label,
         style: GoogleFonts.manrope(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-          color: AppColors.onSurfaceVariant,
-        ),
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+            color: AppColors.onSurfaceVariant),
       ),
     );
   }
 
-  // Exercise bottom sheet
   void _showExerciseSheet(Map<String, dynamic> day) {
     final exercises =
         (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -466,7 +519,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         expand: false,
         builder: (_, scrollController) => Column(
           children: [
-            // Handle
             const SizedBox(height: 12),
             Container(
               width: 40,
@@ -477,8 +529,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               ),
             ),
             const SizedBox(height: 16),
-
-            // Sheet header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Row(
@@ -487,28 +537,23 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                     child: Text(
                       workoutName.toUpperCase(),
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface,
-                      ),
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurface),
                     ),
                   ),
                   Text(
                     '${exercises.length} EXERCISES',
                     style: GoogleFonts.manrope(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.5,
-                      color: AppColors.onSurfaceVariant,
-                    ),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.5,
+                        color: AppColors.onSurfaceVariant),
                   ),
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // Exercise list
             Expanded(
               child: ListView.builder(
                 controller: scrollController,
@@ -516,12 +561,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 itemCount: exercises.length,
                 itemBuilder: (_, index) {
                   final ex = exercises[index];
-                  final name = ex['exerciseName'] as String? ?? '';
-                  final sets = ex['sets'] as int? ?? 0;
-                  final reps = ex['reps'] as int? ?? 0;
-                  final rest = ex['restSeconds'] as int? ?? 0;
-                  final muscle = ex['muscleGroup'] as String? ?? '';
-
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Container(
@@ -532,73 +571,63 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                       ),
                       child: Row(
                         children: [
-                          // Index number
                           Container(
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.12),
+                              color: AppColors.primary.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Center(
                               child: Text(
                                 '${index + 1}',
                                 style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
-                                ),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary),
                               ),
                             ),
                           ),
                           const SizedBox(width: 12),
-
-                          // Exercise info
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  name,
+                                  ex['exerciseName'] as String? ?? '',
                                   style: GoogleFonts.spaceGrotesk(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.onSurface,
-                                  ),
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.onSurface),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  muscle.toUpperCase(),
+                                  (ex['muscleGroup'] as String? ?? '').toUpperCase(),
                                   style: GoogleFonts.manrope(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 1.5,
-                                    color: AppColors.onSurfaceVariant,
-                                  ),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 1.5,
+                                      color: AppColors.onSurfaceVariant),
                                 ),
                               ],
                             ),
                           ),
-
-                          // Sets × Reps + Rest
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
-                                '$sets × $reps',
+                                '${ex['sets']} × ${ex['reps']}',
                                 style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.onSurface,
-                                ),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.onSurface),
                               ),
                               Text(
-                                '${rest}s REST',
+                                '${ex['restSeconds']}s REST',
                                 style: GoogleFonts.manrope(
-                                  fontSize: 10,
-                                  color: AppColors.onSurfaceVariant,
-                                  letterSpacing: 1,
-                                ),
+                                    fontSize: 10,
+                                    color: AppColors.onSurfaceVariant,
+                                    letterSpacing: 1),
                               ),
                             ],
                           ),
@@ -623,10 +652,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 child: Text(
                   'START THIS WORKOUT →',
                   style: GoogleFonts.spaceGrotesk(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5,
-                  ),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5),
                 ),
               ),
             ),
