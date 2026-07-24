@@ -25,6 +25,24 @@ class ExerciseData {
   });
 }
 
+/// Looks up the full static exercise record by its display name.
+///
+/// Plan documents (from the backend) only store `exerciseName` — the
+/// `exerciseId` field is a random UUID with no relation to this table.
+/// So any screen needing metadata not present in the plan doc (video id,
+/// step-by-step instructions, `hasPoseDetection`, etc.) must resolve it
+/// here, by name, at read time.
+///
+/// Returns null if no match is found (e.g. name drift between backend
+/// and this static list) — callers must treat metadata as optional and
+/// degrade gracefully rather than crash.
+ExerciseData? findExerciseByName(String name) {
+  for (final ex in kExercises) {
+    if (ex.name == name) return ex;
+  }
+  return null;
+}
+
 // All muscle group filter values used in the library
 class MuscleGroups {
   static const all = 'All';
