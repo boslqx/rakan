@@ -359,7 +359,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ── Hero: no plan yet ─────────────────────────────────────────────────
+  // Hero: no plan yet
   Widget _buildHeroNoPlan(String goal, String experience) {
     return Container(
       width: double.infinity,
@@ -399,16 +399,31 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Hero: rest day ────────────────────────────────────────────────────
+  // Hero: rest day
   Widget _buildHeroRestDay(String goal) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(24),
       ),
-      child: Column(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.7,
+              child: Image.asset(
+                'assets/images/rest_day.jpg',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: ColoredBox(color: Colors.black.withOpacity(0.5)),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildWeeklyCalendar(),
@@ -462,10 +477,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: AppColors.onSurfaceVariant.withOpacity(0.4))),
         ],
       ),
+          ),
+        ],
+      ),
     );
   }
 
-  // ── Hero: workout day ─────────────────────────────────────────────────
+  // Hero: workout day
   Widget _buildHeroWorkoutDay(String goal, String experience) {
     final workoutName = _todayDay!['workoutName'] as String? ?? 'Workout';
     final focusDescription =
@@ -477,14 +495,29 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(24),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.7,
+              child: Image.asset(
+                'assets/images/workout_day1.jpg',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: ColoredBox(color: Colors.black.withOpacity(0.5)),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
           _buildWeeklyCalendar(),
           const SizedBox(height: 16),
           _buildDailyEvolutionChip(goal),
@@ -546,6 +579,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.5)),
           ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -578,7 +614,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Shared chip ───────────────────────────────────────────────────────
+  // Shared chip
   Widget _buildDailyEvolutionChip(String goal) {
     return Row(
       children: [
