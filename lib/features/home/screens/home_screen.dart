@@ -22,15 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // will create a proper UserProfile model in Phase 2.
   Map<String, dynamic>? _profile;
   bool _isLoading = true;
-
-  // Fetched once, at a slightly larger limit than the feed shows, so the
-  // weekly calendar can check completion for any day in its 7-day window
-  // without a second Firestore round trip. The feed itself only displays
-  // the first 5 (see _buildActivityFeedSlivers).
   List<Map<String, dynamic>> _allLogs = [];
-
-  // All 7 days of the active plan (not just today) — needed so tapping any
-  // date on the calendar can resolve to its matching plan day by weekday.
   List<Map<String, dynamic>> _planDays = [];
 
   Map<String, dynamic>? _todayDay;
@@ -51,7 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (uid == null) return;
 
     _debugUid = uid;
-    final todayNumber = DateTime.now().weekday; // Mon=1 ... Sun=7
+    final todayNumber = DateTime.now().weekday; 
 
     Map<String, dynamic>? profile;
     List<Map<String, dynamic>> allLogs = [];
@@ -107,10 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ── Calendar → plan day / log resolution ──────────────────────────────
-
-  /// Finds the plan day matching a given weekday (Mon=1..Sun=7), regardless
-  /// of which calendar date the user tapped — the plan repeats weekly.
+  // Calendar → plan day / log resolution
   Map<String, dynamic>? _planDayForWeekday(int weekday) {
     if (_planDays.isEmpty) return null;
     final match = _planDays.firstWhere(
@@ -120,8 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return match.isEmpty ? null : match;
   }
 
-  /// Finds a completed workout log whose completedAt falls on the given
-  /// calendar date (matched by year/month/day, not exact time).
+  /// Finds a completed workout log whose completed
   Map<String, dynamic>? _logForDate(DateTime date) {
     for (final log in _allLogs) {
       final completedAt = log['completedAt'] as String?;
@@ -140,6 +128,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return null;
   }
 
+  /// TODAY is the only date a workout can be started or resumed from the
+  /// calendar. Past and future dates are view-only — tapping them shows a
+  /// status sheet (completed / skipped / upcoming) rather than launching
+  /// anything, so the calendar can't be used to "start" a workout early or
+  /// re-do/skip-ahead into a day that isn't the current one.
   void _onCalendarDayTap(DateTime date) {
     final day = _planDayForWeekday(date.weekday);
 
@@ -158,23 +151,130 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    final today = DateTime.now();
+    final isToday = date.year == today.year &&
+        date.month == today.month &&
+        date.day == today.day;
     final existingLog = _logForDate(date);
-    if (existingLog != null) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => WorkoutLogDetailScreen(log: existingLog),
-        ),
-      );
-    } else {
-      // Not completed yet — whether the date is today, upcoming, or in the
-      // past (a missed session), we still let the user open and run it as
-      // a make-up session rather than locking past days.
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => WorkoutPreviewScreen(day: day),
-        ),
-      );
+
+    if (isToday) {
+      if (existingLog != null) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => WorkoutLogDetailScreen(log: existingLog)),
+        );
+      } else {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => WorkoutPreviewScreen(day: day)),
+        );
+      }
+      return;
     }
+
+    final isFuture = DateTime(date.year, date.month, date.day)
+        .isAfter(DateTime(today.year, today.month, today.day));
+
+    _showWorkoutStatusSheet(
+      day: day,
+      date: date,
+      isFuture: isFuture,
+      existingLog: existingLog,
+    );
+  }
+
+  /// View-only status sheet for any workout day that isn't today.
+  void _showWorkoutStatusSheet({
+    required Map<String, dynamic> day,
+    required DateTime date,
+    required bool isFuture,
+    required Map<String, dynamic>? existingLog,
+  }) {
+    final workoutName = day['workoutName'] as String? ?? 'Workout';
+
+    final IconData icon;
+    final Color color;
+    final String statusLabel;
+    final String description;
+
+    if (existingLog != null) {
+      icon = Icons.check_circle_rounded;
+      color = AppColors.primary;
+      statusLabel = 'Completed';
+      description = 'You completed this session on ${_weekdayLabel(date.weekday)}.';
+    } else if (isFuture) {
+      icon = Icons.event_rounded;
+      color = AppColors.onSurfaceVariant;
+      statusLabel = 'Upcoming';
+      description = 'This session unlocks when its day arrives.';
+    } else {
+      icon = Icons.remove_circle_outline_rounded;
+      color = AppColors.error;
+      statusLabel = 'Skipped';
+      description = 'This session\'s day has passed without a logged workout.';
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.12),
+              ),
+              child: Icon(icon, color: color, size: 32),
+            ),
+            const SizedBox(height: 20),
+            Text(statusLabel,
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface)),
+            const SizedBox(height: 6),
+            Text(workoutName,
+                style: GoogleFonts.manrope(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            Text(
+              description,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.manrope(
+                  fontSize: 14, color: AppColors.onSurfaceVariant, height: 1.5),
+            ),
+            if (existingLog != null) ...[
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => WorkoutLogDetailScreen(log: existingLog),
+                      ),
+                    );
+                  },
+                  child: Text('VIEW SUMMARY',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontWeight: FontWeight.w700, letterSpacing: 1)),
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showRestDaySheet(String goal) {
@@ -775,30 +875,45 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Activity feed card — now tappable (opens the read-only detail screen)
-  // and shows the attached progress photo thumbnail when one exists.
+  // Formats a number of kg 
+  String _formatVolume(double kg) {
+    if (kg <= 0) return '—';
+    if (kg >= 1000) return '${(kg / 1000).toStringAsFixed(1)}k kg';
+    return '${kg.toStringAsFixed(0)} kg';
+  }
+
+  /// Relative day label 
+  String _dateTimeLabel(String isoDate) {
+    try {
+      final date = DateTime.parse(isoDate);
+      final diff = DateTime.now().difference(date);
+      final String dayLabel;
+      if (diff.inDays == 0) {
+        dayLabel = 'Today';
+      } else if (diff.inDays == 1) {
+        dayLabel = 'Yesterday';
+      } else {
+        dayLabel = '${diff.inDays} days ago';
+      }
+      final hour24 = date.hour;
+      final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+      final minute = date.minute.toString().padLeft(2, '0');
+      final meridiem = hour24 < 12 ? 'AM' : 'PM';
+      return '$dayLabel • ${hour12.toString().padLeft(2, '0')}:$minute $meridiem';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  // Activity feed card 
   Widget _buildRealLogCard(Map<String, dynamic> log) {
     final workoutName = log['workoutName'] as String? ?? 'Workout';
     final completedAt = log['completedAt'] as String? ?? '';
     final totalVolume = (log['totalVolume'] as num?)?.toDouble() ?? 0;
     final durationMins = log['totalDurationMins'] as int? ?? 0;
+    final totalSets = log['totalSetsCompleted'] as int?;
+    final prReached = log['prReached'] as bool? ?? false;
     final photoBase64 = log['progressPhotoBase64'] as String?;
-
-    // Convert ISO date string to readable relative time
-    String dateLabel = '';
-    try {
-      final date = DateTime.parse(completedAt);
-      final diff = DateTime.now().difference(date);
-      if (diff.inDays == 0) {
-        dateLabel = 'Today';
-      } else if (diff.inDays == 1) {
-        dateLabel = 'Yesterday';
-      } else {
-        dateLabel = '${diff.inDays} days ago';
-      }
-    } catch (_) {
-      dateLabel = '';
-    }
 
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
@@ -810,76 +925,114 @@ class _HomeScreenState extends State<HomeScreen> {
           color: AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (photoBase64 != null && photoBase64.isNotEmpty) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Image.memory(
-                  base64Decode(photoBase64),
-                  width: 56,
-                  height: 56,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    width: 56,
-                    height: 56,
+            // Header: icon + title + date/time
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
                     color: AppColors.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: const Icon(Icons.fitness_center_rounded,
+                      color: AppColors.primary, size: 18),
                 ),
-              ),
-              const SizedBox(width: 16),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          workoutName,
-                          style: GoogleFonts.spaceGrotesk(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.onSurface,
-                          ),
+                      Text(
+                        workoutName,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.onSurface,
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
-                        dateLabel,
+                        _dateTimeLabel(completedAt).toUpperCase(),
                         style: GoogleFonts.manrope(
-                          fontSize: 12,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1,
                           color: AppColors.onSurfaceVariant,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      _buildLogStat('DURATION', '${durationMins}min'),
-                      const SizedBox(width: 24),
-                      _buildLogStat(
-                        'VOLUME',
-                        totalVolume > 0
-                            ? '${totalVolume.toStringAsFixed(0)}kg'
-                            : '—',
-                      ),
-                    ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Stats row
+            Row(
+              children: [
+                Expanded(child: _buildLogStat('VOLUME', _formatVolume(totalVolume))),
+                Expanded(child: _buildLogStat('TIME', '${durationMins}m')),
+                Expanded(
+                  child: _buildLogStat('SETS', totalSets != null ? '$totalSets' : '—'),
+                ),
+              ],
+            ),
+
+            if (prReached) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.emoji_events_rounded,
+                            size: 13, color: AppColors.primary),
+                        const SizedBox(width: 6),
+                        Text('PR REACHED',
+                            style: GoogleFonts.manrope(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1,
+                              color: AppColors.primary,
+                            )),
+                      ],
+                    ),
                   ),
                 ],
               ),
-            ),
+            ],
+
+            if (photoBase64 != null && photoBase64.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.memory(
+                  base64Decode(photoBase64),
+                  width: double.infinity,
+                  height: 160,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  // Weekly calendar — each day is now tappable, resolving to that
-  // weekday's plan day (rest sheet / preview screen / past-log detail).
-  // Workout days additionally show a small completion dot.
+  // Weekly calendar
   Widget _buildWeeklyCalendar() {
     final today = DateTime.now();
     final startDate = today.subtract(const Duration(days: 3));

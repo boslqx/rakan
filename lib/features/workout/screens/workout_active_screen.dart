@@ -11,7 +11,7 @@ import 'auto_log_screen.dart';
 import 'pose_detection_screen.dart';
 import 'workout_transition_screen.dart';
 
-/// The Manual workout screen
+/// The Manual workout screen: a scrollable list of every exercise in the day's plan
 class WorkoutActiveScreen extends StatefulWidget {
   final Map<String, dynamic> day; // The plan day being worked out
 
@@ -43,7 +43,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
         exerciseName: exerciseName,
         muscleGroup: ex['muscleGroup'] as String? ?? '',
         restSeconds: ex['restSeconds'] as int? ?? 60,
-        // Resolve rich metadata (video, steps, hasPoseDetection) by name
+        // Resolve rich metadata
         data: findExerciseByName(exerciseName),
         sets: List.generate(
           sets,
@@ -55,7 +55,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
     _loadRecommendedWeights();
   }
 
-  /// Prefills each exercise's sets with the user's last logged weight for
+  /// Prefills each exercise's sets with the user's last logged weight
   Future<void> _loadRecommendedWeights() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -65,7 +65,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
         uid: uid,
         exerciseName: ex.exerciseName,
       );
-      if (lastWeight == null) continue; // No history 
+      if (lastWeight == null) continue; // No history — leave blank for user to fill in
       if (!mounted) return;
       if (ex.weightManuallySet) continue;
       setState(() {
@@ -91,7 +91,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
   bool get _allExercisesDone =>
       _exerciseStates.every((ex) => ex.isFullyComplete);
 
-  /// Launches the full-screen Auto-Log flow
+  /// Launches the full-screen Auto-Log 
   Future<void> _openAutoLog() async {
     final finished = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -147,6 +147,40 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
       };
     }).toList();
 
+    // Computed here (rather than only later, for the transition screen) so
+    // it can also be stored on the top-level log doc — the activity feed
+    // reads that doc directly and shouldn't need a subcollection fetch
+    // just to show a set count.
+    final totalSets =
+        _exerciseStates.map((ex) => ex.sets.length).reduce((a, b) => a + b);
+    final completedSets = _exerciseStates
+        .map((ex) => ex.completedSets.length)
+        .reduce((a, b) => a + b);
+    final completionRate = totalSets > 0 ? completedSets / totalSets : 1.0;
+
+    // PR detection: for each exercise
+    final prExerciseNames = <String>[];
+    for (final ex in _exerciseStates) {
+      final completedWeights = ex.sets
+          .asMap()
+          .entries
+          .where((e) => ex.completedSets.contains(e.key))
+          .map((e) => e.value.weightKg)
+          .where((w) => w > 0)
+          .toList();
+      if (completedWeights.isEmpty) continue;
+
+      final sessionMax = completedWeights.reduce((a, b) => a > b ? a : b);
+      final historicalMax = await WorkoutLogService().getMaxWeightForExercise(
+        uid: uid,
+        exerciseName: ex.exerciseName,
+      );
+
+      if (historicalMax != null && sessionMax > historicalMax) {
+        prExerciseNames.add(ex.exerciseName);
+      }
+    }
+
     final log = {
       'logId': uuid.v4(),
       'planId': widget.day['planId'] ?? '',
@@ -156,6 +190,9 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
       'completedAt': completedAt.toIso8601String(),
       'totalDurationMins': durationMins,
       'totalVolume': _totalVolume,
+      'totalSetsCompleted': completedSets,
+      'prReached': prExerciseNames.isNotEmpty,
+      'prExerciseNames': prExerciseNames,
       'isCompleted': true,
       'exerciseLogs': exerciseLogs,
     };
@@ -167,13 +204,6 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
     final rpeValues = _exerciseStates.map((ex) => ex.rpe.toDouble()).toList();
     final avgRpe = rpeValues.reduce((a, b) => a + b) / rpeValues.length;
     final maxRpe = rpeValues.reduce((a, b) => a > b ? a : b);
-
-    final totalSets =
-        _exerciseStates.map((ex) => ex.sets.length).reduce((a, b) => a + b);
-    final completedSets = _exerciseStates
-        .map((ex) => ex.completedSets.length)
-        .reduce((a, b) => a + b);
-    final completionRate = totalSets > 0 ? completedSets / totalSets : 1.0;
 
     if (!mounted) return;
 
@@ -289,7 +319,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
     );
   }
 
-  /// variant of this screen
+  /// GUIDED navigates into the full-screen Auto-Log flow
   Widget _buildModeToggle() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
@@ -587,7 +617,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          // Weight field — editing forward-fills onto every not-yet-completed
+          // Weight field
           Expanded(
             child: GestureDetector(
               onTap: () => _editValue(
@@ -838,7 +868,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
     );
   }
 
-  /// Instructional bottom sheet: steps, tips, and a video link, resolved
+  /// Instructional bottom sheet: steps, tips, and a video link
   void _openInfoSheet(ExerciseSessionState ex) {
     final data = ex.data;
     if (data == null) return;

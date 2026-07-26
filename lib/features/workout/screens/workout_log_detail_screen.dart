@@ -5,16 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../services/workout_log_service.dart';
 
-/// Read-only view of a single past workout: what was done, how it felt,
-/// and (if attached) the progress photo from that session.
-///
-/// Deliberately a separate, fresh screen rather than a "view mode" bolted
-/// onto WorkoutCompleteScreen — that screen is built around a workout that
-/// was *just* finished (live state, the completion animation, attaching a
-/// new photo). Reusing it for browsing history later would mean threading
-/// a lot of "is this live or historical" conditionals through it. A plain
-/// read-only screen is simpler and safer to build without risking that
-/// screen's existing, working behaviour.
+/// Read-only view of a single past workout
 class WorkoutLogDetailScreen extends StatefulWidget {
   final Map<String, dynamic> log;
 
@@ -53,7 +44,6 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
   }
 
   // Borg-scale-derived RPE colour zones, consistent with the rest of the
-  // app: green <=4 (easy), amber 5-7 (moderate-hard), red >=8 (near-max).
   Color _rpeColor(int rpe) {
     if (rpe <= 4) return Colors.green;
     if (rpe <= 7) return Colors.amber;
@@ -231,6 +221,9 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
     final rpe = ex['rpeScale'] as int? ?? 5;
     final setDetails =
         (ex['setDetails'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final prExerciseNames =
+        (widget.log['prExerciseNames'] as List?)?.cast<String>() ?? [];
+    final isPr = prExerciseNames.contains(name);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -248,9 +241,20 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name,
-                        style: GoogleFonts.spaceGrotesk(
-                            fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(name,
+                              style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                        ),
+                        if (isPr) ...[
+                          const SizedBox(width: 6),
+                          const Icon(Icons.emoji_events_rounded,
+                              size: 14, color: AppColors.primary),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       '${muscleGroup.toUpperCase()} · $setsCompleted/${setDetails.length} SETS',
