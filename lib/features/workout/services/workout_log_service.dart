@@ -101,6 +101,26 @@ class WorkoutLogService {
     return null; // No prior history found for this exercise
   }
 
+  /// Fetches the per-exercise breakdown (sets, reps, weight, RPE) for one
+  /// specific past workout. Deliberately separate from [getRecentLogs] —
+  /// the activity feed only needs the lightweight top-level log doc to
+  /// render quickly; the full per-exercise breakdown is only fetched when
+  /// the user actually opens a log's detail screen.
+  Future<List<Map<String, dynamic>>> getExerciseLogsForWorkout({
+    required String uid,
+    required String logId,
+  }) async {
+    final snapshot = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('workoutLogs')
+        .doc(logId)
+        .collection('exerciseLogs')
+        .get();
+
+    return snapshot.docs.map((d) => d.data()).toList();
+  }
+
   /// Fetches recent workout logs for the home screen activity feed.
   Future<List<Map<String, dynamic>>> getRecentLogs(String uid,
       {int limit = 10}) async {

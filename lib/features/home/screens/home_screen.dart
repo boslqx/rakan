@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,6 +7,7 @@ import '../../onboarding/services/user_profile_service.dart';
 import '../../workout/screens/workout_active_screen.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../../workout/screens/workout_preview_screen.dart';
+import '../../workout/screens/workout_log_detail_screen.dart';
 import '../../workout/services/workout_log_service.dart';
 
 
@@ -20,10 +22,23 @@ class _HomeScreenState extends State<HomeScreen> {
   // will create a proper UserProfile model in Phase 2.
   Map<String, dynamic>? _profile;
   bool _isLoading = true;
-  List<Map<String, dynamic>> _recentLogs = [];
+
+  // Fetched once, at a slightly larger limit than the feed shows, so the
+  // weekly calendar can check completion for any day in its 7-day window
+  // without a second Firestore round trip. The feed itself only displays
+  // the first 5 (see _buildActivityFeedSlivers).
+  List<Map<String, dynamic>> _allLogs = [];
+
+  // All 7 days of the active plan (not just today) — needed so tapping any
+  // date on the calendar can resolve to its matching plan day by weekday.
+  List<Map<String, dynamic>> _planDays = [];
+
   Map<String, dynamic>? _todayDay;
   String? _loadError;
   String? _debugUid;
+
+  static const int _calendarLogScanLimit = 30;
+  static const int _feedDisplayLimit = 5;
 
   @override
   void initState() {
@@ -39,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final todayNumber = DateTime.now().weekday; // Mon=1 ... Sun=7
 
     Map<String, dynamic>? profile;
-    List<Map<String, dynamic>> recentLogs = [];
+    List<Map<String, dynamic>> allLogs = [];
     Map<String, dynamic>? plan;
     String? loadError;
 
@@ -52,7 +67,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
-      recentLogs = await WorkoutLogService().getRecentLogs(uid, limit: 5);
+      allLogs = await WorkoutLogService()
+          .getRecentLogs(uid, limit: _calendarLogScanLimit);
     } catch (e, st) {
       debugPrint('HomeScreen: recent logs load failed for uid=$uid: $e');
       debugPrint(st.toString());
@@ -69,9 +85,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     Map<String, dynamic>? todayDay;
+    List<Map<String, dynamic>> planDays = [];
     if (plan != null) {
-      final days = (plan['days'] as List).cast<Map<String, dynamic>>();
-      todayDay = days.firstWhere(
+      planDays = (plan['days'] as List).cast<Map<String, dynamic>>();
+      todayDay = planDays.firstWhere(
         (d) => d['dayNumber'] == todayNumber,
         orElse: () => {},
       );
@@ -81,12 +98,133 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       setState(() {
         _profile = profile;
-        _recentLogs = recentLogs;
+        _allLogs = allLogs;
+        _planDays = planDays;
         _todayDay = todayDay;
         _loadError = loadError;
         _isLoading = false;
       });
     }
+  }
+
+  // ── Calendar → plan day / log resolution ──────────────────────────────
+
+  /// Finds the plan day matching a given weekday (Mon=1..Sun=7), regardless
+  /// of which calendar date the user tapped — the plan repeats weekly.
+  Map<String, dynamic>? _planDayForWeekday(int weekday) {
+    if (_planDays.isEmpty) return null;
+    final match = _planDays.firstWhere(
+      (d) => d['dayNumber'] == weekday,
+      orElse: () => {},
+    );
+    return match.isEmpty ? null : match;
+  }
+
+  /// Finds a completed workout log whose completedAt falls on the given
+  /// calendar date (matched by year/month/day, not exact time).
+  Map<String, dynamic>? _logForDate(DateTime date) {
+    for (final log in _allLogs) {
+      final completedAt = log['completedAt'] as String?;
+      if (completedAt == null) continue;
+      try {
+        final logDate = DateTime.parse(completedAt);
+        if (logDate.year == date.year &&
+            logDate.month == date.month &&
+            logDate.day == date.day) {
+          return log;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  void _onCalendarDayTap(DateTime date) {
+    final day = _planDayForWeekday(date.weekday);
+
+    if (day == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No plan set for this day yet.', style: GoogleFonts.manrope()),
+          backgroundColor: AppColors.surfaceContainerHigh,
+        ),
+      );
+      return;
+    }
+
+    if (day['dayType'] == 'rest') {
+      _showRestDaySheet(_goalLabel(_profile?['fitnessGoal'] as String?));
+      return;
+    }
+
+    final existingLog = _logForDate(date);
+    if (existingLog != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => WorkoutLogDetailScreen(log: existingLog),
+        ),
+      );
+    } else {
+      // Not completed yet — whether the date is today, upcoming, or in the
+      // past (a missed session), we still let the user open and run it as
+      // a make-up session rather than locking past days.
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => WorkoutPreviewScreen(day: day),
+        ),
+      );
+    }
+  }
+
+  void _showRestDaySheet(String goal) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primary.withValues(alpha: 0.1),
+              ),
+              child: const Icon(Icons.bedtime_rounded,
+                  color: AppColors.primary, size: 32),
+            ),
+            const SizedBox(height: 20),
+            Text('Rest Day',
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface)),
+            const SizedBox(height: 8),
+            Text(
+              'Today is your recovery day. Your muscles grow during rest — this is part of the plan.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.manrope(
+                  fontSize: 14,
+                  color: AppColors.onSurfaceVariant,
+                  height: 1.5),
+            ),
+            const SizedBox(height: 24),
+            Text('Check the Schedule tab to see your next workout.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.manrope(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.6))),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _startTodaysWorkout() async {
@@ -118,53 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (todayDay.isEmpty || todayDay['dayType'] == 'rest') {
       if (mounted) {
-        showModalBottomSheet(
-          context: context,
-          backgroundColor: AppColors.surfaceContainerLow,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          builder: (_) => Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.primary.withOpacity(0.1),
-                  ),
-                  child: const Icon(Icons.bedtime_rounded,
-                      color: AppColors.primary, size: 32),
-                ),
-                const SizedBox(height: 20),
-                Text('Rest Day',
-                    style: GoogleFonts.spaceGrotesk(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface)),
-                const SizedBox(height: 8),
-                Text(
-                  'Today is your recovery day. Your muscles grow during rest — this is part of the plan.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.manrope(
-                      fontSize: 14,
-                      color: AppColors.onSurfaceVariant,
-                      height: 1.5),
-                ),
-                const SizedBox(height: 24),
-                Text('Check the Schedule tab to see your next workout.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.manrope(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceVariant.withOpacity(0.6))),
-                const SizedBox(height: 32),
-              ],
-            ),
-          ),
-        );
+        _showRestDaySheet(_goalLabel(_profile?['fitnessGoal'] as String?));
       }
       return;
     }
@@ -204,6 +296,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final feedLogs = _allLogs.take(_feedDisplayLimit).toList();
+
     return Scaffold(
       backgroundColor: AppColors.surface,
       // No AppBar — matches your design spec
@@ -246,8 +340,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                    // Phase 4 will replace these with real workout logs
-                    _recentLogs.isEmpty
+                    feedLogs.isEmpty
                       ? SliverToBoxAdapter(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
@@ -260,7 +353,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Column(
                                 children: [
                                   Icon(Icons.fitness_center_rounded,
-                                      color: AppColors.onSurfaceVariant.withOpacity(0.4),
+                                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.4),
                                       size: 32),
                                   const SizedBox(height: 12),
                                   Text(
@@ -290,9 +383,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           delegate: SliverChildBuilderDelegate(
                             (context, index) => Padding(
                               padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                              child: _buildRealLogCard(_recentLogs[index]),
+                              child: _buildRealLogCard(feedLogs[index]),
                             ),
-                            childCount: _recentLogs.length,
+                            childCount: feedLogs.length,
                           ),
                         ),
 
@@ -419,7 +512,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           Positioned.fill(
-            child: ColoredBox(color: Colors.black.withOpacity(0.5)),
+            child: ColoredBox(color: Colors.black.withValues(alpha: 0.5)),
           ),
           Padding(
             padding: const EdgeInsets.all(24),
@@ -457,14 +550,14 @@ class _HomeScreenState extends State<HomeScreen> {
               style: GoogleFonts.spaceGrotesk(
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.onSurfaceVariant.withOpacity(0.5),
+                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
                   height: 1.15)),
           const SizedBox(height: 8),
           Text(
             'Your muscles grow during rest. Today is part of the plan — embrace recovery.',
             style: GoogleFonts.manrope(
                 fontSize: 13,
-                color: AppColors.onSurfaceVariant.withOpacity(0.6),
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
                 height: 1.5),
           ),
           const SizedBox(height: 24),
@@ -474,7 +567,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 1.5,
-                  color: AppColors.onSurfaceVariant.withOpacity(0.4))),
+                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.4))),
         ],
       ),
           ),
@@ -505,13 +598,13 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Opacity(
               opacity: 0.7,
               child: Image.asset(
-                'assets/images/workout_day1.jpg',
+                'assets/images/workout_day.jpg',
                 fit: BoxFit.cover,
               ),
             ),
           ),
           Positioned.fill(
-            child: ColoredBox(color: Colors.black.withOpacity(0.5)),
+            child: ColoredBox(color: Colors.black.withValues(alpha: 0.5)),
           ),
           Padding(
             padding: const EdgeInsets.all(24),
@@ -591,9 +684,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.error.withOpacity(0.08),
+        color: AppColors.error.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.error.withOpacity(0.2)),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
       ),
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -621,7 +714,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.12),
+            color: AppColors.primary.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(48),
           ),
           child: Text('DAILY EVOLUTION',
@@ -682,12 +775,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Placeholder log card
+  // Activity feed card — now tappable (opens the read-only detail screen)
+  // and shows the attached progress photo thumbnail when one exists.
   Widget _buildRealLogCard(Map<String, dynamic> log) {
     final workoutName = log['workoutName'] as String? ?? 'Workout';
     final completedAt = log['completedAt'] as String? ?? '';
     final totalVolume = (log['totalVolume'] as num?)?.toDouble() ?? 0;
     final durationMins = log['totalDurationMins'] as int? ?? 0;
+    final photoBase64 = log['progressPhotoBase64'] as String?;
 
     // Convert ISO date string to readable relative time
     String dateLabel = '';
@@ -705,61 +800,93 @@ class _HomeScreenState extends State<HomeScreen> {
       dateLabel = '';
     }
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => WorkoutLogDetailScreen(log: log)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  workoutName,
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.onSurface,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (photoBase64 != null && photoBase64.isNotEmpty) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.memory(
+                  base64Decode(photoBase64),
+                  width: 56,
+                  height: 56,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 56,
+                    height: 56,
+                    color: AppColors.surfaceContainerHigh,
                   ),
                 ),
               ),
-              Text(
-                dateLabel,
-                style: GoogleFonts.manrope(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
+              const SizedBox(width: 16),
             ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _buildLogStat('DURATION', '${durationMins}min'),
-              const SizedBox(width: 24),
-              _buildLogStat(
-                'VOLUME',
-                totalVolume > 0
-                    ? '${totalVolume.toStringAsFixed(0)}kg'
-                    : '—',
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          workoutName,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        dateLabel,
+                        style: GoogleFonts.manrope(
+                          fontSize: 12,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      _buildLogStat('DURATION', '${durationMins}min'),
+                      const SizedBox(width: 24),
+                      _buildLogStat(
+                        'VOLUME',
+                        totalVolume > 0
+                            ? '${totalVolume.toStringAsFixed(0)}kg'
+                            : '—',
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
+  // Weekly calendar — each day is now tappable, resolving to that
+  // weekday's plan day (rest sheet / preview screen / past-log detail).
+  // Workout days additionally show a small completion dot.
   Widget _buildWeeklyCalendar() {
     final today = DateTime.now();
     final startDate = today.subtract(const Duration(days: 3));
     final days = List.generate(7, (index) => startDate.add(Duration(days: index)));
 
     return SizedBox(
-      height: 72,
+      height: 80,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
@@ -769,45 +896,79 @@ class _HomeScreenState extends State<HomeScreen> {
             final isToday = date.year == today.year &&
                 date.month == today.month &&
                 date.day == today.day;
+
+            final planDay = _planDayForWeekday(date.weekday);
+            final isWorkoutDay = planDay != null && planDay['dayType'] != 'rest';
+            final isCompleted = isWorkoutDay && _logForDate(date) != null;
+
             return Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: Container(
-                width: 44,
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                decoration: BoxDecoration(
-                  color: isToday
-                      ? AppColors.primary
-                      : AppColors.surface,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
+              child: GestureDetector(
+                onTap: () => _onCalendarDayTap(date),
+                child: Container(
+                  width: 44,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  decoration: BoxDecoration(
                     color: isToday
                         ? AppColors.primary
-                        : AppColors.outlineVariant,
+                        : AppColors.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: isToday
+                          ? AppColors.primary
+                          : AppColors.outlineVariant,
+                    ),
                   ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      '${date.day}',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: isToday ? Colors.white : AppColors.onSurface,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${date.day}',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: isToday ? Colors.white : AppColors.onSurface,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _weekdayLabel(date.weekday),
-                      style: GoogleFonts.manrope(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: isToday
-                            ? Colors.white.withOpacity(0.92)
-                            : AppColors.onSurfaceVariant,
+                      const SizedBox(height: 4),
+                      Text(
+                        _weekdayLabel(date.weekday),
+                        style: GoogleFonts.manrope(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: isToday
+                              ? Colors.white.withValues(alpha: 0.92)
+                              : AppColors.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      // Completion indicator — only meaningful for workout
+                      // days; rest days and days with no plan show nothing.
+                      SizedBox(
+                        height: 6,
+                        child: isWorkoutDay
+                            ? Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isCompleted
+                                      ? (isToday ? Colors.white : AppColors.primary)
+                                      : Colors.transparent,
+                                  border: isCompleted
+                                      ? null
+                                      : Border.all(
+                                          color: isToday
+                                              ? Colors.white54
+                                              : AppColors.outlineVariant,
+                                          width: 1,
+                                        ),
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
