@@ -23,6 +23,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   bool _isLoading = true;
   String? _error;
 
+  // Edit mode: when on, tapping a workout day opens the Replace/Cancel
+  bool _isEditMode = false;
+  bool _isMutating = false; // true while a swap/cancel write is in flight
+
   @override
   void initState() {
     super.initState();
@@ -81,25 +85,71 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Screen title
-          Text(
-            _segmentIndex == 0 ? 'SCHEDULE' : 'EXERCISE LIBRARY',
-            style: GoogleFonts.manrope(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 2,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _segmentIndex == 0 ? 'Your 7-Day Plan' : 'Master Your Mechanics',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
-              height: 1.1,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Screen title
+                    Text(
+                      _segmentIndex == 0 ? 'SCHEDULE' : 'EXERCISE LIBRARY',
+                      style: GoogleFonts.manrope(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 2,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _segmentIndex == 0 ? 'Your 7-Day Plan' : 'Master Your Mechanics',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Edit-mode toggle — only meaningful on the Schedule segment.
+              if (_segmentIndex == 0 && _plan != null)
+                GestureDetector(
+                  onTap: () => setState(() => _isEditMode = !_isEditMode),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _isEditMode
+                          ? AppColors.primary
+                          : AppColors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _isEditMode ? Icons.check_rounded : Icons.edit_calendar_rounded,
+                          size: 16,
+                          color: _isEditMode ? AppColors.onPrimary : AppColors.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _isEditMode ? 'DONE' : 'EDIT',
+                          style: GoogleFonts.manrope(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
+                            color: _isEditMode ? AppColors.onPrimary : AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
 
           const SizedBox(height: 16),
@@ -119,6 +169,29 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               ],
             ),
           ),
+
+          if (_isEditMode) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded, size: 14, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Tap a workout day to replace or cancel it.',
+                      style: GoogleFonts.manrope(fontSize: 12, color: AppColors.primary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -342,8 +415,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final exercises =
         (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
+    // In edit mode, workout days open the manage sheet (replace/cancel)
+    final VoidCallback? onTap = isRest
+        ? null
+        : (_isEditMode ? () => _showManageDaySheet(day) : () => _showExerciseSheet(day));
+
     return GestureDetector(
-      onTap: isRest ? null : () => _showExerciseSheet(day),
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -355,8 +433,8 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             left: BorderSide(
               color: isRest
                   ? Colors.transparent
-                  : AppColors.primary.withValues(alpha: 0.6),
-              width: 3,
+                  : (_isEditMode ? AppColors.primary : AppColors.primary.withValues(alpha: 0.6)),
+              width: _isEditMode && !isRest ? 4 : 3,
             ),
           ),
         ),
@@ -378,6 +456,11 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                     ),
                   ),
                 ),
+                if (_isEditMode && !isRest)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 8),
+                    child: Icon(Icons.edit_rounded, size: 14, color: AppColors.primary),
+                  ),
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 4),
@@ -468,7 +551,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               ],
               const SizedBox(height: 10),
               Text(
-                'TAP TO VIEW EXERCISES →',
+                _isEditMode ? 'TAP TO REPLACE OR CANCEL →' : 'TAP TO VIEW EXERCISES →',
                 style: GoogleFonts.manrope(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -498,6 +581,313 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             color: AppColors.onSurfaceVariant),
       ),
     );
+  }
+
+  // Edit mode: manage-day sheet (Replace / Cancel)
+  void _showManageDaySheet(Map<String, dynamic> day) {
+    final workoutName = day['workoutName'] as String? ?? 'Workout';
+    final dayName = day['dayName'] as String? ?? '';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(dayName.toUpperCase(),
+                style: GoogleFonts.manrope(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.5,
+                    color: AppColors.onSurfaceVariant)),
+            const SizedBox(height: 4),
+            Text(workoutName,
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+            const SizedBox(height: 24),
+
+            _manageOptionTile(
+              icon: Icons.swap_horiz_rounded,
+              title: 'Replace Day',
+              subtitle: 'Swap with another day in this plan',
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _showReplaceDayPicker(day);
+              },
+            ),
+            const SizedBox(height: 10),
+            _manageOptionTile(
+              icon: Icons.remove_circle_outline_rounded,
+              title: 'Cancel Day',
+              subtitle: 'Mark this day as rest instead',
+              iconColor: AppColors.error,
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _confirmCancelDay(day);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _manageOptionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    Color iconColor = AppColors.primary,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: GoogleFonts.manrope(fontSize: 12, color: AppColors.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showReplaceDayPicker(Map<String, dynamic> day) {
+    final days = (_plan!['days'] as List).cast<Map<String, dynamic>>();
+    final replacementDays = days
+        .where((d) => d['id'] != day['id'])
+        .toList();
+
+    if (replacementDays.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No other days to swap with.', style: GoogleFonts.manrope()),
+          backgroundColor: AppColors.surfaceContainerHigh,
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerLow,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => DraggableScrollableSheet(
+        initialChildSize: 0.55,
+        maxChildSize: 0.85,
+        minChildSize: 0.35,
+        expand: false,
+        builder: (_, scrollController) => Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'SWAP "${(day['workoutName'] as String).toUpperCase()}" WITH',
+                  style: GoogleFonts.manrope(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
+                      color: AppColors.onSurfaceVariant),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                itemCount: replacementDays.length,
+                itemBuilder: (_, index) {
+                  final other = replacementDays[index];
+                  final otherExercises =
+                      (other['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                  final isRestDay = other['dayType'] == 'rest';
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        _confirmSwap(day, other);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${(other['dayName'] as String).toUpperCase()} • ${isRestDay ? 'Rest Day' : other['workoutName']}',
+                                    style: GoogleFonts.spaceGrotesk(
+                                        fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isRestDay
+                                        ? 'REST DAY'
+                                        : '${otherExercises.length} EXERCISES',
+                                    style: GoogleFonts.manrope(
+                                        fontSize: 10, letterSpacing: 1, color: AppColors.onSurfaceVariant),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.swap_horiz_rounded, color: AppColors.primary),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmSwap(Map<String, dynamic> dayA, Map<String, dynamic> dayB) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Swap Days?',
+            style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+        content: Text(
+          '${dayA['dayName']} will become "${dayB['workoutName']}", and ${dayB['dayName']} will become "${dayA['workoutName']}".',
+          style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Swap',
+                style: GoogleFonts.manrope(color: AppColors.primary, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+    await _runMutation(() => WorkoutPlanService().swapDays(
+          uid: FirebaseAuth.instance.currentUser!.uid,
+          planId: _plan!['id'] as String,
+          dayIdA: dayA['id'] as String,
+          dayIdB: dayB['id'] as String,
+        ));
+  }
+
+  Future<void> _confirmCancelDay(Map<String, dynamic> day) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Cancel This Workout?',
+            style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+        content: Text(
+          '${day['dayName']} will be marked as a rest day. Its exercises will be removed from the schedule.',
+          style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Keep It', style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Cancel Day',
+                style: GoogleFonts.manrope(color: AppColors.error, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+    await _runMutation(() => WorkoutPlanService().cancelDay(
+          uid: FirebaseAuth.instance.currentUser!.uid,
+          planId: _plan!['id'] as String,
+          dayId: day['id'] as String,
+        ));
+  }
+
+  /// Runs a swap/cancel write
+  Future<void> _runMutation(Future<void> Function() action) async {
+    if (_isMutating) return;
+    setState(() => _isMutating = true);
+    try {
+      await action();
+      await _loadPlan();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Something went wrong. Please try again.', style: GoogleFonts.manrope()),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isMutating = false);
+    }
   }
 
   void _showExerciseSheet(Map<String, dynamic> day) {

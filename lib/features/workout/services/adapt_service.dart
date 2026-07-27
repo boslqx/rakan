@@ -90,11 +90,11 @@ class AdaptService {
       // For each FUTURE workout day, adapt exercises
       for (final dayDoc in daysSnap.docs) {
         final dayData = dayDoc.data();
-        final int dayOfWeek = dayData['dayOfWeek'] as int? ?? 0;
-        final bool isRestDay = dayData['isRestDay'] as bool? ?? true;
+        final int dayNumber = dayData['dayNumber'] as int? ?? 0;
+        final bool isRestDay = dayData['dayType'] == 'rest';
 
         // Skip past days, today, and rest days
-        if (dayOfWeek <= todayWeekday || isRestDay) continue;
+        if (dayNumber <= todayWeekday || isRestDay) continue;
 
         // Load exercises for this day
         final exercisesSnap = await _db
