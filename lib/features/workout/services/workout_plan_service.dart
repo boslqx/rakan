@@ -26,7 +26,10 @@ class WorkoutPlanService {
 
       return {
         ...planData,
-        // Injected explicitly rather than assumed to be part of planData 
+        // Injected explicitly rather than assumed to be part of planData —
+        // needed so screens can target this specific plan doc (e.g. for
+        // swapDays/cancelDay) without guessing whether the underlying
+        // document already stores its own ID as a field.
         'id': planDoc.id,
         'days': await _loadDays(uid, planDoc.id),
       };
@@ -65,26 +68,54 @@ class WorkoutPlanService {
           .get();
 
       final exercises = exercisesSnapshot.docs
-          .map((e) => e.data())
+          .map((e) => {...e.data(), 'docId': e.id})
           .toList();
 
-      // 'id' injected here for the same reason as on the plan map
+      // Sort by 'order' if present. Exercises added before this field
+      // existed default to a large sort key, so they keep their original
+      // (arbitrary) relative order and simply appear after any explicitly
+      // ordered ones — nothing breaks for plans generated before reordering
+      // was supported.
+      exercises.sort((a, b) {
+        final orderA = a['order'] as int? ?? 999999;
+        final orderB = b['order'] as int? ?? 999999;
+        return orderA.compareTo(orderB);
+      });
+
+      // 'id' injected here for the same reason as on the plan map — the
+      // Schedule tab's edit feature needs each day's Firestore doc ID to
+      // call swapDays/cancelDay.
       days.add({...dayData, 'id': dayDoc.id, 'exercises': exercises});
     }
 
     return days;
   }
 
-  /// Swaps the workout
+  /// Swaps the workout *content* (name, focus, duration, and full
+  /// exercise list) between two days in the plan, while keeping each
+  /// day's calendar slot fixed — dayNumber, dayName, and dayType never
+  /// move, only which workout occupies that slot does.
+  ///
+  /// This is a genuine swap, not a copy: whatever Monday had, Wednesday
+  /// now has, and vice versa. Because nothing is added or removed, the
+  /// plan's total weekly volume is unchanged — which is why this doesn't
+  /// need to trigger any special recovery/intensity recalculation; the
+  /// existing post-workout adaptation still reacts to whatever actually
+  /// gets logged, same as before.
   Future<void> swapDays({
     required String uid,
     required String planId,
     required String dayIdA,
     required String dayIdB,
   }) async {
-    // Only calendar-position fields stay with their existing documents.
+    // Fields that represent the calendar SLOT rather than the workout
+    // content itself — deliberately left untouched on both days. This
+    // includes the legacy dayOfWeek/isRestDay fields (now unused after
+    // the adapt_service.dart fix, but left alone here in case anything
+    // else still reads them) for the same "slot, not content" reasoning
+    // as dayNumber/dayType.
     const slotFields = {
-      'dayNumber', 'dayName', 'dayOfWeek',
+      'dayNumber', 'dayName', 'dayType', 'dayOfWeek', 'isRestDay',
     };
 
     final daysRef = _db
@@ -110,25 +141,19 @@ class WorkoutPlanService {
       for (final entry in dataB.entries)
         if (!slotFields.contains(entry.key)) entry.key: entry.value,
     };
-    final slotA = {
-      for (final entry in dataA.entries)
-        if (slotFields.contains(entry.key)) entry.key: entry.value,
-    };
-    final slotB = {
-      for (final entry in dataB.entries)
-        if (slotFields.contains(entry.key)) entry.key: entry.value,
-    };
 
     final exercisesASnap = await dayRefA.collection('exercises').get();
     final exercisesBSnap = await dayRefB.collection('exercises').get();
 
     final batch = _db.batch();
 
-    // Replace each day document's content completely. This prevents fields
-    batch.set(dayRefA, {...slotA, ...contentB});
-    batch.set(dayRefB, {...slotB, ...contentA});
+    // Swap the day-level content fields
+    batch.update(dayRefA, contentB);
+    batch.update(dayRefB, contentA);
 
-    // Swap the exercises subcollections
+    // Swap the exercises subcollections: remove both, then rewrite each
+    // day's subcollection with the other's original exercise docs
+    // (original doc IDs preserved, just moved to the other parent).
     for (final doc in exercisesASnap.docs) {
       batch.delete(doc.reference);
     }
@@ -145,7 +170,10 @@ class WorkoutPlanService {
     await batch.commit();
   }
 
-  /// Explicitly cancels a scheduled workout day
+  /// Explicitly cancels a scheduled workout day: converts it to a rest
+  /// day and clears its exercises. This is distinct from a day that
+  /// simply goes unlogged (shown as "Skipped" on the Home calendar) — a
+  /// cancel is a deliberate action taken before the day is attempted.
   Future<void> cancelDay({
     required String uid,
     required String planId,
@@ -172,6 +200,84 @@ class WorkoutPlanService {
       'durationMinutes': 0,
     });
 
+    await batch.commit();
+  }
+
+  /// Adds a new exercise to a day, appended after its current last
+  /// exercise (by 'order'), and writes a fresh duration estimate for the
+  /// day in the same batch — computed by the caller (the detail screen),
+  /// since only it has the live, up-to-date exercise list to estimate
+  /// from.
+  Future<void> addExerciseToDay({
+    required String uid,
+    required String planId,
+    required String dayId,
+    required Map<String, dynamic> exercise,
+    required int order,
+    required int newDurationMinutes,
+  }) async {
+    final dayRef = _db
+        .collection('users')
+        .doc(uid)
+        .collection('workoutPlans')
+        .doc(planId)
+        .collection('days')
+        .doc(dayId);
+    final newExerciseRef = dayRef.collection('exercises').doc();
+
+    final batch = _db.batch();
+    batch.set(newExerciseRef, {...exercise, 'order': order});
+    batch.update(dayRef, {'durationMinutes': newDurationMinutes});
+    await batch.commit();
+  }
+
+  /// Removes a single exercise from a day (by its Firestore doc ID — see
+  /// the 'docId' field injected in [_loadDays]) and updates the day's
+  /// duration estimate to match. Remaining exercises' 'order' values are
+  /// left as-is — gaps in the sequence don't affect sort correctness.
+  Future<void> removeExerciseFromDay({
+    required String uid,
+    required String planId,
+    required String dayId,
+    required String exerciseDocId,
+    required int newDurationMinutes,
+  }) async {
+    final dayRef = _db
+        .collection('users')
+        .doc(uid)
+        .collection('workoutPlans')
+        .doc(planId)
+        .collection('days')
+        .doc(dayId);
+
+    final batch = _db.batch();
+    batch.delete(dayRef.collection('exercises').doc(exerciseDocId));
+    batch.update(dayRef, {'durationMinutes': newDurationMinutes});
+    await batch.commit();
+  }
+
+  /// Persists a new exercise order for a day, after the user drags to
+  /// reorder them in the UI. Takes the exercises' Firestore doc IDs in
+  /// their new display order and writes sequential 'order' values.
+  Future<void> reorderExercisesInDay({
+    required String uid,
+    required String planId,
+    required String dayId,
+    required List<String> orderedExerciseDocIds,
+  }) async {
+    final exercisesRef = _db
+        .collection('users')
+        .doc(uid)
+        .collection('workoutPlans')
+        .doc(planId)
+        .collection('days')
+        .doc(dayId)
+        .collection('exercises');
+
+    final batch = _db.batch();
+    for (int i = 0; i < orderedExerciseDocIds.length; i++) {
+      batch.update(exercisesRef.doc(orderedExerciseDocIds[i]), {'order': i});
+    }
     await batch.commit();
   }
 }

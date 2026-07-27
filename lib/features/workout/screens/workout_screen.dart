@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../services/workout_plan_service.dart';
-import 'workout_preview_screen.dart';
+import 'workout_day_detail_screen.dart';
 import 'exercise_library_screen.dart';
 
 class WorkoutScreen extends StatefulWidget {
@@ -24,6 +24,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   String? _error;
 
   // Edit mode: when on, tapping a workout day opens the Replace/Cancel
+  // management sheet instead of the normal "view exercises" sheet.
   bool _isEditMode = false;
   bool _isMutating = false; // true while a swap/cancel write is in flight
 
@@ -416,9 +417,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
     // In edit mode, workout days open the manage sheet (replace/cancel)
+    // instead of the normal view-exercises sheet. Rest days aren't
+    // editable yet — only workout days can be replaced or cancelled.
     final VoidCallback? onTap = isRest
         ? null
-        : (_isEditMode ? () => _showManageDaySheet(day) : () => _showExerciseSheet(day));
+        : (_isEditMode
+            ? () => _showManageDaySheet(day)
+            : () => _openDayDetail(day));
 
     return GestureDetector(
       onTap: onTap,
@@ -583,7 +588,8 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
   }
 
-  // Edit mode: manage-day sheet (Replace / Cancel)
+  // ── Edit mode: manage-day sheet (Replace / Cancel) ────────────────────
+
   void _showManageDaySheet(Map<String, dynamic> day) {
     final workoutName = day['workoutName'] as String? ?? 'Workout';
     final dayName = day['dayName'] as String? ?? '';
@@ -615,7 +621,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             _manageOptionTile(
               icon: Icons.swap_horiz_rounded,
               title: 'Replace Day',
-              subtitle: 'Swap with another day in this plan',
+              subtitle: 'Swap with another workout day in this plan',
               onTap: () {
                 Navigator.pop(sheetContext);
                 _showReplaceDayPicker(day);
@@ -687,14 +693,14 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   void _showReplaceDayPicker(Map<String, dynamic> day) {
     final days = (_plan!['days'] as List).cast<Map<String, dynamic>>();
-    final replacementDays = days
-        .where((d) => d['id'] != day['id'])
+    final otherWorkoutDays = days
+        .where((d) => d['dayType'] != 'rest' && d['id'] != day['id'])
         .toList();
 
-    if (replacementDays.isEmpty) {
+    if (otherWorkoutDays.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('No other days to swap with.', style: GoogleFonts.manrope()),
+          content: Text('No other workout days to swap with.', style: GoogleFonts.manrope()),
           backgroundColor: AppColors.surfaceContainerHigh,
         ),
       );
@@ -744,12 +750,11 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               child: ListView.builder(
                 controller: scrollController,
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                itemCount: replacementDays.length,
+                itemCount: otherWorkoutDays.length,
                 itemBuilder: (_, index) {
-                  final other = replacementDays[index];
+                  final other = otherWorkoutDays[index];
                   final otherExercises =
                       (other['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-                  final isRestDay = other['dayType'] == 'rest';
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: GestureDetector(
@@ -770,15 +775,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    '${(other['dayName'] as String).toUpperCase()} • ${isRestDay ? 'Rest Day' : other['workoutName']}',
+                                    '${(other['dayName'] as String).toUpperCase()} • ${other['workoutName']}',
                                     style: GoogleFonts.spaceGrotesk(
                                         fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    isRestDay
-                                        ? 'REST DAY'
-                                        : '${otherExercises.length} EXERCISES',
+                                    '${otherExercises.length} EXERCISES',
                                     style: GoogleFonts.manrope(
                                         fontSize: 10, letterSpacing: 1, color: AppColors.onSurfaceVariant),
                                   ),
@@ -869,7 +872,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         ));
   }
 
-  /// Runs a swap/cancel write
+  /// Runs a swap/cancel write, showing a lightweight loading state and
+  /// reloading the plan from Firestore afterward so the UI reflects the
+  /// authoritative saved state rather than a locally-guessed one.
   Future<void> _runMutation(Future<void> Function() action) async {
     if (_isMutating) return;
     setState(() => _isMutating = true);
@@ -890,167 +895,22 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     }
   }
 
-  void _showExerciseSheet(Map<String, dynamic> day) {
-    final exercises =
-        (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final workoutName = day['workoutName'] as String;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surfaceContainerLow,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      isScrollControlled: true,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        maxChildSize: 0.92,
-        minChildSize: 0.4,
-        expand: false,
-        builder: (_, scrollController) => Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      workoutName.toUpperCase(),
-                      style: GoogleFonts.spaceGrotesk(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onSurface),
-                    ),
-                  ),
-                  Text(
-                    '${exercises.length} EXERCISES',
-                    style: GoogleFonts.manrope(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.5,
-                        color: AppColors.onSurfaceVariant),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                itemCount: exercises.length,
-                itemBuilder: (_, index) {
-                  final ex = exercises[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${index + 1}',
-                                style: GoogleFonts.spaceGrotesk(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.primary),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  ex['exerciseName'] as String? ?? '',
-                                  style: GoogleFonts.spaceGrotesk(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.onSurface),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  (ex['muscleGroup'] as String? ?? '').toUpperCase(),
-                                  style: GoogleFonts.manrope(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 1.5,
-                                      color: AppColors.onSurfaceVariant),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '${ex['sets']} × ${ex['reps']}',
-                                style: GoogleFonts.spaceGrotesk(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.onSurface),
-                              ),
-                              Text(
-                                '${ex['restSeconds']}s REST',
-                                style: GoogleFonts.manrope(
-                                    fontSize: 10,
-                                    color: AppColors.onSurfaceVariant,
-                                    letterSpacing: 1),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => WorkoutPreviewScreen(day: day),
-                    ),
-                  );
-                },
-                child: Text(
-                  'START THIS WORKOUT →',
-                  style: GoogleFonts.spaceGrotesk(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.5),
-                ),
-              ),
-            ),
-          ],
+  /// Opens the full-screen, editable day view (WorkoutDayDetailScreen)
+  /// instead of the old bottom sheet — lets the user reorder, add/remove
+  /// exercises, and view exercise details, then start the workout
+  /// directly from there if it's today.
+  Future<void> _openDayDetail(Map<String, dynamic> day) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WorkoutDayDetailScreen(
+          day: day,
+          planId: _plan!['id'] as String,
         ),
       ),
     );
+    // Always refresh on return — cheap, and correctly reflects any
+    // add/remove/reorder edits made on the detail screen without needing
+    // to track exactly what changed.
+    _loadPlan();
   }
 }
