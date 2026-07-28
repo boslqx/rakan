@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../data/exercise_data.dart';
+import '../services/workout_plan_service.dart';
 import 'pose_detection_screen.dart';
 
 class ExerciseDetailSheet extends StatefulWidget {
@@ -233,11 +235,11 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
                         // Tips
                         _buildTipsCard(),
 
-                        // Pose detection CTA
-                        if (widget.exercise.hasPoseDetection) ...[
-                          const SizedBox(height: 24),
-                          _buildFormCheckButton(context),
-                        ],
+                        // Exercise actions
+                        const SizedBox(height: 24),
+                        _buildFormCheckButton(context),
+                        const SizedBox(height: 12),
+                        _buildAddToWorkoutButton(context),
 
                         const SizedBox(height: 40),
                       ],
@@ -461,6 +463,359 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
           fontSize: 14,
           fontWeight: FontWeight.w700,
           letterSpacing: 1,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddToWorkoutButton(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: () => _showAddToWorkoutDialog(context),
+      icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+      label: Text(
+        'ADD TO WORKOUT',
+        style: GoogleFonts.spaceGrotesk(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1,
+        ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primaryContainer,
+        foregroundColor: AppColors.onPrimary,
+        minimumSize: const Size(double.infinity, 56),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(48),
+        ),
+        elevation: 0,
+      ),
+    );
+  }
+
+  Future<void> _showAddToWorkoutDialog(BuildContext context) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final plan = await WorkoutPlanService().getActivePlan(uid);
+      if (plan == null || !mounted) return;
+
+      final days = (plan['days'] as List).cast<Map<String, dynamic>>();
+      final workoutDays = days.where((d) => d['dayType'] == 'workout').toList();
+
+      if (workoutDays.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No workout days in your active plan.',
+                  style: GoogleFonts.manrope()),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+        return;
+      }
+
+      if (!mounted) return;
+
+      final selectedDay = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        backgroundColor: AppColors.surfaceContainerLow,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (sheetContext) => _WorkoutDayPickerSheet(
+          workoutDays: workoutDays,
+          exerciseName: widget.exercise.name,
+        ),
+      );
+
+      if (selectedDay != null && mounted) {
+        await _confirmAddToWorkout(context, selectedDay);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text('Failed to load workout plan: $e', style: GoogleFonts.manrope()),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmAddToWorkout(BuildContext context, Map<String, dynamic> day) async {
+    final dayName = day['dayName'] as String? ?? 'this day';
+    final workoutName = day['workoutName'] as String? ?? 'Workout';
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Add to Workout?',
+            style: GoogleFonts.spaceGrotesk(
+                color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+        content: Text(
+          'Add "${widget.exercise.name}" to $dayName ($workoutName)?',
+          style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel',
+                style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Add',
+                style: GoogleFonts.manrope(
+                    color: AppColors.primary, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      await _addExerciseToDay(day, dayName, workoutName);
+    }
+  }
+
+  Future<void> _addExerciseToDay(
+      Map<String, dynamic> day, String dayName, String workoutName) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final planId = day['planId'] as String? ?? '';
+    final dayId = day['id'] as String? ?? '';
+
+    if (planId.isEmpty || dayId.isEmpty) return;
+
+    // We need to get the current exercises for this day to calculate order and duration
+    // The day object from the picker already has exercises
+    final exercises = (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final newExercise = {
+      'exerciseId': DateTime.now().millisecondsSinceEpoch.toString(),
+      'exerciseName': widget.exercise.name,
+      'muscleGroup': widget.exercise.muscleGroup,
+      'sets': 3,
+      'reps': 10,
+      'restSeconds': 60,
+    };
+
+    // Estimate duration
+    const secondsPerRep = 3;
+    const minWorkSeconds = 15;
+    int totalSeconds = 0;
+    for (final ex in exercises) {
+      final sets = ex['sets'] as int? ?? 3;
+      final reps = ex['reps'] as int? ?? 10;
+      final restSeconds = ex['restSeconds'] as int? ?? 60;
+      final workSeconds = (reps * secondsPerRep) < minWorkSeconds
+          ? minWorkSeconds
+          : reps * secondsPerRep;
+      totalSeconds += sets * workSeconds + (sets - 1) * restSeconds;
+    }
+    // Add new exercise
+    final newSets = newExercise['sets'] as int;
+    final newReps = newExercise['reps'] as int;
+    final newRest = newExercise['restSeconds'] as int;
+    final newWorkSeconds = (newReps * secondsPerRep) < minWorkSeconds
+        ? minWorkSeconds
+        : newReps * secondsPerRep;
+    totalSeconds += newSets * newWorkSeconds + (newSets - 1) * newRest;
+
+    final newDurationMinutes = (totalSeconds / 60).round();
+    final finalDuration = newDurationMinutes < 10 ? 10 : newDurationMinutes;
+
+    try {
+      await WorkoutPlanService().addExerciseToDay(
+        uid: uid,
+        planId: planId,
+        dayId: dayId,
+        exercise: newExercise,
+        order: exercises.length,
+        newDurationMinutes: finalDuration,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added "${widget.exercise.name}" to $dayName',
+                style: GoogleFonts.manrope()),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+        Navigator.pop(context); // Close the exercise detail sheet
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add exercise: $e', style: GoogleFonts.manrope()),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+}
+
+/// Bottom sheet to pick a workout day
+class _WorkoutDayPickerSheet extends StatelessWidget {
+  final List<Map<String, dynamic>> workoutDays;
+  final String exerciseName;
+
+  const _WorkoutDayPickerSheet({
+    required this.workoutDays,
+    required this.exerciseName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      maxChildSize: 0.9,
+      minChildSize: 0.4,
+      expand: false,
+      builder: (_, scrollController) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            // Drag handle
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+              child: Text(
+                'ADD "$exerciseName" TO',
+                style: GoogleFonts.manrope(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                itemCount: workoutDays.length,
+                itemBuilder: (_, index) {
+                  final day = workoutDays[index];
+                  final dayNumber = day['dayNumber'] as int;
+                  final dayName = day['dayName'] as String;
+                  final workoutName = day['workoutName'] as String;
+                  final focusDescription = day['focusDescription'] as String? ?? '';
+                  final durationMinutes = day['durationMinutes'] as int? ?? 0;
+                  final exercises = (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context, day),
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Center(
+                                    child: Text('DAY $dayNumber',
+                                        style: GoogleFonts.spaceGrotesk(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primary)),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(dayName.toUpperCase(),
+                                          style: GoogleFonts.manrope(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 1.5,
+                                              color: AppColors.onSurfaceVariant)),
+                                      Text(workoutName,
+                                          style: GoogleFonts.spaceGrotesk(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.onSurface)),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(Icons.arrow_forward_ios_rounded,
+                                    size: 16, color: AppColors.onSurfaceVariant),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Text(focusDescription,
+                                style: GoogleFonts.manrope(
+                                    fontSize: 12, color: AppColors.onSurfaceVariant)),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Icon(Icons.timer_outlined,
+                                    size: 13, color: AppColors.onSurfaceVariant),
+                                const SizedBox(width: 4),
+                                Text('$durationMinutes MIN',
+                                    style: GoogleFonts.manrope(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.onSurfaceVariant)),
+                                const SizedBox(width: 16),
+                                const Icon(Icons.fitness_center_rounded,
+                                    size: 13, color: AppColors.onSurfaceVariant),
+                                const SizedBox(width: 4),
+                                Text('${exercises.length} EXERCISES',
+                                    style: GoogleFonts.manrope(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.onSurfaceVariant)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
