@@ -93,8 +93,9 @@ class WorkoutPlanService {
 
   /// Swaps the workout *content* (name, focus, duration, and full
   /// exercise list) between two days in the plan, while keeping each
-  /// day's calendar slot fixed — dayNumber, dayName, and dayType never
-  /// move, only which workout occupies that slot does.
+  /// day's calendar position fixed — dayNumber and dayName never move.
+  /// The day type moves with the content, so a workout can be swapped with
+  /// a rest day.
   ///
   /// This is a genuine swap, not a copy: whatever Monday had, Wednesday
   /// now has, and vice versa. Because nothing is added or removed, the
@@ -108,14 +109,10 @@ class WorkoutPlanService {
     required String dayIdA,
     required String dayIdB,
   }) async {
-    // Fields that represent the calendar SLOT rather than the workout
-    // content itself — deliberately left untouched on both days. This
-    // includes the legacy dayOfWeek/isRestDay fields (now unused after
-    // the adapt_service.dart fix, but left alone here in case anything
-    // else still reads them) for the same "slot, not content" reasoning
-    // as dayNumber/dayType.
+    // Calendar-position fields stay with their existing documents. The
+    // day type (including the legacy isRestDay field) moves with its content.
     const slotFields = {
-      'dayNumber', 'dayName', 'dayType', 'dayOfWeek', 'isRestDay',
+      'dayNumber', 'dayName', 'dayOfWeek',
     };
 
     final daysRef = _db
@@ -141,15 +138,24 @@ class WorkoutPlanService {
       for (final entry in dataB.entries)
         if (!slotFields.contains(entry.key)) entry.key: entry.value,
     };
+    final slotA = {
+      for (final entry in dataA.entries)
+        if (slotFields.contains(entry.key)) entry.key: entry.value,
+    };
+    final slotB = {
+      for (final entry in dataB.entries)
+        if (slotFields.contains(entry.key)) entry.key: entry.value,
+    };
 
     final exercisesASnap = await dayRefA.collection('exercises').get();
     final exercisesBSnap = await dayRefB.collection('exercises').get();
 
     final batch = _db.batch();
 
-    // Swap the day-level content fields
-    batch.update(dayRefA, contentB);
-    batch.update(dayRefB, contentA);
+    // Replace each document's content completely, so workout-only fields
+    // cannot remain after that day becomes a rest day.
+    batch.set(dayRefA, {...slotA, ...contentB});
+    batch.set(dayRefB, {...slotB, ...contentA});
 
     // Swap the exercises subcollections: remove both, then rewrite each
     // day's subcollection with the other's original exercise docs

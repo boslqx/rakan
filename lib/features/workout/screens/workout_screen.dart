@@ -621,7 +621,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             _manageOptionTile(
               icon: Icons.swap_horiz_rounded,
               title: 'Replace Day',
-              subtitle: 'Swap with another workout day in this plan',
+              subtitle: 'Swap with another day in this plan',
               onTap: () {
                 Navigator.pop(sheetContext);
                 _showReplaceDayPicker(day);
@@ -693,14 +693,14 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   void _showReplaceDayPicker(Map<String, dynamic> day) {
     final days = (_plan!['days'] as List).cast<Map<String, dynamic>>();
-    final otherWorkoutDays = days
-        .where((d) => d['dayType'] != 'rest' && d['id'] != day['id'])
+    final replacementDays = days
+        .where((d) => d['id'] != day['id'])
         .toList();
 
-    if (otherWorkoutDays.isEmpty) {
+    if (replacementDays.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('No other workout days to swap with.', style: GoogleFonts.manrope()),
+          content: Text('No other days to swap with.', style: GoogleFonts.manrope()),
           backgroundColor: AppColors.surfaceContainerHigh,
         ),
       );
@@ -750,11 +750,12 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               child: ListView.builder(
                 controller: scrollController,
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                itemCount: otherWorkoutDays.length,
+                itemCount: replacementDays.length,
                 itemBuilder: (_, index) {
-                  final other = otherWorkoutDays[index];
+                  final other = replacementDays[index];
                   final otherExercises =
                       (other['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                  final isRestDay = other['dayType'] == 'rest';
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: GestureDetector(
@@ -775,13 +776,15 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    '${(other['dayName'] as String).toUpperCase()} • ${other['workoutName']}',
+                                    '${(other['dayName'] as String).toUpperCase()} • ${isRestDay ? 'Rest Day' : other['workoutName']}',
                                     style: GoogleFonts.spaceGrotesk(
                                         fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '${otherExercises.length} EXERCISES',
+                                    isRestDay
+                                        ? 'REST DAY'
+                                        : '${otherExercises.length} EXERCISES',
                                     style: GoogleFonts.manrope(
                                         fontSize: 10, letterSpacing: 1, color: AppColors.onSurfaceVariant),
                                   ),
