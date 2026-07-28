@@ -616,44 +616,46 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          // Weight field
-          Expanded(
-            child: GestureDetector(
-              onTap: () => _editValue(
-                label: 'Weight (kg)',
-                current: setData.weightKg.toInt(),
-                onSave: (val) => setState(() {
-                  setData.weightKg = val.toDouble();
-                  ex.weightManuallySet = true;
-                  for (int i = setIndex + 1; i < ex.sets.length; i++) {
-                    if (!ex.completedSets.contains(i)) {
-                      ex.sets[i].weightKg = val.toDouble();
+          // Weight field — only rendered for exercises that support added load.
+          if (ex.tracksWeight) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => _editValue(
+                  label: 'Weight (kg)',
+                  current: setData.weightKg.toInt(),
+                  onSave: (val) => setState(() {
+                    setData.weightKg = val.toDouble();
+                    ex.weightManuallySet = true;
+                    for (int i = setIndex + 1; i < ex.sets.length; i++) {
+                      if (!ex.completedSets.contains(i)) {
+                        ex.sets[i].weightKg = val.toDouble();
+                      }
                     }
-                  }
-                }),
-              ),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(10),
+                  }),
                 ),
-                child: Text(
-                  setData.weightKg == 0
-                      ? '—'
-                      : setData.weightKg.toStringAsFixed(1),
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: setData.weightKg == 0
-                        ? AppColors.onSurfaceVariant
-                        : AppColors.onSurface,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    setData.weightKg == 0
+                        ? '—'
+                        : setData.weightKg.toStringAsFixed(1),
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: setData.weightKg == 0
+                          ? AppColors.onSurfaceVariant
+                          : AppColors.onSurface,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
+          ],
           const SizedBox(width: 8),
           GestureDetector(
             onTap: () {

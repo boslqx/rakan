@@ -25,17 +25,20 @@ class ExerciseData {
   });
 }
 
+/// Exact equipment tag values
+const Set<String> kBodyweightOnlyEquipmentTags = {
+  'Bodyweight',
+  'Bodyweight, Bench',
+  'Pull-Up Bar',
+  'Ab Wheel',
+};
+
+extension ExerciseTracksWeight on ExerciseData {
+  /// True if this exercise should show a weight input and count weight
+  bool get tracksWeight => !kBodyweightOnlyEquipmentTags.contains(equipment);
+}
+
 /// Looks up the full static exercise record by its display name.
-///
-/// Plan documents (from the backend) only store `exerciseName` — the
-/// `exerciseId` field is a random UUID with no relation to this table.
-/// So any screen needing metadata not present in the plan doc (video id,
-/// step-by-step instructions, `hasPoseDetection`, etc.) must resolve it
-/// here, by name, at read time.
-///
-/// Returns null if no match is found (e.g. name drift between backend
-/// and this static list) — callers must treat metadata as optional and
-/// degrade gracefully rather than crash.
 ExerciseData? findExerciseByName(String name) {
   for (final ex in kExercises) {
     if (ex.name == name) return ex;

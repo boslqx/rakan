@@ -45,7 +45,6 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   int _frameRotation = 0;
 
   bool _permissionGranted = false;
-  bool _permissionChecked = false;
 
   ExerciseSessionState get _currentExercise => widget.exercises[_exerciseIndex];
   bool get _isLastExercise => _exerciseIndex == widget.exercises.length - 1;
@@ -58,8 +57,6 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
         widget.exercises.any((ex) => ex.data?.hasPoseDetection ?? false);
     if (anyNeedsCamera) {
       _requestCameraPermission();
-    } else {
-      _permissionChecked = true;
     }
   }
 
@@ -78,13 +75,11 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
       if (!mounted) return;
       setState(() {
         _permissionGranted = granted;
-        _permissionChecked = true;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _permissionGranted = false;
-        _permissionChecked = true;
       });
     }
   }
@@ -344,7 +339,6 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   }
 
   Widget _topCloseBar() {
-    final ex = _currentExercise;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Row(
@@ -426,15 +420,17 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     _readyStat('${set.reps}', 'TARGET REPS'),
-                    const SizedBox(width: 12),
-                    GestureDetector(
-                      onTap: _editWeight,
-                      child: _readyStat(
-                        set.weightKg == 0 ? 'TAP' : '${set.weightKg.toStringAsFixed(0)}kg',
-                        'WEIGHT',
-                        editable: true,
+                    if (ex.tracksWeight) ...[
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: _editWeight,
+                        child: _readyStat(
+                          set.weightKg == 0 ? 'TAP' : '${set.weightKg.toStringAsFixed(0)}kg',
+                          'WEIGHT',
+                          editable: true,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
                 if (!canCamera) ...[

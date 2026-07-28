@@ -1,7 +1,6 @@
 import 'exercise_data.dart';
 
-/// Maps the granular secondary-muscle tags used in `ExerciseData.secondaryMuscles`
-/// down to the app's existing 7 broad `MuscleGroups` categories.
+// tracksWeight bodyweight-detection logic
 const Map<String, String> kGranularToBroadMuscleGroup = {
   // Chest
   'Chest': MuscleGroups.chest,
@@ -45,7 +44,7 @@ const Map<String, String> kGranularToBroadMuscleGroup = {
   'Obliques': MuscleGroups.core,
 };
 
-/// Weekly Maximum Recoverable Volume (working sets/week) per broad muscle
+/// Weekly Maximum Recoverable Volume (working sets/week)
 const Map<String, int> kWeeklyMRVByMuscleGroup = {
   // Large muscle groups
   MuscleGroups.back: 20,
@@ -67,7 +66,7 @@ const int kFallbackWeeklyMRV = 16;
 /// A secondary mover's set contributes this fraction of a full set's fatigue
 const double kSecondaryMuscleWeight = 0.5;
 
-/// fatigue score
+/// Below this fatigue score
 const double kRestDayFatigueThreshold = 0.5;
 const int kDefaultRestDays = 2;
 const int kElevatedRestDays = 3;

@@ -40,6 +40,9 @@ class ExerciseSessionState {
 
   bool get isFullyComplete => completedSets.length == sets.length;
 
+  /// Whether this exercise has any added-load variant
+  bool get tracksWeight => data?.tracksWeight ?? true;
+
   /// Index of the first not-yet-completed set. Equals sets.length once
   int get currentSetIndex {
     for (int i = 0; i < sets.length; i++) {
