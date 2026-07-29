@@ -9,6 +9,7 @@ import '../../workout/services/workout_plan_service.dart';
 import '../../workout/screens/workout_preview_screen.dart';
 import '../../workout/screens/workout_log_detail_screen.dart';
 import '../../workout/services/workout_log_service.dart';
+import '../../workout/services/weekly_summary_service.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -75,6 +76,8 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint(st.toString());
       loadError ??= 'Unable to load your workout plan. Please try again.';
     }
+
+    WeeklySummaryService().checkAndGenerateWeeklySummary(uid);
 
     Map<String, dynamic>? todayDay;
     List<Map<String, dynamic>> planDays = [];
