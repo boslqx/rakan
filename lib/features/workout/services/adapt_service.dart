@@ -79,25 +79,34 @@ class AdaptService {
         'backend message=${result['message']}',
       );
 
-      final proposalPayloads = buildProposalPayloads(
-        sessionExercises: sessionExercises,
-        fatigueScore: fatigueScore,
-        sourceLogId: sourceLogId,
-      );
+      
+      final Set<String> seenMuscleGroups = {};
+      final batch = _db.batch();
+      final proposalsRef = _db
+          .collection('users')
+          .doc(uid)
+          .collection('adaptationProposals');
 
-      if (proposalPayloads.isNotEmpty) {
-        final batch = _db.batch();
-        final proposalsRef = _db
-            .collection('users')
-            .doc(uid)
-            .collection('adaptationProposals');
+      for (final logged in sessionExercises) {
+        final exerciseData = findExerciseByName(logged.exerciseName);
+        if (exerciseData == null) continue; // unresolvable — nothing to key a proposal on
 
-        for (final payload in proposalPayloads) {
-          batch.set(proposalsRef.doc(), payload);
-        }
+        final muscleGroup = exerciseData.muscleGroup;
+        if (seenMuscleGroups.contains(muscleGroup)) continue; // already proposed this session
 
-        await batch.commit();
+        seenMuscleGroups.add(muscleGroup);
+
+        final proposalDoc = proposalsRef.doc();
+        batch.set(proposalDoc, {
+          'createdAt': FieldValue.serverTimestamp(),
+          'muscleGroup': muscleGroup,
+          'sessionFatigueScore': fatigueScore,
+          'status': 'pending',
+          'sourceLogId': sourceLogId,
+        });
       }
+
+      await batch.commit();
 
       return fatigueLevel;
     } catch (e) {

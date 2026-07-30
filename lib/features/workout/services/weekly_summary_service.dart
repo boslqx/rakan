@@ -1,8 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+import '../data/exercise_data.dart';
 
 class WeeklySummaryService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  static const String _baseUrl = 'https://rakan-backend.onrender.com';
   static const Duration kSummaryInterval = Duration(days: 7);
 
   /// Checks whether at least 7 days have passed since the last weekly summary
@@ -39,6 +44,7 @@ class WeeklySummaryService {
   Future<void> _generateSummary(String uid, DateTime now) async {
     final weekStart = now.subtract(kSummaryInterval);
 
+    // existing session/RPE aggregation
     final logsSnapshot = await _db
         .collection('users')
         .doc(uid)
@@ -60,7 +66,7 @@ class WeeklySummaryService {
       sessionsCompleted++;
       totalVolume += (logData['totalVolume'] as num?)?.toDouble() ?? 0;
 
-      // Same subcollection-scan pattern as updateMuscleRecovery 
+      // Same subcollection-scan pattern as updateMuscleRecovery
       final exerciseLogsSnap =
           await logDoc.reference.collection('exerciseLogs').get();
       for (final exLogDoc in exerciseLogsSnap.docs) {
@@ -73,20 +79,198 @@ class WeeklySummaryService {
         ? null
         : rpeValues.reduce((a, b) => a + b) / rpeValues.length;
 
+    // gather past volumes for trend (up to last 3 weeklySummaries) 
+    final pastSummariesSnap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('weeklySummaries')
+        .orderBy('generatedAt', descending: true)
+        .limit(3)
+        .get();
+    final pastVolumes = pastSummariesSnap.docs
+        .map((d) => (d.data()['totalVolume'] as num?)?.toDouble() ?? 0.0)
+        .toList();
+
+    // gather pending proposals + their muscle recovery scores
+    final proposalsSnap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('adaptationProposals')
+        .where('status', isEqualTo: 'pending')
+        .get();
+
+    final List<Map<String, dynamic>> proposalPayloads = [];
+    final Map<String, DocumentReference> proposalRefsById = {};
+    final Map<String, String> muscleGroupByProposalId = {};
+
+    for (final propDoc in proposalsSnap.docs) {
+      final data = propDoc.data();
+      final muscleGroup = data['muscleGroup'] as String;
+      final fatigueScore = (data['sessionFatigueScore'] as num).toDouble();
+
+      // Read this muscle group's current recovery score
+      final recoveryDoc = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('muscleRecovery')
+          .doc(muscleGroup)
+          .get();
+      final recoveryScore =
+          (recoveryDoc.data()?['fatigueScore'] as num?)?.toDouble();
+      if (recoveryScore == null) {
+        // No recovery data yet for this muscle group — skip rather than guess;
+        // the proposal stays pending and will be retried next weekly run.
+        continue;
+      }
+
+      proposalPayloads.add({
+        'proposal_id': propDoc.id,
+        'fatigue_score': fatigueScore,
+        'muscle_recovery_score': recoveryScore,
+      });
+      proposalRefsById[propDoc.id] = propDoc.reference;
+      muscleGroupByProposalId[propDoc.id] = muscleGroup;
+    }
+
+    // call the combined backend endpoint 
+    Map<String, dynamic>? commitResult;
+    if (proposalPayloads.isNotEmpty || pastVolumes.isNotEmpty) {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/commit-adaptations'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'current_volume': totalVolume,
+          'past_volumes': pastVolumes,
+          'proposals': proposalPayloads,
+        }),
+      ).timeout(const Duration(seconds: 60));
+
+      if (response.statusCode == 200) {
+        commitResult = jsonDecode(response.body) as Map<String, dynamic>;
+      } else {
+        print(
+            'commit-adaptations failed: ${response.statusCode} — skipping this run\'s adaptations');
+      }
+    }
+
+    // apply resolved adjustments + write summary, all in ONE batch
+    final batch = _db.batch();
+
+    if (commitResult != null) {
+      final resolvedProposals = commitResult['resolved_proposals'] as List<dynamic>;
+
+      for (final resolved in resolvedProposals) {
+        final proposalId = resolved['proposal_id'] as String;
+        final finalAdjustment = (resolved['final_adjustment'] as num).toDouble();
+        final tier = resolved['tier'] as String;
+        final muscleGroup = muscleGroupByProposalId[proposalId]!;
+
+        // Apply to every future exercise whose primary muscleGroup matches
+        await _applyAdjustmentToMuscleGroup(
+          batch: batch,
+          uid: uid,
+          muscleGroup: muscleGroup,
+          adjustment: finalAdjustment,
+          tier: tier,
+          todayWeekday: now.weekday,
+        );
+
+        // Mark this proposal committed
+        batch.update(proposalRefsById[proposalId]!, {
+          'status': 'committed',
+          'resolvedTier': tier,
+          'resolvedAdjustment': finalAdjustment,
+          'committedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    // Existing summary write, now with trend fields added
     final summaryRef = _db
         .collection('users')
         .doc(uid)
         .collection('weeklySummaries')
-        .doc(); // auto-generated ID 
-
-    await summaryRef.set({
+        .doc();
+    batch.set(summaryRef, {
       'weekStart': weekStart.toIso8601String(),
       'weekEnd': now.toIso8601String(),
       'sessionsCompleted': sessionsCompleted,
       'avgRpe': avgRpe,
       'totalVolume': totalVolume,
+      'trend': commitResult?['trend'] ?? 'insufficient_data',
+      'trendAdjustment': commitResult?['trend_adjustment'] ?? 0.0,
       'generatedAt': now.toIso8601String(),
     });
+
+    await batch.commit();
+  }
+
+  /// Finds every exercise in every future workout day whose primary
+  Future<void> _applyAdjustmentToMuscleGroup({
+    required WriteBatch batch,
+    required String uid,
+    required String muscleGroup,
+    required double adjustment,
+    required String tier,
+    required int todayWeekday,
+  }) async {
+    final planQuery = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('workoutPlans')
+        .where('isActive', isEqualTo: true)
+        .limit(1)
+        .get();
+    if (planQuery.docs.isEmpty) return;
+    final planId = planQuery.docs.first.id;
+
+    final daysSnap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('workoutPlans')
+        .doc(planId)
+        .collection('days')
+        .get();
+
+    for (final dayDoc in daysSnap.docs) {
+      final dayData = dayDoc.data();
+      final int dayNumber = dayData['dayNumber'] as int? ?? 0;
+      final bool isRestDay = dayData['dayType'] == 'rest';
+      if (dayNumber <= todayWeekday || isRestDay) continue;
+
+      final exercisesSnap = await dayDoc.reference.collection('exercises').get();
+
+      for (final exDoc in exercisesSnap.docs) {
+        final exData = exDoc.data();
+        final exerciseName = exData['exerciseName'] as String?;
+        if (exerciseName == null) continue;
+
+        final exerciseInfo = findExerciseByName(exerciseName);
+        if (exerciseInfo == null || exerciseInfo.muscleGroup != muscleGroup) continue;
+
+        final currentSets = exData['sets'] as int? ?? 3;
+        final currentReps = exData['reps'] as int? ?? 10;
+
+        final newSets = _clampInt((currentSets * (1 + adjustment)).round(), min: 1, max: 6);
+        final newReps = _clampInt((currentReps * (1 + adjustment)).round(), min: 3, max: 20);
+
+        if (newSets != currentSets || newReps != currentReps) {
+          batch.update(exDoc.reference, {
+            'sets': newSets,
+            'reps': newReps,
+            'adaptedAt': FieldValue.serverTimestamp(),
+            'fatigueLevel': tier,
+            'adaptationSource': 'engine_v2',
+          });
+        }
+      }
+    }
+  }
+
+  int _clampInt(int value, {required int min, required int max}) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
   }
 
   /// Reads recent weekly summaries, most recent first.
