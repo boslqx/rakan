@@ -62,18 +62,31 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
 
   Future<void> _runAdaptation() async {
     try {
-      final message = await AdaptService().predictAndAdapt(
+      final experienceLevel = await _resolveExperienceLevel(widget.uid);
+      final fatigueLevel = await AdaptService().predictAndAdapt(
         uid: widget.uid,
         avgRpe: widget.avgRpe,
         maxRpe: widget.maxRpe,
         sessionDuration: widget.durationMins.toDouble(),
         exercisesCount: widget.exerciseCount,
         completionRate: widget.completionRate,
+        experienceLevel: experienceLevel,
+        sourceLogId: widget.logId,
+        sessionExercises: widget.exerciseLogs
+            .map(
+              (log) => LoggedExerciseInfo(
+                exerciseName: log['exerciseName'] as String? ?? '',
+              ),
+            )
+            .where((exercise) => exercise.exerciseName.isNotEmpty)
+            .toList(),
       );
       if (!mounted) return;
       setState(() {
         _adaptStatus = 'done';
-        _adaptMessage = message.isNotEmpty ? message : _buildAdaptMessage();
+        _adaptMessage = fatigueLevel.isNotEmpty
+            ? _proposalDisplayMessage(fatigueLevel)
+            : _buildAdaptMessage();
       });
     } catch (_) {
       if (!mounted) return;
@@ -81,10 +94,45 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
     }
   }
 
+  Future<int> _resolveExperienceLevel(String uid) async {
+    final profileSnap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('profile')
+        .doc('data')
+        .get();
+
+    final profileData = profileSnap.data() ?? {};
+    final experienceStr = profileData['experience'] as String? ?? 'beginner';
+
+    switch (experienceStr.toLowerCase()) {
+      case 'beginner':
+        return 0;
+      case 'intermediate':
+        return 1;
+      case 'advanced':
+        return 2;
+      default:
+        return 0;
+    }
+  }
+
   String _buildAdaptMessage() {
-    if (widget.avgRpe > 7.5) return '🔄 Next workout adjusted for recovery';
-    if (widget.avgRpe < 4.0) return '📈 Next workout intensity increased';
-    return '✅ Plan stays on track';
+    return "Nice work. We'll factor this into your next plan update.";
+  }
+
+  /// User-facing copy reflects that adaptation is proposed, not yet applied.
+  String _proposalDisplayMessage(String fatigueLevel) {
+    switch (fatigueLevel) {
+      case 'high':
+        return "That was a demanding session. We'll factor this into your "
+            'next plan update to help you recover.';
+      case 'low':
+        return "Great session! We'll factor this into your next plan update "
+            'to keep you progressing.';
+      default:
+        return "Nice work. We'll factor this into your next plan update.";
+    }
   }
 
   // ── Photo logic ──────────────────────────────────────────────────────

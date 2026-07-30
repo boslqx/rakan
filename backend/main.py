@@ -2,12 +2,14 @@ from fastapi import FastAPI
 from firebase_config import db
 from routers.plan_router import router as plan_router
 from routers.adapt_router import router as adapt_router
+from routers.adaptation_engine_router import router as adaptation_engine_router
 
 app = FastAPI(title="Rakan AI Backend")
 
 # Register routers — all plan endpoints are now available
 app.include_router(plan_router)
 app.include_router(adapt_router)
+app.include_router(adaptation_engine_router)
 
 @app.get("/")
 def root():

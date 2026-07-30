@@ -5,7 +5,7 @@ class WeeklySummaryService {
 
   static const Duration kSummaryInterval = Duration(days: 7);
 
-  /// Checks whether at least 7 days have passed since the last weeklyn summary
+  /// Checks whether at least 7 days have passed since the last weekly summary
   Future<void> checkAndGenerateWeeklySummary(String uid) async {
     try {
       final profileRef = _db

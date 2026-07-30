@@ -2,34 +2,56 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import '../data/exercise_data.dart';
+
+class LoggedExerciseInfo {
+  final String exerciseName;
+
+  LoggedExerciseInfo({required this.exerciseName});
+}
+
 class AdaptService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   static const String _baseUrl = 'https://rakan-backend.onrender.com';
 
-  /// predicts fatigue, and adapts the next workout days in the active plan.
+  static List<Map<String, dynamic>> buildProposalPayloads({
+    required List<LoggedExerciseInfo> sessionExercises,
+    required double fatigueScore,
+    required String sourceLogId,
+  }) {
+    final payloads = <Map<String, dynamic>>[];
+
+    for (final loggedExercise in sessionExercises) {
+      final exerciseData = findExerciseByName(loggedExercise.exerciseName);
+      if (exerciseData == null) continue;
+
+      payloads.add({
+        'createdAt': FieldValue.serverTimestamp(),
+        'exerciseName': loggedExercise.exerciseName,
+        'muscleGroup': exerciseData.muscleGroup,
+        'sessionFatigueScore': fatigueScore,
+        'status': 'pending',
+        'sourceLogId': sourceLogId,
+      });
+    }
+
+    return payloads;
+  }
+
+  /// Predicts fatigue and writes one adaptation proposal per logged exercise.
   Future<String> predictAndAdapt({
     required String uid,
     required double avgRpe,
     required double maxRpe,
-    required double sessionDuration, // in minutes
+    required double sessionDuration,
     required int exercisesCount,
     required double completionRate,
+    required int experienceLevel,
+    required String sourceLogId,
+    required List<LoggedExerciseInfo> sessionExercises,
   }) async {
     try {
-      // Get user experience level from profile
-      final profileSnap = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('profile')
-          .doc('data')
-          .get();
-
-      final profileData = profileSnap.data() ?? {};
-      final experienceStr = profileData['experience'] as String? ?? 'beginner';
-      final experienceLevel = _experienceToInt(experienceStr);
-
-      // Call /adapt-plan endpoint
       final response = await http.post(
         Uri.parse('$_baseUrl/adapt-plan'),
         headers: {'Content-Type': 'application/json'},
@@ -41,120 +63,46 @@ class AdaptService {
           'completion_rate': completionRate,
           'experience_level': experienceLevel,
         }),
-      ).timeout(const Duration(seconds: 60)); // allow for cold start
+      ).timeout(const Duration(seconds: 60));
 
       if (response.statusCode != 200) {
-        print('AdaptService: API error ${response.statusCode}');
-        return '';
+        throw Exception('Adaptation prediction failed: ${response.statusCode}');
       }
 
-      final result = jsonDecode(response.body);
-      final double intensityAdj = (result['intensity_adjustment'] as num).toDouble();
-      final String fatigueLevel = result['fatigue_level'] as String;
+      final result = jsonDecode(response.body) as Map<String, dynamic>;
       final double fatigueScore = (result['fatigue_score'] as num).toDouble();
+      final String fatigueLevel = result['fatigue_level'] as String;
+      // The backend message describes a raw adjustment. Proposals are not
+      // applied immediately, so callers use fatigueLevel for UI copy instead.
+      print(
+        'AdaptService: fatigue=$fatigueLevel; '
+        'backend message=${result['message']}',
+      );
 
-      print('AdaptService: fatigue=$fatigueLevel ($fatigueScore), adjustment=$intensityAdj');
+      final proposalPayloads = buildProposalPayloads(
+        sessionExercises: sessionExercises,
+        fatigueScore: fatigueScore,
+        sourceLogId: sourceLogId,
+      );
 
-      // If no adjustment needed, stop here
-      if (intensityAdj == 0.0) return result['message'] as String;
-
-      // Find the active workout plan
-      final plansSnap = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('workoutPlans')
-          .where('status', isEqualTo: 'active')
-          .limit(1)
-          .get();
-
-      if (plansSnap.docs.isEmpty) {
-        print('AdaptService: No active plan found');
-        return result['message'] as String;
-      }
-
-      final planDoc = plansSnap.docs.first;
-      final planId = planDoc.id;
-
-      // Get today's weekday 
-      final todayWeekday = DateTime.now().weekday;
-
-      // 5. Load all days in the plan
-      final daysSnap = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('workoutPlans')
-          .doc(planId)
-          .collection('days')
-          .get();
-
-      // For each FUTURE workout day, adapt exercises
-      for (final dayDoc in daysSnap.docs) {
-        final dayData = dayDoc.data();
-        final int dayNumber = dayData['dayNumber'] as int? ?? 0;
-        final bool isRestDay = dayData['dayType'] == 'rest';
-
-        // Skip past days, today, and rest days
-        if (dayNumber <= todayWeekday || isRestDay) continue;
-
-        // Load exercises for this day
-        final exercisesSnap = await _db
+      if (proposalPayloads.isNotEmpty) {
+        final batch = _db.batch();
+        final proposalsRef = _db
             .collection('users')
             .doc(uid)
-            .collection('workoutPlans')
-            .doc(planId)
-            .collection('days')
-            .doc(dayDoc.id)
-            .collection('exercises')
-            .get();
+            .collection('adaptationProposals');
 
-        // Adapt each exercise
-        for (final exDoc in exercisesSnap.docs) {
-          final exData = exDoc.data();
-          final int currentSets = exData['sets'] as int? ?? 3;
-          final int currentReps = exData['reps'] as int? ?? 10;
-
-          // Apply adjustment with bounds
-          final int newSets = _clampInt(
-            (currentSets * (1 + intensityAdj)).round(),
-            min: 1, max: 6,
-          );
-          final int newReps = _clampInt(
-            (currentReps * (1 + intensityAdj)).round(),
-            min: 3, max: 20,
-          );
-
-          // Only write if something actually changed
-          if (newSets != currentSets || newReps != currentReps) {
-            await exDoc.reference.update({
-              'sets': newSets,
-              'reps': newReps,
-              'adaptedAt': FieldValue.serverTimestamp(),
-              'fatigueLevel': fatigueLevel,
-            });
-          }
+        for (final payload in proposalPayloads) {
+          batch.set(proposalsRef.doc(), payload);
         }
+
+        await batch.commit();
       }
 
-      print('AdaptService: Plan adapted successfully');
-      return result['message'] as String;
-
+      return fatigueLevel;
     } catch (e) {
-      print('AdaptService error (non-critical): $e');
+      print('AdaptService error: $e');
       return '';
     }
-  }
-
-  /// Converts experience string from onboarding to int for the ML model
-  int _experienceToInt(String experience) {
-    switch (experience.toLowerCase()) {
-      case 'beginner': return 0;
-      case 'intermediate': return 1;
-      case 'advanced': return 2;
-      default: return 0;
-    }
-  }
-
-  int _clampInt(int value, {required int min, required int max}) {
-    return value.clamp(min, max);
   }
 }
