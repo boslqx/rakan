@@ -15,21 +15,27 @@ class AdaptService {
 
   static const String _baseUrl = 'https://rakan-backend.onrender.com';
 
-  static List<Map<String, dynamic>> buildProposalPayloads({
+  /// Builds one proposal payload per unique primary muscle group 
+  static List<Map<String, dynamic>> buildSessionProposals({
     required List<LoggedExerciseInfo> sessionExercises,
     required double fatigueScore,
     required String sourceLogId,
   }) {
     final payloads = <Map<String, dynamic>>[];
+    final Set<String> seenMuscleGroups = {};
 
     for (final loggedExercise in sessionExercises) {
       final exerciseData = findExerciseByName(loggedExercise.exerciseName);
-      if (exerciseData == null) continue;
+      if (exerciseData == null) continue; // unresolvable — nothing to key a proposal on
+
+      final muscleGroup = exerciseData.muscleGroup;
+      if (seenMuscleGroups.contains(muscleGroup)) continue; // already proposed this session
+
+      seenMuscleGroups.add(muscleGroup);
 
       payloads.add({
         'createdAt': FieldValue.serverTimestamp(),
-        'exerciseName': loggedExercise.exerciseName,
-        'muscleGroup': exerciseData.muscleGroup,
+        'muscleGroup': muscleGroup,
         'sessionFatigueScore': fatigueScore,
         'status': 'pending',
         'sourceLogId': sourceLogId,
@@ -39,7 +45,7 @@ class AdaptService {
     return payloads;
   }
 
-  /// Predicts fatigue and writes one adaptation proposal per logged exercise.
+  /// Predicts fatigue and writes one adaptation proposal per unique primary
   Future<String> predictAndAdapt({
     required String uid,
     required double avgRpe,
@@ -72,38 +78,27 @@ class AdaptService {
       final result = jsonDecode(response.body) as Map<String, dynamic>;
       final double fatigueScore = (result['fatigue_score'] as num).toDouble();
       final String fatigueLevel = result['fatigue_level'] as String;
-      // The backend message describes a raw adjustment. Proposals are not
-      // applied immediately, so callers use fatigueLevel for UI copy instead.
+      // The backend message describes a raw adjustment. 
       print(
         'AdaptService: fatigue=$fatigueLevel; '
         'backend message=${result['message']}',
       );
 
       
-      final Set<String> seenMuscleGroups = {};
+      final proposals = buildSessionProposals(
+        sessionExercises: sessionExercises,
+        fatigueScore: fatigueScore,
+        sourceLogId: sourceLogId,
+      );
+
       final batch = _db.batch();
       final proposalsRef = _db
           .collection('users')
           .doc(uid)
           .collection('adaptationProposals');
 
-      for (final logged in sessionExercises) {
-        final exerciseData = findExerciseByName(logged.exerciseName);
-        if (exerciseData == null) continue; // unresolvable — nothing to key a proposal on
-
-        final muscleGroup = exerciseData.muscleGroup;
-        if (seenMuscleGroups.contains(muscleGroup)) continue; // already proposed this session
-
-        seenMuscleGroups.add(muscleGroup);
-
-        final proposalDoc = proposalsRef.doc();
-        batch.set(proposalDoc, {
-          'createdAt': FieldValue.serverTimestamp(),
-          'muscleGroup': muscleGroup,
-          'sessionFatigueScore': fatigueScore,
-          'status': 'pending',
-          'sourceLogId': sourceLogId,
-        });
+      for (final proposal in proposals) {
+        batch.set(proposalsRef.doc(), proposal);
       }
 
       await batch.commit();
