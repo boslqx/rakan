@@ -218,7 +218,7 @@ class WeeklySummaryService {
         .collection('users')
         .doc(uid)
         .collection('workoutPlans')
-        .where('isActive', isEqualTo: true)
+        .where('status', isEqualTo: 'active')
         .limit(1)
         .get();
     if (planQuery.docs.isEmpty) return;
