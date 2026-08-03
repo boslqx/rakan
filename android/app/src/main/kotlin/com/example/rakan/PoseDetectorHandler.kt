@@ -180,7 +180,6 @@ class PoseDetectorHandler(
     fun cleanup() {
         cameraProvider?.unbindAll()
         poseLandmarker?.close()
-        if (!cameraExecutor.isShutdown) cameraExecutor.shutdown()
         Log.d("PoseDetector", "Stopped")
     }
 }
