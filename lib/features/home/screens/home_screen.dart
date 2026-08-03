@@ -29,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _todayDay;
   String? _loadError;
   String? _debugUid;
+  int? _weekNumber;
 
   static const int _calendarLogScanLimit = 30;
   static const int _feedDisplayLimit = 5;
@@ -97,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _planDays = planDays;
         _todayDay = todayDay;
         _loadError = loadError;
+        _weekNumber = plan?['weekNumber'] as int?;
         _isLoading = false;
       });
     }
@@ -434,6 +436,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               _buildLoadErrorCard(_loadError!),
                             ],
                             const SizedBox(height: 24),
+                            if (_weekNumber != null) ...[
+                              _buildWeekIndicator(),
+                              const SizedBox(height: 12),
+                            ],
                             _buildHeroCard(),
                             const SizedBox(height: 32),
                             _buildSectionLabel('ACTIVITY LOG'),
@@ -532,6 +538,45 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 1.1,
           ),
         ),
+      ],
+    );
+  }
+
+  // Small mesocycle indicator — "WEEK N" label, with a DELOAD pill 
+  Widget _buildWeekIndicator() {
+    final weekNumber = _weekNumber!;
+    final isDeloadWeek = weekNumber % 4 == 0;
+
+    return Row(
+      children: [
+        Text(
+          'WEEK $weekNumber',
+          style: GoogleFonts.manrope(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 2,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+        if (isDeloadWeek) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.error.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(100), // full roundedness, per design system
+            ),
+            child: Text(
+              'DELOAD',
+              style: GoogleFonts.manrope(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.5,
+                color: AppColors.error,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
