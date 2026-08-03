@@ -3,7 +3,7 @@ from typing import Literal, Optional
 
 from routers.adapt_router import _apply_adaptation_rules
 
-Tier = Literal["forced_deload", "session_priority", "weekly_priority"]
+Tier = Literal["scheduled_deload", "forced_deload", "session_priority", "weekly_priority"]
 Trend = Literal["increasing", "stable", "decreasing", "insufficient_data"]
 
 # Muscle recovery thresholds — rolling 7-day weighted-set count vs MRV
@@ -13,8 +13,11 @@ RECOVERY_WELL_RECOVERED_THRESHOLD = 0.5  # below this -> weekly trend allowed to
 # A forced deload should never be shallower than the plain session-fatigue
 FORCED_DELOAD_FLOOR = -0.175  # matches Bell et al. (2025) reactive deload
 
+# Scheduled (mesocycle) deload ughly 40-50%
+SCHEDULED_DELOAD_ADJUSTMENT = -0.425
 
-# Weekly trend thresholds — see design discussion: 3-week rolling volume
+
+# Weekly trend thresholds 
 TREND_INCREASING_THRESHOLD = 0.05   # ACSM (2026): 5% progressive overload
 TREND_DECREASING_THRESHOLD = -0.10
 
@@ -56,7 +59,22 @@ def resolve_adjustment(
     muscle_recovery_score: float,
     weekly_trend_adjustment: float = 0.0,
     weekly_trend: Optional[Trend] = None,
+    is_deload_week: bool = False,
 ) -> AdaptationDecision:
+    # Tier 0: scheduled (mesocycle) deload — a programmed block boundary,
+    if is_deload_week:
+        return AdaptationDecision(
+            final_adjustment=SCHEDULED_DELOAD_ADJUSTMENT,
+            tier="scheduled_deload",
+            reason=(
+                "This is a scheduled mesocycle deload week. Session fatigue "
+                f"({fatigue_score:.2f}), muscle recovery "
+                f"({muscle_recovery_score:.2f}), and weekly trend "
+                f"({weekly_trend or 'n/a'}) are all overridden — a programmed "
+                "deload is not up for negotiation by any reactive signal."
+            ),
+        )
+
     session_level, session_adjustment, _ = _apply_adaptation_rules(fatigue_score)
 
     # Tier 1: forced deload

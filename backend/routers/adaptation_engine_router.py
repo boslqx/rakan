@@ -16,6 +16,8 @@ class CommitAdaptationsRequest(BaseModel):
     current_volume: float
     past_volumes: list[float]
     proposals: list[ProposalInput]
+    # Whole-plan property: true if this weekly run lands on a scheduled
+    is_deload_week: bool = False
 
 
 class ResolvedProposal(BaseModel):
@@ -45,6 +47,7 @@ def commit_adaptations(req: CommitAdaptationsRequest):
             muscle_recovery_score=proposal.muscle_recovery_score,
             weekly_trend_adjustment=trend_result.trend_adjustment,
             weekly_trend=trend_result.trend,
+            is_deload_week=req.is_deload_week,
         )
         resolved.append(
             ResolvedProposal(

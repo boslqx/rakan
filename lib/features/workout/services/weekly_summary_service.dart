@@ -79,6 +79,27 @@ class WeeklySummaryService {
         ? null
         : rpeValues.reduce((a, b) => a + b) / rpeValues.length;
 
+    // Mesocycle tracking: read the active plan's current weekNumber 
+    final planQuery = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('workoutPlans')
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+
+    String? planId;
+    int newWeekNumber = 2; // sensible fallback if no plan/weekNumber found yet
+    bool isDeloadWeek = false;
+    if (planQuery.docs.isNotEmpty) {
+      planId = planQuery.docs.first.id;
+      final currentWeekNumber =
+          planQuery.docs.first.data()['weekNumber'] as int? ?? 1;
+      newWeekNumber = currentWeekNumber + 1;
+      // Fixed 4-week mesocycle: every 4th week (4, 8, 12, ...) is a deload.
+      isDeloadWeek = newWeekNumber % 4 == 0;
+    }
+
     // gather past volumes for trend (up to last 3 weeklySummaries) 
     final pastSummariesSnap = await _db
         .collection('users')
@@ -142,6 +163,7 @@ class WeeklySummaryService {
           'current_volume': totalVolume,
           'past_volumes': pastVolumes,
           'proposals': proposalPayloads,
+          'is_deload_week': isDeloadWeek,
         }),
       ).timeout(const Duration(seconds: 60));
 
@@ -156,6 +178,16 @@ class WeeklySummaryService {
     // apply resolved adjustments + write summary, all in ONE batch
     final batch = _db.batch();
 
+    // Advance the mesocycle week counter
+    if (planId != null) {
+      final planRef = _db
+          .collection('users')
+          .doc(uid)
+          .collection('workoutPlans')
+          .doc(planId);
+      batch.update(planRef, {'weekNumber': newWeekNumber});
+    }
+
     if (commitResult != null) {
       final resolvedProposals = commitResult['resolved_proposals'] as List<dynamic>;
 
@@ -169,6 +201,7 @@ class WeeklySummaryService {
         await _applyAdjustmentToMuscleGroup(
           batch: batch,
           uid: uid,
+          planId: planId,
           muscleGroup: muscleGroup,
           adjustment: finalAdjustment,
           tier: tier,
@@ -199,6 +232,8 @@ class WeeklySummaryService {
       'totalVolume': totalVolume,
       'trend': commitResult?['trend'] ?? 'insufficient_data',
       'trendAdjustment': commitResult?['trend_adjustment'] ?? 0.0,
+      'weekNumber': newWeekNumber,
+      'isDeloadWeek': isDeloadWeek,
       'generatedAt': now.toIso8601String(),
     });
 
@@ -209,20 +244,14 @@ class WeeklySummaryService {
   Future<void> _applyAdjustmentToMuscleGroup({
     required WriteBatch batch,
     required String uid,
+    required String? planId,
     required String muscleGroup,
     required double adjustment,
     required String tier,
     required int todayWeekday,
   }) async {
-    final planQuery = await _db
-        .collection('users')
-        .doc(uid)
-        .collection('workoutPlans')
-        .where('status', isEqualTo: 'active')
-        .limit(1)
-        .get();
-    if (planQuery.docs.isEmpty) return;
-    final planId = planQuery.docs.first.id;
+    // planId is resolved once, up in _generateSummary, and threaded 
+    if (planId == null) return;
 
     final daysSnap = await _db
         .collection('users')
