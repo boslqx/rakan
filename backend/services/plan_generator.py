@@ -238,7 +238,7 @@ def _format_exercise(ex: dict) -> dict:
     return {
         "exerciseId": str(uuid.uuid4()),
         "exerciseName": ex["name"],
-        "muscleGroup": ex["muscle_group"],
+        "muscleGroup": ex["muscle_group"].title(),
         "secondaryMuscles": ex["secondary_muscles"],
         "sets": ex["sets"],
         "reps": ex["reps"],

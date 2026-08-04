@@ -41,7 +41,8 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
       return ExerciseSessionState(
         exerciseId: ex['exerciseId'] as String? ?? '',
         exerciseName: exerciseName,
-        muscleGroup: ex['muscleGroup'] as String? ?? '',
+        muscleGroup: findExerciseByName(exerciseName)?.muscleGroup
+            ?? ex['muscleGroup'] as String? ?? '',
         restSeconds: ex['restSeconds'] as int? ?? 60,
         // Resolve rich metadata
         data: findExerciseByName(exerciseName),
