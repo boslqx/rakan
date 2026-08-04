@@ -75,10 +75,10 @@ class AngleCalculator {
 // Exercise Analysis Results
 class PostureResult {
   final bool isCorrect;
-  final String feedback;       
-  final String phase;         
-  final double? keyAngle;      
-  final bool countRep;         
+  final String feedback;
+  final String phase;
+  final double? keyAngle;
+  final bool countRep;
 
   const PostureResult({
     required this.isCorrect,
@@ -96,8 +96,15 @@ class SquatAnalyser {
   static const double _bottomAngleMax = 100.0;
   static const double _standingAngleMin = 160.0; // nearly straight leg = standing
 
-  // Rep counting state machine
+  // _phase drives feedback text only — NOT rep counting (see _hasReachedBottom below)
   String _phase = 'standing';
+
+  // Hysteresis flag: true once the angle has crossed into "bottom" territory
+  // since the last counted rep. Rep counting only cares whether this flag
+  // was set before the angle returns to standing — it doesn't require every
+  // intermediate phase to have been visited on its own frame.
+  bool _hasReachedBottom = false;
+
   int repCount = 0;
 
   PostureResult analyse(List<Landmark> landmarks) {
@@ -133,29 +140,33 @@ class SquatAnalyser {
 
     bool countRep = false;
 
-    // State machine transitions
-    if (kneeAngle > _standingAngleMin) {
-      if (_phase == 'coming_up') {
-        // Completed a full squat cycle
-        repCount++;
-        countRep = true;
-      }
-      _phase = 'standing';
-    } else if (kneeAngle < _bottomAngleMax + 20 && _phase == 'standing') {
-      _phase = 'going_down';
-    } else if (kneeAngle <= _bottomAngleMax && _phase == 'going_down') {
-      _phase = 'bottom';
-    } else if (kneeAngle > _bottomAngleMax && _phase == 'bottom') {
-      _phase = 'coming_up';
+    // --- Rep counting: hysteresis-based, order-independent ---
+    if (kneeAngle <= _bottomAngleMax) {
+      _hasReachedBottom = true;
+    }
+    if (kneeAngle > _standingAngleMin && _hasReachedBottom) {
+      repCount++;
+      countRep = true;
+      _hasReachedBottom = false;
     }
 
-    // Generate feedback based on current phase and angle
+    // --- Phase: used only for feedback text, not for counting ---
+    if (kneeAngle > _standingAngleMin) {
+      _phase = 'standing';
+    } else if (kneeAngle <= _bottomAngleMax) {
+      _phase = 'bottom';
+    } else if (_hasReachedBottom) {
+      _phase = 'coming_up';
+    } else {
+      _phase = 'going_down';
+    }
+
     String feedback;
     bool isCorrect;
 
     if (_phase == 'standing') {
       feedback = countRep
-          ? 'Rep ${repCount} complete! Lower down slowly'
+          ? 'Rep $repCount complete! Lower down slowly'
           : 'Stand straight, feet shoulder-width apart';
       isCorrect = true;
     } else if (_phase == 'going_down') {
@@ -170,7 +181,6 @@ class SquatAnalyser {
         isCorrect = true;
       }
     } else {
-      // coming_up
       feedback = 'Drive up — keep your core tight';
       isCorrect = true;
     }
@@ -186,17 +196,18 @@ class SquatAnalyser {
 
   void reset() {
     _phase = 'standing';
+    _hasReachedBottom = false;
     repCount = 0;
   }
 }
 
 // Push-up Analyser
 class PushUpAnalyser {
-  // ensures full range of motion and pectoral activation.
-  static const double _bottomAngleMax = 110.0;  
-  static const double _topAngleMin = 145.0;     
+  static const double _bottomAngleMax = 110.0;
+  static const double _topAngleMin = 145.0;
 
   String _phase = 'up';
+  bool _hasReachedBottom = false;
   int repCount = 0;
 
   PostureResult analyse(List<Landmark> landmarks) {
@@ -230,18 +241,23 @@ class PushUpAnalyser {
 
     bool countRep = false;
 
+    if (elbowAngle <= _bottomAngleMax) {
+      _hasReachedBottom = true;
+    }
+    if (elbowAngle > _topAngleMin && _hasReachedBottom) {
+      repCount++;
+      countRep = true;
+      _hasReachedBottom = false;
+    }
+
     if (elbowAngle > _topAngleMin) {
-      if (_phase == 'coming_up') {
-        repCount++;
-        countRep = true;
-      }
       _phase = 'up';
-    } else if (elbowAngle <= _topAngleMin && elbowAngle > _bottomAngleMax && _phase == 'up') {
-      _phase = 'going_down';
-    } else if (elbowAngle <= _bottomAngleMax && _phase == 'going_down') {
+    } else if (elbowAngle <= _bottomAngleMax) {
       _phase = 'bottom';
-    } else if (elbowAngle > _bottomAngleMax && _phase == 'bottom') {
+    } else if (_hasReachedBottom) {
       _phase = 'coming_up';
+    } else {
+      _phase = 'going_down';
     }
 
     String feedback;
@@ -279,16 +295,18 @@ class PushUpAnalyser {
 
   void reset() {
     _phase = 'up';
+    _hasReachedBottom = false;
     repCount = 0;
   }
 }
 
 // Shoulder Press Analyser
 class ShoulderPressAnalyser {
-  static const double _bottomAngleMax = 100.0;  // start position
-  static const double _topAngleMin = 160.0;      // arms extended overhead
+  static const double _bottomAngleMax = 100.0;
+  static const double _topAngleMin = 160.0;
 
   String _phase = 'bottom';
+  bool _hasReachedTop = false;
   int repCount = 0;
 
   PostureResult analyse(List<Landmark> landmarks) {
@@ -314,16 +332,21 @@ class ShoulderPressAnalyser {
     bool countRep = false;
 
     if (elbowAngle >= _topAngleMin) {
-      if (_phase == 'pressing') {
-        _phase = 'top';
-      }
-    } else if (elbowAngle < _topAngleMin && _phase == 'top') {
-      _phase = 'lowering';
-    } else if (elbowAngle <= _bottomAngleMax && _phase == 'lowering') {
+      _hasReachedTop = true;
+    }
+    if (elbowAngle <= _bottomAngleMax && _hasReachedTop) {
       repCount++;
       countRep = true;
+      _hasReachedTop = false;
+    }
+
+    if (elbowAngle >= _topAngleMin) {
+      _phase = 'top';
+    } else if (elbowAngle <= _bottomAngleMax) {
       _phase = 'bottom';
-    } else if (elbowAngle > _bottomAngleMax && _phase == 'bottom') {
+    } else if (_hasReachedTop) {
+      _phase = 'lowering';
+    } else {
       _phase = 'pressing';
     }
 
@@ -339,13 +362,8 @@ class ShoulderPressAnalyser {
       feedback = 'Press overhead — fully extend your arms';
       isCorrect = true;
     } else if (_phase == 'top') {
-      if (elbowAngle < _topAngleMin) {
-        feedback = 'Extend fully — lock out at the top';
-        isCorrect = false;
-      } else {
-        feedback = 'Full extension! Lower back with control';
-        isCorrect = true;
-      }
+      feedback = 'Full extension! Lower back with control';
+      isCorrect = true;
     } else {
       feedback = 'Lower slowly — control the weight down';
       isCorrect = true;
@@ -362,19 +380,327 @@ class ShoulderPressAnalyser {
 
   void reset() {
     _phase = 'bottom';
+    _hasReachedTop = false;
     repCount = 0;
   }
 }
 
-// Exercise Analyser Factory 
+// Deadlift Analyser
+// Key joint: HIP angle (shoulder-hip-knee), not knee — a deadlift is a hip
+// hinge movement, so hip extension/flexion is the primary diagnostic angle.
+// Thresholds informed by MediaPipe-based deadlift posture-correction systems
+// using Set-Up / Lifting / Lock-Out staging derived from trainer-validated
+// video analysis.
+class DeadliftAnalyser {
+  static const double _bottomAngleMax = 100.0;   // hinged over, Set-Up position
+  static const double _lockoutAngleMin = 165.0;  // fully standing, hips extended
+
+  String _phase = 'lockout';
+  bool _hasReachedBottom = false;
+  int repCount = 0;
+
+  PostureResult analyse(List<Landmark> landmarks) {
+    if (landmarks.length < 29) {
+      return const PostureResult(
+        isCorrect: false,
+        feedback: 'Position yourself so your full body is visible',
+        phase: 'unknown',
+      );
+    }
+
+    final leftShoulder = landmarks[PoseLandmarkIndex.leftShoulder];
+    final leftHip = landmarks[PoseLandmarkIndex.leftHip];
+    final leftKnee = landmarks[PoseLandmarkIndex.leftKnee];
+    final rightShoulder = landmarks[PoseLandmarkIndex.rightShoulder];
+    final rightHip = landmarks[PoseLandmarkIndex.rightHip];
+    final rightKnee = landmarks[PoseLandmarkIndex.rightKnee];
+
+    final leftHipAngle = AngleCalculator.calculateAngle(leftShoulder, leftHip, leftKnee);
+    final rightHipAngle = AngleCalculator.calculateAngle(rightShoulder, rightHip, rightKnee);
+    final hipAngle = (leftHipAngle + rightHipAngle) / 2;
+
+    if (leftHip.visibility < 0.5 || rightHip.visibility < 0.5) {
+      return PostureResult(
+        isCorrect: false,
+        feedback: 'Step back — full body must be visible from the side',
+        phase: _phase,
+        keyAngle: hipAngle,
+      );
+    }
+
+    bool countRep = false;
+
+    // --- Rep counting: hysteresis-based, order-independent ---
+    if (hipAngle <= _bottomAngleMax) {
+      _hasReachedBottom = true;
+    }
+    if (hipAngle >= _lockoutAngleMin && _hasReachedBottom) {
+      repCount++;
+      countRep = true;
+      _hasReachedBottom = false;
+    }
+
+    // --- Phase: feedback text only ---
+    if (hipAngle >= _lockoutAngleMin) {
+      _phase = 'lockout';
+    } else if (hipAngle <= _bottomAngleMax) {
+      _phase = 'setup';
+    } else if (_hasReachedBottom) {
+      _phase = 'lifting';
+    } else {
+      _phase = 'lowering';
+    }
+
+    String feedback;
+    bool isCorrect;
+
+    if (_phase == 'lockout') {
+      feedback = countRep
+          ? 'Rep $repCount complete! Reset and hinge again'
+          : 'Standing tall — hinge at the hips to begin';
+      isCorrect = true;
+    } else if (_phase == 'lowering') {
+      feedback = 'Push hips back — keep the bar close to your legs';
+      isCorrect = true;
+    } else if (_phase == 'setup') {
+      feedback = 'Good hinge — keep your back flat, drive through heels';
+      isCorrect = true;
+    } else {
+      feedback = 'Drive hips forward — squeeze glutes at the top';
+      isCorrect = true;
+    }
+
+    return PostureResult(
+      isCorrect: isCorrect,
+      feedback: feedback,
+      phase: _phase,
+      keyAngle: hipAngle,
+      countRep: countRep,
+    );
+  }
+
+  void reset() {
+    _phase = 'lockout';
+    _hasReachedBottom = false;
+    repCount = 0;
+  }
+}
+
+// Lunge Analyser
+// Key joint: FRONT knee angle. A lunge is asymmetric (one leg forward, one
+// back), unlike a squat — so we auto-detect the "front" leg each frame as
+// whichever knee is currently more bent (smaller angle), avoiding the need
+// for the user to specify which leg leads.
+class LungeAnalyser {
+  static const double _bottomAngleMax = 100.0;   // front knee bent, lunge depth
+  static const double _standingAngleMin = 160.0; // both legs near-straight
+
+  String _phase = 'standing';
+  bool _hasReachedBottom = false;
+  int repCount = 0;
+
+  PostureResult analyse(List<Landmark> landmarks) {
+    if (landmarks.length < 29) {
+      return const PostureResult(
+        isCorrect: false,
+        feedback: 'Position yourself so your full body is visible',
+        phase: 'unknown',
+      );
+    }
+
+    final leftHip = landmarks[PoseLandmarkIndex.leftHip];
+    final leftKnee = landmarks[PoseLandmarkIndex.leftKnee];
+    final leftAnkle = landmarks[PoseLandmarkIndex.leftAnkle];
+    final rightHip = landmarks[PoseLandmarkIndex.rightHip];
+    final rightKnee = landmarks[PoseLandmarkIndex.rightKnee];
+    final rightAnkle = landmarks[PoseLandmarkIndex.rightAnkle];
+
+    final leftKneeAngle = AngleCalculator.calculateAngle(leftHip, leftKnee, leftAnkle);
+    final rightKneeAngle = AngleCalculator.calculateAngle(rightHip, rightKnee, rightAnkle);
+
+    // Front leg = whichever knee is currently MORE bent (smaller angle)
+    final frontKneeAngle = math.min(leftKneeAngle, rightKneeAngle);
+
+    if (leftKnee.visibility < 0.5 || rightKnee.visibility < 0.5) {
+      return PostureResult(
+        isCorrect: false,
+        feedback: 'Step back — both legs must be visible',
+        phase: _phase,
+        keyAngle: frontKneeAngle,
+      );
+    }
+
+    bool countRep = false;
+
+    // --- Rep counting: hysteresis-based, order-independent ---
+    if (frontKneeAngle <= _bottomAngleMax) {
+      _hasReachedBottom = true;
+    }
+    if (frontKneeAngle > _standingAngleMin && _hasReachedBottom) {
+      repCount++;
+      countRep = true;
+      _hasReachedBottom = false;
+    }
+
+    // --- Phase: feedback text only ---
+    if (frontKneeAngle > _standingAngleMin) {
+      _phase = 'standing';
+    } else if (frontKneeAngle <= _bottomAngleMax) {
+      _phase = 'bottom';
+    } else if (_hasReachedBottom) {
+      _phase = 'coming_up';
+    } else {
+      _phase = 'going_down';
+    }
+
+    String feedback;
+    bool isCorrect;
+
+    if (_phase == 'standing') {
+      feedback = countRep
+          ? 'Rep $repCount complete! Step into the next lunge'
+          : 'Stand tall — step forward into your lunge';
+      isCorrect = true;
+    } else if (_phase == 'going_down') {
+      feedback = 'Lower straight down — front knee over ankle';
+      isCorrect = true;
+    } else if (_phase == 'bottom') {
+      feedback = 'Good depth! Push through your front heel to rise';
+      isCorrect = true;
+    } else {
+      feedback = 'Drive up — keep your torso upright';
+      isCorrect = true;
+    }
+
+    return PostureResult(
+      isCorrect: isCorrect,
+      feedback: feedback,
+      phase: _phase,
+      keyAngle: frontKneeAngle,
+      countRep: countRep,
+    );
+  }
+
+  void reset() {
+    _phase = 'standing';
+    _hasReachedBottom = false;
+    repCount = 0;
+  }
+}
+
+// Bicep Curl Analyser
+// Key joint: elbow angle. Unlike push-up/press, a curl starts EXTENDED
+// (large angle) and flexes UP to a small angle — the opposite phase order.
+// Thresholds (extended >=160°, flexed <=50°) are consistent across multiple
+// independent MediaPipe bicep-curl implementations (commonly cited as a
+// 40-160° full range-of-motion requirement); 50° used here as a slightly
+// safer full-contraction margin over the loosest published bound of 40°.
+class BicepCurlAnalyser {
+  static const double _extendedAngleMin = 160.0; // arm straight down
+  static const double _flexedAngleMax = 50.0;    // full contraction at top
+
+  String _phase = 'extended';
+  bool _hasReachedFlexed = false;
+  int repCount = 0;
+
+  PostureResult analyse(List<Landmark> landmarks) {
+    if (landmarks.length < 17) {
+      return const PostureResult(
+        isCorrect: false,
+        feedback: 'Position yourself so your arms are visible',
+        phase: 'unknown',
+      );
+    }
+
+    final leftShoulder = landmarks[PoseLandmarkIndex.leftShoulder];
+    final leftElbow = landmarks[PoseLandmarkIndex.leftElbow];
+    final leftWrist = landmarks[PoseLandmarkIndex.leftWrist];
+    final rightShoulder = landmarks[PoseLandmarkIndex.rightShoulder];
+    final rightElbow = landmarks[PoseLandmarkIndex.rightElbow];
+    final rightWrist = landmarks[PoseLandmarkIndex.rightWrist];
+
+    final leftElbowAngle = AngleCalculator.calculateAngle(leftShoulder, leftElbow, leftWrist);
+    final rightElbowAngle = AngleCalculator.calculateAngle(rightShoulder, rightElbow, rightWrist);
+    final elbowAngle = (leftElbowAngle + rightElbowAngle) / 2;
+
+    if (leftElbow.visibility < 0.5 || rightElbow.visibility < 0.5) {
+      return PostureResult(
+        isCorrect: false,
+        feedback: 'Arms not visible — face the camera directly',
+        phase: _phase,
+        keyAngle: elbowAngle,
+      );
+    }
+
+    bool countRep = false;
+
+    // --- Rep counting: hysteresis-based, order-independent ---
+    if (elbowAngle <= _flexedAngleMax) {
+      _hasReachedFlexed = true;
+    }
+    if (elbowAngle >= _extendedAngleMin && _hasReachedFlexed) {
+      repCount++;
+      countRep = true;
+      _hasReachedFlexed = false;
+    }
+
+    // --- Phase: feedback text only ---
+    if (elbowAngle >= _extendedAngleMin) {
+      _phase = 'extended';
+    } else if (elbowAngle <= _flexedAngleMax) {
+      _phase = 'flexed';
+    } else if (_hasReachedFlexed) {
+      _phase = 'lowering';
+    } else {
+      _phase = 'curling';
+    }
+
+    String feedback;
+    bool isCorrect;
+
+    if (_phase == 'extended') {
+      feedback = countRep
+          ? 'Rep $repCount complete! Curl again'
+          : 'Arm extended — curl the weight up';
+      isCorrect = true;
+    } else if (_phase == 'curling') {
+      feedback = 'Keep curling — squeeze at the top';
+      isCorrect = true;
+    } else if (_phase == 'flexed') {
+      feedback = 'Full contraction! Lower with control';
+      isCorrect = true;
+    } else {
+      feedback = 'Lower slowly — full extension at the bottom';
+      isCorrect = true;
+    }
+
+    return PostureResult(
+      isCorrect: isCorrect,
+      feedback: feedback,
+      phase: _phase,
+      keyAngle: elbowAngle,
+      countRep: countRep,
+    );
+  }
+
+  void reset() {
+    _phase = 'extended';
+    _hasReachedFlexed = false;
+    repCount = 0;
+  }
+}
+
+// Exercise Analyser Factory
 class ExerciseAnalyserFactory {
   static dynamic getAnalyser(String exerciseName) {
     final name = exerciseName.toLowerCase();
+    if (name.contains('deadlift')) return DeadliftAnalyser();
+    if (name.contains('lunge')) return LungeAnalyser();
+    if (name.contains('curl')) return BicepCurlAnalyser();
     if (name.contains('squat')) return SquatAnalyser();
     if (name.contains('push') || name.contains('pushup')) return PushUpAnalyser();
     if (name.contains('bench')) return PushUpAnalyser(); // same elbow angle
     if (name.contains('press') || name.contains('shoulder')) return ShoulderPressAnalyser();
-    if (name.contains('curl')) return PushUpAnalyser(); // elbow flexion
     return SquatAnalyser();
   }
 
@@ -385,7 +711,7 @@ class ExerciseAnalyserFactory {
       return '📱 Place phone 2–3m away at hip height.\n🧍 Stand sideways — your full body must be visible from head to ankles.';
     }
     if (name.contains('push')) {
-      return '📱 Place phone on the floor 1m to your side.\n🧍 Face sideways — your full body from head to feet must be visible.';
+      return '📱 Place phone on the floor 1m to your side, level with your body — not angled up.\n🧍 Face sideways — your full body from head to feet must be visible.';
     }
     if (name.contains('press') || name.contains('shoulder')) {
       return '📱 Place phone 2m away at chest height.\n🧍 Face the camera directly — both arms must be fully visible.';
@@ -394,7 +720,7 @@ class ExerciseAnalyserFactory {
       return '📱 Place phone 2–3m away at hip height.\n🧍 Stand sideways — full body from head to floor must be visible.';
     }
     if (name.contains('lunge')) {
-      return '📱 Place phone 2–3m away at hip height.\n🧍 Stand sideways — full body visible.';
+      return '📱 Place phone 2–3m away at hip height.\n🧍 Stand sideways — full body visible, step forward/back within frame.';
     }
     if (name.contains('curl')) {
       return '📱 Place phone 1–2m away at shoulder height.\n🧍 Face the camera — both arms fully visible.';
