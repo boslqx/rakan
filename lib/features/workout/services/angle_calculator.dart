@@ -89,8 +89,18 @@ class PostureResult {
   });
 }
 
+// Shared interface implemented by every exercise analyser. Calling code
+// (e.g. PoseDetectionScreen) programs against this interface instead of
+// checking concrete types with `is`/`as` — adding a 7th, 8th... exercise
+// analyser in future never requires touching the dispatch code again.
+abstract class PostureAnalyser {
+  PostureResult analyse(List<Landmark> landmarks);
+  int get repCount;
+  void reset();
+}
+
 // Squat Analyser
-class SquatAnalyser {
+class SquatAnalyser implements PostureAnalyser {
   // 80°-100° at the bottom of a squat for safe, effective depth.
   static const double _bottomAngleMin = 80.0;
   static const double _bottomAngleMax = 100.0;
@@ -202,7 +212,7 @@ class SquatAnalyser {
 }
 
 // Push-up Analyser
-class PushUpAnalyser {
+class PushUpAnalyser implements PostureAnalyser {
   static const double _bottomAngleMax = 110.0;
   static const double _topAngleMin = 145.0;
 
@@ -301,7 +311,7 @@ class PushUpAnalyser {
 }
 
 // Shoulder Press Analyser
-class ShoulderPressAnalyser {
+class ShoulderPressAnalyser implements PostureAnalyser {
   static const double _bottomAngleMax = 100.0;
   static const double _topAngleMin = 160.0;
 
@@ -391,7 +401,7 @@ class ShoulderPressAnalyser {
 // Thresholds informed by MediaPipe-based deadlift posture-correction systems
 // using Set-Up / Lifting / Lock-Out staging derived from trainer-validated
 // video analysis.
-class DeadliftAnalyser {
+class DeadliftAnalyser implements PostureAnalyser {
   static const double _bottomAngleMax = 100.0;   // hinged over, Set-Up position
   static const double _lockoutAngleMin = 165.0;  // fully standing, hips extended
 
@@ -491,7 +501,7 @@ class DeadliftAnalyser {
 // back), unlike a squat — so we auto-detect the "front" leg each frame as
 // whichever knee is currently more bent (smaller angle), avoiding the need
 // for the user to specify which leg leads.
-class LungeAnalyser {
+class LungeAnalyser implements PostureAnalyser {
   static const double _bottomAngleMax = 100.0;   // front knee bent, lunge depth
   static const double _standingAngleMin = 160.0; // both legs near-straight
 
@@ -595,7 +605,7 @@ class LungeAnalyser {
 // independent MediaPipe bicep-curl implementations (commonly cited as a
 // 40-160° full range-of-motion requirement); 50° used here as a slightly
 // safer full-contraction margin over the loosest published bound of 40°.
-class BicepCurlAnalyser {
+class BicepCurlAnalyser implements PostureAnalyser {
   static const double _extendedAngleMin = 160.0; // arm straight down
   static const double _flexedAngleMax = 50.0;    // full contraction at top
 
@@ -692,7 +702,7 @@ class BicepCurlAnalyser {
 
 // Exercise Analyser Factory
 class ExerciseAnalyserFactory {
-  static dynamic getAnalyser(String exerciseName) {
+  static PostureAnalyser getAnalyser(String exerciseName) {
     final name = exerciseName.toLowerCase();
     if (name.contains('deadlift')) return DeadliftAnalyser();
     if (name.contains('lunge')) return LungeAnalyser();

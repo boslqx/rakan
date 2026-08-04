@@ -29,7 +29,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
 
   // Posture feedback state
   PostureResult? _lastResult;
-  dynamic _analyser;
+  late final PostureAnalyser _analyser;
 
   // Rep tracking
   int _repCount = 0;
@@ -94,17 +94,10 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
             .map((l) => Landmark.fromMap(Map<String, dynamic>.from(l as Map)))
             .toList();
 
-        // Run exercise-specific analysis
-        PostureResult result;
-        if (_analyser is SquatAnalyser) {
-          result = (_analyser as SquatAnalyser).analyse(landmarks);
-        } else if (_analyser is PushUpAnalyser) {
-          result = (_analyser as PushUpAnalyser).analyse(landmarks);
-        } else if (_analyser is ShoulderPressAnalyser) {
-          result = (_analyser as ShoulderPressAnalyser).analyse(landmarks);
-        } else {
-          result = (_analyser as SquatAnalyser).analyse(landmarks);
-        }
+        // Run exercise-specific analysis — dispatches through the shared
+        // PostureAnalyser interface, so this line never needs to change
+        // no matter how many exercise analysers get added in future.
+        final result = _analyser.analyse(landmarks);
 
         setState(() {
           _poseDetected = true;
@@ -113,16 +106,10 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
           _frameWidth = (data['frameWidth'] as int?) ?? 640;
           _frameHeight = (data['frameHeight'] as int?) ?? 480;
           _frameRotation = (data['frameRotation'] as int?) ?? 0;
-          
+
           // Update rep count logic
           if (result.countRep) {
-            _repCount = result.countRep
-                ? (_analyser is SquatAnalyser
-                    ? (_analyser as SquatAnalyser).repCount
-                    : _analyser is PushUpAnalyser
-                        ? (_analyser as PushUpAnalyser).repCount
-                        : (_analyser as ShoulderPressAnalyser).repCount)
-                : _repCount;
+            _repCount = _analyser.repCount;
             if (_repCount >= widget.targetReps) {
               _workoutComplete = true;
             }
@@ -197,7 +184,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
                 ),
               ),
 
-            // Top bar 
+            // Top bar
             Positioned(
               top: 0,
               left: 0,

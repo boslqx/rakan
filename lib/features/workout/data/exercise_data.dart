@@ -932,6 +932,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Dumbbells',
     youtubeId: 'l1tXK8CzxB4',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 10–12 reps',
     steps: [
       'Stand holding dumbbells at your sides, palms facing forward.',
@@ -1178,6 +1179,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Bodyweight',
     youtubeId: 'qfpaNBDhidg',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 10–12 reps each leg',
     steps: [
       'Stand tall, step one foot backward.',
@@ -1289,6 +1291,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Bodyweight',
     youtubeId: 'UpyDdQjBTa0',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 10–12 reps each leg',
     steps: [
       'Stand tall, step one foot forward.',
