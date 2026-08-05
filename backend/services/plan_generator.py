@@ -52,6 +52,17 @@ SPLIT_MUSCLES = {
     "Active Recovery":     ["abs"],
 }
 
+# Maps the backend's internal muscle_group vocabulary
+MUSCLE_GROUP_MAP = {
+    "chest": "Chest",
+    "back": "Back",
+    "shoulders": "Shoulders",
+    "arms": "Arms",
+    "legs": "Legs",
+    "glutes": "Glutes",
+    "abs": "Core",
+}
+
 
 def generate_plan(
     uid: str,
@@ -238,8 +249,8 @@ def _format_exercise(ex: dict) -> dict:
     return {
         "exerciseId": str(uuid.uuid4()),
         "exerciseName": ex["name"],
-        "muscleGroup": ex["muscle_group"].title(),
-        "secondaryMuscles": ex["secondary_muscles"],
+        "muscleGroup": MUSCLE_GROUP_MAP[ex["muscle_group"]],
+        "secondaryMuscles": [m.title() for m in ex["secondary_muscles"]],
         "sets": ex["sets"],
         "reps": ex["reps"],
         "restSeconds": ex["rest_seconds"],
