@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../data/exercise_data.dart';
 
 class WorkoutPlanService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -207,6 +208,82 @@ class WorkoutPlanService {
     });
 
     await batch.commit();
+  }
+
+  /// Converts a rest day into a workout day. dayNumber/dayName (calendar
+  /// slot) are never touched. If [templateExercises] is provided, they're
+  /// batch-written into the exercises subcollection using the exact same
+  /// document shape as addExerciseToDay() (exerciseId as millis timestamp,
+  /// order as index) — so WorkoutDayDetailScreen reads templated and
+  /// manually-added exercises identically, no special-casing needed there.
+  Future<Map<String, dynamic>> convertRestDayToWorkout({
+    required String uid,
+    required String planId,
+    required String dayId,
+    required String workoutName,
+    List<ExerciseData>? templateExercises,
+  }) async {
+    final dayRef = _db
+        .collection('users')
+        .doc(uid)
+        .collection('workoutPlans')
+        .doc(planId)
+        .collection('days')
+        .doc(dayId);
+
+    final batch = _db.batch();
+
+    batch.update(dayRef, {
+      'dayType': 'workout',
+      'workoutName': workoutName,
+      'focusDescription': '',
+      'durationMinutes': 0,
+    });
+
+    if (templateExercises != null && templateExercises.isNotEmpty) {
+      final exercisesRef = dayRef.collection('exercises');
+      final exercisesForDuration = <Map<String, dynamic>>[];
+
+      for (var i = 0; i < templateExercises.length; i++) {
+        final ex = templateExercises[i];
+        final docRef = exercisesRef.doc();
+        final exerciseMap = {
+          'exerciseId': DateTime.now().millisecondsSinceEpoch.toString(),
+          'exerciseName': ex.name,
+          'muscleGroup': ex.muscleGroup,
+          'sets': 3,
+          'reps': 10,
+          'restSeconds': 60,
+          'order': i,
+        };
+        batch.set(docRef, exerciseMap);
+        exercisesForDuration.add(exerciseMap);
+      }
+
+      // Reuse the exact same deterministic formula from WorkoutDayDetailScreen
+      // (reps × 3s, min 15s per set, plus rest between sets).
+      const secondsPerRep = 3;
+      const minWorkSeconds = 15;
+      int totalSeconds = 0;
+
+      for (final ex in exercisesForDuration) {
+        final sets = ex['sets'] as int? ?? 3;
+        final reps = ex['reps'] as int? ?? 10;
+        final restSeconds = ex['restSeconds'] as int? ?? 60;
+        final workSeconds = (reps * secondsPerRep) < minWorkSeconds
+            ? minWorkSeconds
+            : reps * secondsPerRep;
+        totalSeconds += sets * workSeconds + (sets - 1) * restSeconds;
+      }
+
+      final minutes = (totalSeconds / 60).round();
+      batch.update(dayRef, {'durationMinutes': minutes < 10 ? 10 : minutes});
+    }
+
+    await batch.commit();
+
+    final snap = await dayRef.get();
+    return {...snap.data()!, 'id': snap.id};
   }
 
   /// Adds a new exercise to a day, appended after its current last

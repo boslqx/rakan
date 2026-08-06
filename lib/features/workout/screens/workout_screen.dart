@@ -5,6 +5,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../services/workout_plan_service.dart';
 import 'workout_day_detail_screen.dart';
 import 'exercise_library_screen.dart';
+import '../data/exercise_data.dart';
+import '../../onboarding/services/user_profile_service.dart';
 
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
@@ -185,7 +187,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Tap a workout day to replace or cancel it.',
+                      'Tap a workout day to replace or cancel it. Tap a rest day to convert it.',
                       style: GoogleFonts.manrope(fontSize: 12, color: AppColors.primary),
                     ),
                   ),
@@ -416,11 +418,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final exercises =
         (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
-    // In edit mode, workout days open the manage sheet (replace/cancel)
-    // instead of the normal view-exercises sheet. Rest days aren't
-    // editable yet — only workout days can be replaced or cancelled.
+    // In edit mode, workout days open the manage sheet (replace/cancel).
+    // Rest days now also open a manage sheet — but with a single option:
+    // convert them into a workout day.
+    // Outside edit mode, rest days stay null — untouched, matches your
+    // existing "view-only unless editing" pattern.
     final VoidCallback? onTap = isRest
-        ? null
+        ? (_isEditMode ? () => _showManageRestDaySheet(day) : null)
         : (_isEditMode
             ? () => _showManageDaySheet(day)
             : () => _openDayDetail(day));
@@ -873,6 +877,383 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           planId: _plan!['id'] as String,
           dayId: day['id'] as String,
         ));
+  }
+
+  /// Edit mode: manage sheet for rest days — lets the user convert a rest
+  /// day into a workout day by naming it, then opens the detail screen to
+  /// populate exercises.
+  void _showManageRestDaySheet(Map<String, dynamic> day) {
+    final dayName = day['dayName'] as String? ?? '';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(dayName.toUpperCase(),
+                style: GoogleFonts.manrope(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.5,
+                    color: AppColors.onSurfaceVariant)),
+            const SizedBox(height: 4),
+            Text('Rest Day',
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+            const SizedBox(height: 24),
+            _manageOptionTile(
+              icon: Icons.fitness_center_rounded,
+              title: 'Convert to Workout Day',
+              subtitle: 'Turn this rest day into a training day',
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _promptWorkoutNameAndConvert(day);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Prompts for a workout name, converts the rest day to a workout day,
+  /// then opens the day detail screen for exercise population.
+  Future<void> _promptWorkoutNameAndConvert(Map<String, dynamic> day) async {
+    final dayNumber = day['dayNumber'] as int;
+    final controller = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('New Workout Name',
+            style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: '$dayNumber Workout',
+            hintStyle: GoogleFonts.manrope(color: AppColors.onSurfaceVariant.withValues(alpha: 0.4)),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: AppColors.outlineVariant),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.primary, width: 2),
+            ),
+            filled: true,
+            fillColor: AppColors.surfaceContainerHigh,
+          ),
+          style: GoogleFonts.manrope(color: AppColors.onSurface, fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Convert',
+                style: GoogleFonts.manrope(color: AppColors.primary, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final workoutName = controller.text.trim().isEmpty
+        ? '$dayNumber Workout'
+        : controller.text.trim();
+
+    final useTemplate = await _showUseTemplateDialog();
+    if (!mounted) return;
+
+    Map<String, dynamic>? updatedDay;
+
+    if (useTemplate == true) {
+      final muscleGroup = await _pickMuscleGroupSheet();
+      if (muscleGroup == null) return;
+
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final profile = await UserProfileService().getUserProfile(uid);
+      final userEquipment = (profile?['equipment'] as List?)?.cast<String>() ?? [];
+      final userExperience = profile?['experienceLevel'] as String? ?? 'beginner';
+
+      final exercises = buildTemplateExercises(
+        muscleGroup: muscleGroup,
+        userEquipment: userEquipment,
+        userExperience: userExperience,
+      );
+
+      await _runMutation(() async {
+        updatedDay = await WorkoutPlanService().convertRestDayToWorkout(
+          uid: uid,
+          planId: _plan!['id'] as String,
+          dayId: day['id'] as String,
+          workoutName: workoutName,
+          templateExercises: exercises,
+        );
+      });
+    } else {
+      await _runMutation(() async {
+        updatedDay = await WorkoutPlanService().convertRestDayToWorkout(
+          uid: FirebaseAuth.instance.currentUser!.uid,
+          planId: _plan!['id'] as String,
+          dayId: day['id'] as String,
+          workoutName: workoutName,
+        );
+      });
+    }
+
+    if (!mounted || updatedDay == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => WorkoutDayDetailScreen(
+        day: updatedDay!,
+        planId: _plan!['id'] as String,
+      )),
+    );
+  }
+
+  /// Asks if the user wants to start with a pre-built template for the
+  /// chosen muscle group, or begin with an empty workout.
+  Future<bool?> _showUseTemplateDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Start with a template?',
+            style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+        content: Text(
+          'Pick a muscle group and we\'ll add 3–4 exercises matched to your equipment and experience level.',
+          style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Empty Workout', style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Use Template',
+                style: GoogleFonts.manrope(color: AppColors.primary, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shows the muscle-group picker sheet (Chest, Back, Shoulders, Arms, Legs, Glutes, Core).
+  Future<String?> _pickMuscleGroupSheet() {
+    const groups = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Glutes', 'Core'];
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Choose a focus',
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: groups.map((g) {
+                return ActionChip(
+                  label: Text(g, style: GoogleFonts.manrope(color: AppColors.onSurface)),
+                  backgroundColor: AppColors.surfaceContainerHigh,
+                  shape: const StadiumBorder(),
+                  onPressed: () => Navigator.pop(ctx, g),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Template exercise helpers ────────────────────────────────────────
+
+  /// Maps ExerciseData equipment tags (e.g. 'Dumbbells, Bench') to
+  /// Onboarding EquipmentType enum names (e.g. 'dumbbell', 'bench').
+  static const Map<String, String> _kEquipmentTagToEnum = {
+    'bodyweight': 'noEquipment',
+    'dumbbell': 'dumbbell',
+    'dumbbells': 'dumbbell',
+    'barbell': 'barbell',
+    'bench': 'bench',
+    'cable machine': 'machines',
+    'machine': 'machines',
+    'resistance band': 'resistanceBand',
+    'pull-up bar': 'pullUpBar',
+    'kettlebell': 'kettlebell',
+  };
+
+  /// Checks if an exercise's equipment requirement is satisfied by the
+  /// user's available equipment. Returns true if all required tags map
+  /// to equipment the user has (or if user has fullGym).
+  bool _equipmentMatches(String exerciseEquipment, List<String> userEquipment) {
+    final userSet = userEquipment.toSet();
+    if (userSet.contains('fullGym')) return true;
+
+    final tags = exerciseEquipment
+        .split(',')
+        .map((t) => t.trim().toLowerCase())
+        .where((t) => t.isNotEmpty);
+
+    for (final tag in tags) {
+      final mapped = _kEquipmentTagToEnum[tag];
+      if (mapped == null) return false; // unmapped tag, non-fullGym user
+      if (mapped != 'noEquipment' && !userSet.contains(mapped)) return false;
+    }
+    return true;
+  }
+
+  static const Map<String, int> _kDifficultyRank = {
+    'Beginner': 0,
+    'Intermediate': 1,
+    'Advanced': 2,
+  };
+
+  /// Absolute distance between exercise difficulty and user experience level.
+  int _difficultyDistance(String exerciseDifficulty, String userExperience) {
+    final exRank = _kDifficultyRank[exerciseDifficulty] ?? 1;
+    final normalized = userExperience.isEmpty
+        ? 'beginner'
+        : userExperience[0].toUpperCase() + userExperience.substring(1).toLowerCase();
+    final userRank = _kDifficultyRank[normalized] ?? 0;
+    return (exRank - userRank).abs();
+  }
+
+  /// Template exercise pools per muscle group (exercise names from kExercises).
+  static const Map<String, List<String>> _kMuscleGroupTemplatePools = {
+    'Chest': [
+      'Push-Up',
+      'Dumbbell Bench Press',
+      'Dumbbell Flye',
+      'Incline Push-Up',
+      'Incline Dumbbell Press',
+      'Machine Chest Press',
+      'Pec Deck Flye',
+      'Resistance Band Chest Press',
+      'Resistance Band Chest Flye',
+      'Dumbbell Floor Press',
+    ],
+    'Back': [
+      'Inverted Row',
+      'Dumbbell Row',
+      'Lat Pulldown',
+      'Seated Cable Row',
+      'Pull-Up',
+      'Chin-Up',
+      'Resistance Band Row',
+      'Resistance Band Lat Pulldown',
+      'Chest-Supported Dumbbell Row',
+      'Single-Arm Cable Row',
+    ],
+    'Shoulders': [
+      'Pike Push-Up',
+      'Dumbbell Shoulder Press',
+      'Dumbbell Lateral Raise',
+      'Dumbbell Front Raise',
+      'Dumbbell Rear Delt Flye',
+      'Arnold Press',
+      'Seated Dumbbell Shoulder Press',
+      'Machine Shoulder Press',
+      'Resistance Band Lateral Raise',
+      'Resistance Band Face Pull',
+    ],
+    'Arms': [
+      'Dumbbell Bicep Curl',
+      'Dumbbell Hammer Curl',
+      'Dumbbell Tricep Overhead Extension',
+      'Tricep Dip',
+      'Resistance Band Bicep Curl',
+      'Resistance Band Tricep Pushdown',
+      'Bench Dip',
+      'Dumbbell Concentration Curl',
+      'Incline Dumbbell Curl',
+      'Dumbbell Skull Crusher',
+    ],
+    'Legs': [
+      'Bodyweight Squat',
+      'Reverse Lunge',
+      'Dumbbell Goblet Squat',
+      'Dumbbell Romanian Deadlift',
+      'Split Squat',
+      'Bulgarian Split Squat',
+      'Step-Up',
+      'Wall Sit',
+      'Leg Press',
+      'Leg Curl',
+    ],
+    'Glutes': [
+      'Glute Bridge',
+      'Hip Thrust',
+      'Single-Leg Glute Bridge',
+      'Frog Pump',
+      'Fire Hydrant',
+      'Donkey Kick',
+      'Dumbbell Hip Thrust',
+      'Dumbbell Step-Up',
+      'Cable Glute Kickback',
+      'Resistance Band Glute Bridge',
+    ],
+    'Core': [
+      'Plank',
+      'Crunch',
+      'Leg Raise',
+      'Mountain Climber',
+      'Russian Twist',
+      'Dead Bug',
+      'Bird Dog',
+      'Bicycle Crunch',
+      'Flutter Kick',
+      'Side Plank',
+    ],
+  };
+
+  /// Builds a list of template exercises for the given muscle group,
+  /// filtered by user's equipment and sorted by difficulty proximity
+  /// to the user's experience level.
+  List<ExerciseData> buildTemplateExercises({
+    required String muscleGroup,
+    required List<String> userEquipment,
+    required String userExperience,
+    int maxExercises = 4,
+  }) {
+    final pool = _kMuscleGroupTemplatePools[muscleGroup] ?? [];
+
+    final resolved = pool
+        .map((name) => findExerciseByName(name))
+        .whereType<ExerciseData>()
+        .where((ex) => _equipmentMatches(ex.equipment, userEquipment))
+        .toList();
+
+    resolved.sort((a, b) => _difficultyDistance(a.difficulty, userExperience)
+        .compareTo(_difficultyDistance(b.difficulty, userExperience)));
+
+    return resolved.take(maxExercises).toList();
   }
 
   /// Runs a swap/cancel write, showing a lightweight loading state and
