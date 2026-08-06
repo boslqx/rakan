@@ -38,7 +38,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   List<Landmark> _landmarks = [];
   bool _poseDetected = false;
   PostureResult? _lastResult;
-  dynamic _analyser;
+  late PostureAnalyser _analyser;
   int _repCount = 0;
   int _frameWidth = 640;
   int _frameHeight = 480;
@@ -52,6 +52,14 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   @override
   void initState() {
     super.initState();
+
+    if (!_skipToNextIncompleteExercise()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).pop(true);
+      });
+      return;
+    }
+
     // Only bother asking for camera permission if at least one exercise
     final anyNeedsCamera =
         widget.exercises.any((ex) => ex.data?.hasPoseDetection ?? false);
@@ -87,6 +95,21 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   bool get _currentExerciseCanUseCamera =>
       (_currentExercise.data?.hasPoseDetection ?? false) && _permissionGranted;
 
+  /// Advances _exerciseIndex forward past any exercises that are already
+  /// fully complete (all sets logged via Manual mode). Returns true if a
+  /// valid, incomplete exercise was found and set as current; returns false
+  /// if every remaining exercise is already complete.
+  bool _skipToNextIncompleteExercise() {
+    while (_exerciseIndex < widget.exercises.length) {
+      final ex = widget.exercises[_exerciseIndex];
+      if (ex.currentSetIndex < ex.sets.length) {
+        return true;
+      }
+      _exerciseIndex++;
+    }
+    return false;
+  }
+
   // Starting a set
   void _startSet() {
     if (_currentExerciseCanUseCamera) {
@@ -121,16 +144,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
             .map((l) => Landmark.fromMap(Map<String, dynamic>.from(l as Map)))
             .toList();
 
-        PostureResult result;
-        if (_analyser is SquatAnalyser) {
-          result = (_analyser as SquatAnalyser).analyse(landmarks);
-        } else if (_analyser is PushUpAnalyser) {
-          result = (_analyser as PushUpAnalyser).analyse(landmarks);
-        } else if (_analyser is ShoulderPressAnalyser) {
-          result = (_analyser as ShoulderPressAnalyser).analyse(landmarks);
-        } else {
-          result = (_analyser as SquatAnalyser).analyse(landmarks);
-        }
+        final result = _analyser.analyse(landmarks);
 
         setState(() {
           _poseDetected = true;
@@ -141,11 +155,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
           _frameRotation = (data['frameRotation'] as int?) ?? 0;
 
           if (result.countRep) {
-            _repCount = _analyser is SquatAnalyser
-                ? (_analyser as SquatAnalyser).repCount
-                : _analyser is PushUpAnalyser
-                    ? (_analyser as PushUpAnalyser).repCount
-                    : (_analyser as ShoulderPressAnalyser).repCount;
+            _repCount = _analyser.repCount;
 
             final target = _currentExercise.sets[_currentExercise.currentSetIndex].reps;
             if (_repCount >= target) {
@@ -206,12 +216,18 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   }
 
   void _confirmRpeAndAdvance() {
-    if (_isLastExercise) {
-      Navigator.of(context).pop(true); // true = workout finished
+    if (_exerciseIndex + 1 < widget.exercises.length) {
+      _exerciseIndex++;
+    } else {
+      _exerciseIndex = widget.exercises.length;
+    }
+
+    if (!_skipToNextIncompleteExercise()) {
+      Navigator.of(context).pop(true);
       return;
     }
+
     setState(() {
-      _exerciseIndex++;
       _phase = _ScreenPhase.ready;
     });
   }
