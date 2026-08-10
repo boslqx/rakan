@@ -8,6 +8,47 @@ import 'exercise_library_screen.dart';
 import '../data/exercise_data.dart';
 import '../../onboarding/services/user_profile_service.dart';
 
+bool equipmentMatches(
+  String exerciseEquipment,
+  List<String> userEquipment,
+  Map<String, String> equipmentTagToEnum,
+) {
+  final userSet = userEquipment.toSet();
+  if (userSet.contains('fullGym')) return true;
+
+  final alternatives = exerciseEquipment
+      .split('/')
+      .map((value) => value.trim())
+      .where((value) => value.isNotEmpty);
+
+  for (final alternative in alternatives) {
+    final tags = alternative
+        .split(',')
+        .map((tag) => tag.trim().toLowerCase())
+        .where((tag) => tag.isNotEmpty)
+        .toList();
+
+    if (tags.isEmpty) return true;
+
+    var alternativeMatches = true;
+    for (final tag in tags) {
+      final mapped = equipmentTagToEnum[tag];
+      if (mapped == null) {
+        alternativeMatches = false;
+        break;
+      }
+      if (mapped != 'noEquipment' && !userSet.contains(mapped)) {
+        alternativeMatches = false;
+        break;
+      }
+    }
+
+    if (alternativeMatches) return true;
+  }
+
+  return false;
+}
+
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
 
@@ -1109,24 +1150,46 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     'kettlebell': 'kettlebell',
   };
 
-  /// Checks if an exercise's equipment requirement is satisfied by the
-  /// user's available equipment. Returns true if all required tags map
-  /// to equipment the user has (or if user has fullGym).
+  /// Maps an exercise's equipment string to whether the user can perform it.
+  ///
+  /// Equipment strings may encode two different relationships between tags:
+  ///   - ',' means AND — all listed items are required (e.g. 'Dumbbells, Bench')
+  ///   - '/' means OR — any one alternative setup is sufficient
+  ///     (e.g. 'Bodyweight / Dumbbells, Bench' means: bodyweight-only works,
+  ///     OR dumbbells+bench works)
+  ///
+  /// Each '/'-separated alternative is evaluated as its own AND-group;
+  /// the exercise matches if the user satisfies at least one alternative.
+  /// An unmapped tag fails closed within that alternative only — it does
+  /// not disqualify other alternatives.
   bool _equipmentMatches(String exerciseEquipment, List<String> userEquipment) {
     final userSet = userEquipment.toSet();
     if (userSet.contains('fullGym')) return true;
 
-    final tags = exerciseEquipment
-        .split(',')
-        .map((t) => t.trim().toLowerCase())
-        .where((t) => t.isNotEmpty);
+    final alternatives = exerciseEquipment.split('/');
 
-    for (final tag in tags) {
-      final mapped = _kEquipmentTagToEnum[tag];
-      if (mapped == null) return false; // unmapped tag, non-fullGym user
-      if (mapped != 'noEquipment' && !userSet.contains(mapped)) return false;
+    for (final alt in alternatives) {
+      final tags = alt
+          .split(',')
+          .map((t) => t.trim().toLowerCase())
+          .where((t) => t.isNotEmpty);
+
+      var altMatches = true;
+      for (final tag in tags) {
+        final mapped = _kEquipmentTagToEnum[tag];
+        if (mapped == null) {
+          altMatches = false;
+          break;
+        }
+        if (mapped != 'noEquipment' && !userSet.contains(mapped)) {
+          altMatches = false;
+          break;
+        }
+      }
+      if (altMatches) return true;
     }
-    return true;
+
+    return false;
   }
 
   static const Map<String, int> _kDifficultyRank = {
@@ -1146,6 +1209,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   /// Template exercise pools per muscle group (exercise names from kExercises).
+  /// Note: some exercise `equipment` strings in exercise_data.dart use '/'
+  /// to mean "OR" between alternative setups (e.g. 'Bodyweight / Dumbbells, Bench').
+  /// See _equipmentMatches() for how this is parsed.
   static const Map<String, List<String>> _kMuscleGroupTemplatePools = {
     'Chest': [
       'Push-Up',
