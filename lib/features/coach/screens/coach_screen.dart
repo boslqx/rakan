@@ -10,6 +10,21 @@ import '../../workout/services/workout_plan_service.dart';
 import '../../onboarding/models/onboarding_data.dart';
 import '../../onboarding/screens/plan_generation_screen.dart';
 
+/// Maps each broad muscle group used by `muscleRecovery` docs onto the
+const Map<String, List<Muscle>> kBroadMuscleGroupToHeatmapMuscles = {
+  'Chest': [Muscle.chest],
+  'Back': [Muscle.upperBack, Muscle.lowerBack, Muscle.trapezius],
+  'Shoulders': [Muscle.deltoids],
+  'Arms': [Muscle.biceps, Muscle.triceps, Muscle.forearm],
+  'Legs': [Muscle.quadriceps, Muscle.hamstring, Muscle.calves],
+  'Glutes': [Muscle.gluteal],
+  'Core': [Muscle.abs, Muscle.obliques],
+};
+
+const double kHeatmapHighFatigueThreshold = 0.7;
+const double kHeatmapLowFatigueThreshold = 0.4;
+const int kMuscleRecoveryStaleDays = 7;
+
 class CoachScreen extends StatefulWidget {
   const CoachScreen({super.key});
 
@@ -36,6 +51,7 @@ class _CoachScreenState extends State<CoachScreen> {
   // Recovery / Injury data
   bool _recoveryLoading = true;
   List<Map<String, dynamic>> _injuries = [];
+  Map<String, Map<String, dynamic>> _muscleRecoveryData = {};
   BodySide _heatmapSide = BodySide.front;
   // Gender read from profile
   BodyGender _bodyGender = BodyGender.male;
@@ -125,9 +141,10 @@ class _CoachScreenState extends State<CoachScreen> {
         _muscleFrequency = muscleFreq;
         _statsLoading = false;
       });
-    } catch (e) {
-      print('CoachScreen stats error: $e');
-      setState(() => _statsLoading = false);
+    } catch (e, stack) {
+      debugPrint('CoachScreen recovery error: $e');
+      debugPrint('$stack');
+      setState(() => _recoveryLoading = false);
     }
   }
 
@@ -154,9 +171,19 @@ class _CoachScreenState extends State<CoachScreen> {
           .collection('injuries')
           .get();
 
+      final muscleRecoverySnap = await _db
+          .collection('users')
+          .doc(_uid)
+          .collection('muscleRecovery')
+          .get();
+      final muscleRecoveryData = {
+        for (final doc in muscleRecoverySnap.docs) doc.id: doc.data(),
+      };
+
       // If no injuries subcollection yet, seed from profile onboarding data
       if (injurySnap.docs.isEmpty) {
-        final profileInjuries = profileSnap.data()?['injuries'] as List<dynamic>? ?? [];
+        final profileInjuries =
+            profileSnap.data()?['injuries'] as List<dynamic>? ?? [];
         if (profileInjuries.isNotEmpty) {
           await _seedInjuriesFromProfile(profileInjuries);
           // Reload after seeding
@@ -166,7 +193,10 @@ class _CoachScreenState extends State<CoachScreen> {
               .collection('injuries')
               .get();
           setState(() {
-            _injuries = reloaded.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+            _injuries = reloaded.docs
+                .map((d) => {'id': d.id, ...d.data()})
+                .toList();
+            _muscleRecoveryData = muscleRecoveryData;
             _recoveryLoading = false;
           });
           return;
@@ -174,7 +204,10 @@ class _CoachScreenState extends State<CoachScreen> {
       }
 
       setState(() {
-        _injuries = injurySnap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+        _injuries = injurySnap.docs
+            .map((d) => {'id': d.id, ...d.data()})
+            .toList();
+        _muscleRecoveryData = muscleRecoveryData;
         _recoveryLoading = false;
       });
     } catch (e) {
@@ -766,38 +799,8 @@ class _CoachScreenState extends State<CoachScreen> {
 
   // Heatmap
   Widget _buildHeatmapCard() {
-    // Build heatmap data from injuries
-    // WHY intensity values? active=1.0 (full red), recovering=0.5, recovered=0.1
-    final Map<Muscle, MuscleData> heatmapData = {};
-
-    for (final injury in _injuries) {
-      final status = injury['status'] as String? ?? 'active';
-      final region = injury['region'] as String? ?? '';
-      final muscle = _regionToMuscle(region);
-      if (muscle == null) continue;
-
-      double intensity;
-      Color? color;
-      switch (status) {
-        case 'active':
-          intensity = 1.0;
-          color = AppColors.error;
-          break;
-        case 'recovering':
-          intensity = 0.6;
-          color = const Color(0xFFE8A87C); // amber
-          break;
-        case 'recovered':
-          intensity = 0.2;
-          color = AppColors.primary.withOpacity(0.6);
-          break;
-        default:
-          intensity = 1.0;
-          color = AppColors.error;
-      }
-
-      heatmapData[muscle] = MuscleData(intensity: intensity, color: color);
-    }
+    debugPrint('muscleRecoveryData: ${_muscleRecoveryData.keys.toList()}, glutes doc: ${_muscleRecoveryData['Glutes']}');
+    final heatmapData = _buildMergedHeatmapData();
 
     return Container(
       decoration: BoxDecoration(
@@ -869,14 +872,15 @@ class _CoachScreenState extends State<CoachScreen> {
           // Legend
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 12,
+              runSpacing: 8,
               children: [
-                _buildLegendDot(AppColors.error, 'Active'),
-                const SizedBox(width: 16),
-                _buildLegendDot(const Color(0xFFE8A87C), 'Recovering'),
-                const SizedBox(width: 16),
-                _buildLegendDot(AppColors.primary, 'Recovered'),
+                _buildLegendDot(AppColors.error, 'Injured / High Load'),
+                _buildLegendDot(const Color(0xFFE8A87C), 'Recovering / Moderate'),
+                _buildLegendDot(AppColors.primary, 'Recovered / Low Load'),
+                _buildLegendDot(_noDataColor, 'No Data'),
               ],
             ),
           ),
@@ -1403,24 +1407,109 @@ class _CoachScreenState extends State<CoachScreen> {
   }
 
   // HELPERS
-  Muscle? _regionToMuscle(String region) {
+  (Muscle, MuscleSide)? _regionToMuscleAndSide(String region) {
     switch (region) {
-      case 'chest': return Muscle.chest;
-      case 'upperBack': return Muscle.upperBack;
-      case 'lowerBack': return Muscle.lowerBack;
+      case 'chest':
+        return (Muscle.chest, MuscleSide.both);
+      case 'upperBack':
+        return (Muscle.upperBack, MuscleSide.both);
+      case 'lowerBack':
+        return (Muscle.lowerBack, MuscleSide.both);
       case 'leftShoulder':
-      case 'rightShoulder': return Muscle.deltoids;
+        return (Muscle.deltoids, MuscleSide.left);
+      case 'rightShoulder':
+        return (Muscle.deltoids, MuscleSide.right);
       case 'leftArm':
-      case 'rightArm': return Muscle.biceps;
-      case 'core': return Muscle.abs;
+        return (Muscle.biceps, MuscleSide.left);
+      case 'rightArm':
+        return (Muscle.biceps, MuscleSide.right);
+      case 'core':
+        return (Muscle.abs, MuscleSide.both);
       case 'leftHip':
-      case 'rightHip': return Muscle.gluteal;
+        return (Muscle.gluteal, MuscleSide.left);
+      case 'rightHip':
+        return (Muscle.gluteal, MuscleSide.right);
       case 'leftKnee':
-      case 'rightKnee': return Muscle.knees;
+        return (Muscle.knees, MuscleSide.left);
+      case 'rightKnee':
+        return (Muscle.knees, MuscleSide.right);
       case 'leftAnkle':
-      case 'rightAnkle': return Muscle.ankles;
-      case 'neck': return Muscle.neck;
-      default: return null;
+        return (Muscle.ankles, MuscleSide.left);
+      case 'rightAnkle':
+        return (Muscle.ankles, MuscleSide.right);
+      case 'neck':
+        return (Muscle.neck, MuscleSide.both);
+      default:
+        return null;
     }
   }
+
+  Map<Muscle, MuscleData> _buildMergedHeatmapData() {
+    final Map<Muscle, MuscleData> result = {};
+
+    for (final entry in kBroadMuscleGroupToHeatmapMuscles.entries) {
+      final broadGroup = entry.key;
+      final muscles = entry.value;
+      final recoveryDoc = _muscleRecoveryData[broadGroup];
+
+      Color fatigueColor;
+      if (recoveryDoc == null) {
+        fatigueColor = _noDataColor;
+      } else {
+        final lastTrainedStr = recoveryDoc['lastTrained'] as String?;
+        final lastTrained = lastTrainedStr != null
+            ? DateTime.tryParse(lastTrainedStr)
+            : null;
+        final isStale = lastTrained == null ||
+            DateTime.now().difference(lastTrained).inDays >
+                kMuscleRecoveryStaleDays;
+
+        if (isStale) {
+          fatigueColor = _noDataColor;
+        } else {
+          final fatigueScore =
+              (recoveryDoc['fatigueScore'] as num?)?.toDouble() ?? 0.0;
+          if (fatigueScore >= kHeatmapHighFatigueThreshold) {
+            fatigueColor = AppColors.error;
+          } else if (fatigueScore < kHeatmapLowFatigueThreshold) {
+            fatigueColor = AppColors.primary;
+          } else {
+            fatigueColor = const Color(0xFFE8A87C);
+          }
+        }
+      }
+
+      for (final muscle in muscles) {
+        result[muscle] = MuscleData(
+          intensity: 1.0,
+          color: fatigueColor,
+          side: MuscleSide.both,
+        );
+      }
+    }
+
+    for (final injury in _injuries) {
+      final status = injury['status'] as String? ?? 'active';
+      if (status == 'recovered') continue;
+
+      final region = injury['region'] as String? ?? '';
+      final mapped = _regionToMuscleAndSide(region);
+      if (mapped == null) continue;
+      final (muscle, side) = mapped;
+
+      final injuryColor = status == 'active'
+          ? AppColors.error
+          : const Color(0xFFE8A87C);
+
+      result[muscle] = MuscleData(
+        intensity: 1.0,
+        color: injuryColor,
+        side: side,
+      );
+    }
+
+    return result;
+  }
+
+  Color get _noDataColor => AppColors.onSurfaceVariant.withOpacity(0.25);
 }

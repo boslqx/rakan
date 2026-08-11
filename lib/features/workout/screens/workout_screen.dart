@@ -1133,10 +1133,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
   }
 
-  // ── Template exercise helpers ────────────────────────────────────────
-
-  /// Maps ExerciseData equipment tags (e.g. 'Dumbbells, Bench') to
-  /// Onboarding EquipmentType enum names (e.g. 'dumbbell', 'bench').
+  // Template exercise helpers
   static const Map<String, String> _kEquipmentTagToEnum = {
     'bodyweight': 'noEquipment',
     'dumbbell': 'dumbbell',
@@ -1148,20 +1145,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     'resistance band': 'resistanceBand',
     'pull-up bar': 'pullUpBar',
     'kettlebell': 'kettlebell',
+    'bar': 'pullUpBar',
   };
 
-  /// Maps an exercise's equipment string to whether the user can perform it.
-  ///
-  /// Equipment strings may encode two different relationships between tags:
-  ///   - ',' means AND — all listed items are required (e.g. 'Dumbbells, Bench')
-  ///   - '/' means OR — any one alternative setup is sufficient
-  ///     (e.g. 'Bodyweight / Dumbbells, Bench' means: bodyweight-only works,
-  ///     OR dumbbells+bench works)
-  ///
-  /// Each '/'-separated alternative is evaluated as its own AND-group;
-  /// the exercise matches if the user satisfies at least one alternative.
-  /// An unmapped tag fails closed within that alternative only — it does
-  /// not disqualify other alternatives.
+  /// Maps an exercise's equipment string to whether the user can perform it
   bool _equipmentMatches(String exerciseEquipment, List<String> userEquipment) {
     final userSet = userEquipment.toSet();
     if (userSet.contains('fullGym')) return true;
