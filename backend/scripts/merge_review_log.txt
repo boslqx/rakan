@@ -1,0 +1,158 @@
+
+=== DUPLICATES (skipped, already exist) (30) ===
+- archer push up: normalized name match
+- barbell bench press: normalized name match
+- barbell bent over row: normalized name match
+- barbell curl: normalized name match
+- barbell deadlift: normalized name match
+- barbell front squat: normalized name match
+- barbell lunge: normalized name match
+- barbell romanian deadlift: normalized name match
+- chin-up: normalized name match
+- close-grip push-up: normalized name match
+- dead bug: normalized name match
+- decline push-up: normalized name match
+- diamond push-up: normalized name match
+- dumbbell bench press: normalized name match
+- dumbbell concentration curl: normalized name match
+- dumbbell front raise: normalized name match
+- dumbbell goblet squat: normalized name match
+- dumbbell hammer curl: normalized name match
+- dumbbell lateral raise: normalized name match
+- dumbbell pullover: normalized name match
+- dumbbell romanian deadlift: normalized name match
+- dumbbell step-up: normalized name match
+- hanging leg raise: normalized name match
+- incline push-up: normalized name match
+- inverted row: normalized name match
+- jump squat: normalized name match
+- mountain climber: normalized name match
+- pull-up: normalized name match
+- push-up: normalized name match
+- russian twist: normalized name match
+
+=== EXCLUDED — category out of scope (30) ===
+- astride jumps (male): EXCLUDED (out of scope for strength library)
+- back and forth step: EXCLUDED (out of scope for strength library)
+- bear crawl: EXCLUDED (out of scope for strength library)
+- burpee: EXCLUDED (out of scope for strength library)
+- cycle cross trainer: EXCLUDED (out of scope for strength library)
+- dumbbell burpee: EXCLUDED (out of scope for strength library)
+- half knee bends (male): EXCLUDED (out of scope for strength library)
+- high knee against wall: EXCLUDED (out of scope for strength library)
+- jack burpee: EXCLUDED (out of scope for strength library)
+- jack jump (male): EXCLUDED (out of scope for strength library)
+- jump rope: EXCLUDED (out of scope for strength library)
+- neck side stretch: EXCLUDED (only 2 entries, not worth a new bucket)
+- push to run: EXCLUDED (out of scope for strength library)
+- run: EXCLUDED (out of scope for strength library)
+- run (equipment): EXCLUDED (out of scope for strength library)
+- scissor jumps (male): EXCLUDED (out of scope for strength library)
+- semi squat jump (male): EXCLUDED (out of scope for strength library)
+- short stride run: EXCLUDED (out of scope for strength library)
+- side push neck stretch: EXCLUDED (only 2 entries, not worth a new bucket)
+- skater hops: EXCLUDED (out of scope for strength library)
+- ski step: EXCLUDED (out of scope for strength library)
+- star jump (male): EXCLUDED (out of scope for strength library)
+- stationary bike run v. 3: EXCLUDED (out of scope for strength library)
+- stationary bike walk: EXCLUDED (out of scope for strength library)
+- swing 360: EXCLUDED (out of scope for strength library)
+- walk elliptical cross trainer: EXCLUDED (out of scope for strength library)
+- walking high knees lunge: EXCLUDED (out of scope for strength library)
+- walking on incline treadmill: EXCLUDED (out of scope for strength library)
+- walking on stepmill: EXCLUDED (out of scope for strength library)
+- wheel run: EXCLUDED (out of scope for strength library)
+
+=== EXCLUDED — equipment out of scope (87) ===
+- assisted hanging knee raise: EXCLUDED (too ambiguous)
+- assisted hanging knee raise with throw down: EXCLUDED (too ambiguous)
+- assisted lying calves stretch: EXCLUDED (too ambiguous)
+- assisted lying glutes stretch: EXCLUDED (too ambiguous)
+- assisted lying gluteus and piriformis stretch: EXCLUDED (too ambiguous)
+- assisted lying leg raise with lateral throw down: EXCLUDED (too ambiguous)
+- assisted lying leg raise with throw down: EXCLUDED (too ambiguous)
+- assisted prone hamstring: EXCLUDED (too ambiguous)
+- assisted prone lying quads stretch: EXCLUDED (too ambiguous)
+- assisted prone rectus femoris stretch: EXCLUDED (too ambiguous)
+- assisted seated pectoralis major stretch with stability ball: EXCLUDED (too ambiguous)
+- assisted side lying adductor stretch: EXCLUDED (too ambiguous)
+- assisted sit-up: EXCLUDED (too ambiguous)
+- assisted standing triceps extension (with towel): EXCLUDED (too ambiguous)
+- battling ropes: EXCLUDED (ambiguous - battle rope vs cable)
+- behind head chest stretch: EXCLUDED (too ambiguous)
+- calf stretch with rope: EXCLUDED (ambiguous - battle rope vs cable)
+- hack calf raise: EXCLUDED (niche, low count 15)
+- hack one leg calf raise: EXCLUDED (niche, low count 15)
+- hands bike: EXCLUDED (outside strength scope)
+- intermediate hip flexor and quad stretch: EXCLUDED (ambiguous - battle rope vs cable)
+- london bridge: EXCLUDED (ambiguous - battle rope vs cable)
+- otis up: EXCLUDED (too vague)
+- peroneals stretch: EXCLUDED (ambiguous - battle rope vs cable)
+- posterior tibialis stretch: EXCLUDED (ambiguous - battle rope vs cable)
+- reclining big toe pose with rope: EXCLUDED (ambiguous - battle rope vs cable)
+- roller back stretch: EXCLUDED (ambiguous - foam roller vs ab roller)
+- roller body saw: EXCLUDED (ambiguous - foam roller vs ab roller)
+- roller hip lat stretch: EXCLUDED (ambiguous - foam roller vs ab roller)
+- roller hip stretch: EXCLUDED (ambiguous - foam roller vs ab roller)
+- roller reverse crunch: EXCLUDED (ambiguous - foam roller vs ab roller)
+- roller seated shoulder flexor depresor retractor: EXCLUDED (ambiguous - foam roller vs ab roller)
+- roller seated single leg shoulder flexor depresor retractor: EXCLUDED (ambiguous - foam roller vs ab roller)
+- roller side lat stretch: EXCLUDED (ambiguous - foam roller vs ab roller)
+- rope climb: EXCLUDED (ambiguous - battle rope vs cable)
+- ski ergometer: EXCLUDED (outside strength scope)
+- sled 45 degrees one leg press: EXCLUDED (niche, low count 15)
+- sled 45в° calf press: EXCLUDED (niche, low count 15)
+- sled 45в° leg press: EXCLUDED (niche, low count 15)
+- sled 45в° leg press (back pov): EXCLUDED (niche, low count 15)
+- sled 45° leg press (side pov): EXCLUDED (niche, low count 15)
+- sled 45в° leg wide press: EXCLUDED (niche, low count 15)
+- sled calf press on leg press: EXCLUDED (niche, low count 15)
+- sled closer hack squat: EXCLUDED (niche, low count 15)
+- sled forward angled calf raise: EXCLUDED (niche, low count 15)
+- sled hack squat: EXCLUDED (niche, low count 15)
+- sled lying calf press: EXCLUDED (niche, low count 15)
+- sled lying squat: EXCLUDED (niche, low count 15)
+- sled one leg calf press on leg press: EXCLUDED (niche, low count 15)
+- sledge hammer: EXCLUDED (outside strength scope)
+- standing hamstring and calf stretch with strap: EXCLUDED (ambiguous - battle rope vs cable)
+- tire flip: EXCLUDED (outside strength scope)
+- weighted bench dip: EXCLUDED (too vague)
+- weighted close grip chin-up on dip cage: EXCLUDED (too vague)
+- weighted cossack squats (male): EXCLUDED (too vague)
+- weighted crunch: EXCLUDED (too vague)
+- weighted decline sit-up: EXCLUDED (too vague)
+- weighted donkey calf raise: EXCLUDED (too vague)
+- weighted drop push up: EXCLUDED (too vague)
+- weighted front plank: EXCLUDED (too vague)
+- weighted front raise: EXCLUDED (too vague)
+- weighted hanging leg-hip raise: EXCLUDED (too vague)
+- weighted hyperextension (on stability ball): EXCLUDED (too vague)
+- weighted kneeling step with swing: EXCLUDED (too vague)
+- weighted lunge with swing: EXCLUDED (too vague)
+- weighted muscle up: EXCLUDED (too vague)
+- weighted muscle up (on bar): EXCLUDED (too vague)
+- weighted one hand pull up: EXCLUDED (too vague)
+- weighted overhead crunch (on stability ball): EXCLUDED (too vague)
+- weighted pull-up: EXCLUDED (too vague)
+- weighted round arm: EXCLUDED (too vague)
+- weighted russian twist: EXCLUDED (too vague)
+- weighted russian twist (legs up): EXCLUDED (too vague)
+- weighted russian twist v. 2: EXCLUDED (too vague)
+- weighted seated twist (on stability ball): EXCLUDED (too vague)
+- weighted side bend (on stability ball): EXCLUDED (too vague)
+- weighted sissy squat: EXCLUDED (too vague)
+- weighted squat: EXCLUDED (too vague)
+- weighted standing curl: EXCLUDED (too vague)
+- weighted standing hand squeeze: EXCLUDED (too vague)
+- weighted straight bar dip: EXCLUDED (too vague)
+- weighted stretch lunge: EXCLUDED (too vague)
+- weighted svend press: EXCLUDED (too vague)
+- weighted three bench dips: EXCLUDED (too vague)
+- weighted tricep dips: EXCLUDED (too vague)
+- weighted triceps dip on high parallel bars: EXCLUDED (too vague)
+- wrist rollerer: EXCLUDED (too vague)
+
+=== UNMAPPED CATEGORY (unexpected — investigate) (0) ===
+
+=== UNMAPPED EQUIPMENT (unexpected — investigate) (1) ===
+- trap bar deadlift: unmapped equipment: trap bar

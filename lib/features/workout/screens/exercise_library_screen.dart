@@ -269,6 +269,58 @@ class _ExerciseCard extends StatelessWidget {
   const _ExerciseCard({required this.exercise});
 
   @override
+  Widget _buildThumbnail() {
+    // Case 1: local static thumbnail from the curated GIF set
+    if (exercise.thumbnailAsset != null) {
+      return Image.asset(
+        exercise.thumbnailAsset!,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _thumbnailPlaceholder(),
+      );
+    }
+
+    // Case 2: no local thumbnail, but a real YouTube ID
+    if (exercise.youtubeId.isNotEmpty) {
+      return Image.network(
+        'https://img.youtube.com/vi/${exercise.youtubeId}/mqdefault.jpg',
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        loadingBuilder: (_, child, progress) {
+          if (progress == null) return child;
+          return Container(
+            color: AppColors.surfaceContainerHigh,
+            child: const Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: AppColors.primary,
+              ),
+            ),
+          );
+        },
+        errorBuilder: (_, __, ___) => _thumbnailPlaceholder(),
+      );
+    }
+
+    // Case 3: neither — icon placeholder
+    return _thumbnailPlaceholder();
+  }
+
+  Widget _thumbnailPlaceholder() {
+    return Container(
+      color: AppColors.surfaceContainerHigh,
+      child: const Center(
+        child: Icon(
+          Icons.fitness_center_rounded,
+          color: AppColors.onSurfaceVariant,
+          size: 28,
+        ),
+      ),
+    );
+  }
+
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => _openDetail(context),
@@ -288,35 +340,7 @@ class _ExerciseCard extends StatelessWidget {
                   ClipRRect(
                     borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(20)),
-                    child: Image.network(
-                      'https://img.youtube.com/vi/${exercise.youtubeId}/mqdefault.jpg',
-                      width: double.infinity,
-                      height: double.infinity,
-                      fit: BoxFit.cover,
-                      // Show a dark placeholder while loading
-                      loadingBuilder: (_, child, progress) {
-                        if (progress == null) return child;
-                        return Container(
-                          color: AppColors.surfaceContainerHigh,
-                          child: const Center(
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        );
-                      },
-                      errorBuilder: (_, __, ___) => Container(
-                        color: AppColors.surfaceContainerHigh,
-                        child: const Center(
-                          child: Icon(
-                            Icons.fitness_center_rounded,
-                            color: AppColors.onSurfaceVariant,
-                            size: 28,
-                          ),
-                        ),
-                      ),
-                    ),
+                    child: _buildThumbnail(),
                   ),
 
                   // Gradient overlay

@@ -10,6 +10,9 @@ class ExerciseData {
   final String setsRepsGuide;
   final List<String> steps;
   final List<String> tips;
+  final String? sourceAttribution;
+  final String? localGifAsset;
+  final String? thumbnailAsset;
 
   const ExerciseData({
     required this.name,
@@ -22,6 +25,9 @@ class ExerciseData {
     required this.setsRepsGuide,
     required this.steps,
     required this.tips,
+    this.sourceAttribution,
+    this.localGifAsset,
+    this.thumbnailAsset,
   });
 }
 
@@ -81,6 +87,8 @@ const List<ExerciseData> kExercises = [
       'Push through your palms to return to the start position, fully extending your arms.',
     ],
     tips: ['Squeeze glutes throughout', 'Don\'t let hips sag', 'Keep elbows at 45° not flared'],
+    localGifAsset: 'assets/exercise_gifs/pushups.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/pushups.jpg',
   ),
   ExerciseData(
     name: 'Wide Push-Up',
@@ -97,6 +105,8 @@ const List<ExerciseData> kExercises = [
       'Press back up, squeezing the chest at the top.',
     ],
     tips: ['Wider grip shifts load to the outer chest', 'Maintain a neutral spine'],
+    localGifAsset: 'assets/exercise_gifs/1311-JmMVpR3.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/1311-JmMVpR3.jpg',
   ),
   ExerciseData(
     name: 'Diamond Push-Up',
@@ -113,6 +123,8 @@ const List<ExerciseData> kExercises = [
       'Press back up to full arm extension.',
     ],
     tips: ['Primary emphasis shifts to triceps and inner chest', 'Keep elbows tracking back, not flaring'],
+    localGifAsset: 'assets/exercise_gifs/0283-soIB2rj.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0283-soIB2rj.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Bench Press',
@@ -129,6 +141,8 @@ const List<ExerciseData> kExercises = [
       'Lower the dumbbells back to the starting position with control.',
     ],
     tips: ['Allow slight wrist rotation for natural movement', 'Don\'t bounce off chest'],
+    localGifAsset: 'assets/exercise_gifs/0289-SpYC0Kp.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0289-SpYC0Kp.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Flye',
@@ -144,6 +158,8 @@ const List<ExerciseData> kExercises = [
       'Reverse the arc, squeezing the chest as you bring the dumbbells back together.',
     ],
     tips: ['Keep the elbow angle fixed throughout', 'Think "hugging a tree"'],
+    localGifAsset: 'assets/exercise_gifs/0308-yz9nUhF.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0308-yz9nUhF.jpg',
   ),
   ExerciseData(
     name: 'Barbell Bench Press',
@@ -162,6 +178,8 @@ const List<ExerciseData> kExercises = [
       'Drive your feet into the floor and press the bar back up, locking out at the top.',
     ],
     tips: ['Retract and depress shoulder blades', 'Think "bend the bar" to engage lats', 'Bar path is slightly diagonal'],
+    localGifAsset: 'assets/exercise_gifs/0025-EIeI8Vf.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0025-EIeI8Vf.jpg',
   ),
   ExerciseData(
     name: 'Cable Chest Flye',
@@ -178,6 +196,8 @@ const List<ExerciseData> kExercises = [
       'Slowly open your arms back to the start, feeling a deep chest stretch.',
     ],
     tips: ['Cables maintain tension throughout the range of motion', 'Squeeze hard at the peak contraction'],
+    localGifAsset: 'assets/exercise_gifs/0188-xLYSdtg.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0188-xLYSdtg.jpg',
   ),
   ExerciseData(
     name: 'Incline Push-Up',
@@ -194,6 +214,8 @@ const List<ExerciseData> kExercises = [
       'Push back to full arm extension.',
     ],
     tips: ['Higher surface = easier', 'Great regression for those building push-up strength'],
+    localGifAsset: 'assets/exercise_gifs/0493-B1EVP9F.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0493-B1EVP9F.jpg',
   ),
   ExerciseData(
     name: 'Decline Push-Up',
@@ -209,6 +231,8 @@ const List<ExerciseData> kExercises = [
       'Press back to full arm extension.',
     ],
     tips: ['Elevated feet increase upper chest activation', 'Keep core tight to avoid hip sag'],
+    localGifAsset: 'assets/exercise_gifs/0279-i5cEhka.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0279-i5cEhka.jpg',
   ),
   ExerciseData(
     name: 'Archer Push-Up',
@@ -223,6 +247,8 @@ const List<ExerciseData> kExercises = [
       'Lower toward one hand, keeping the other arm straight (archer draw).',
       'Push back up and repeat to the other side.',
     ],
+    localGifAsset: 'assets/exercise_gifs/3294-A9qxk2F.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/3294-A9qxk2F.jpg',
     tips: ['Progression toward one-arm push-up', 'Keep hips square throughout'],
   ),
   ExerciseData(
@@ -239,6 +265,8 @@ const List<ExerciseData> kExercises = [
       'Lower until elbows touch the floor, then press again.',
     ],
     tips: ['Floor limits range of motion, reducing shoulder strain', 'Good option without a bench'],
+    localGifAsset: 'assets/exercise_gifs/Kettlebell-Chest-Press-on-the-Floor.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Kettlebell-Chest-Press-on-the-Floor.jpg',
   ),
   ExerciseData(
     name: 'Incline Dumbbell Press',
@@ -254,6 +282,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control to starting position.',
     ],
     tips: ['30–45° incline targets upper chest', 'Avoid going steeper as it becomes a shoulder press'],
+    localGifAsset: 'assets/exercise_gifs/Incline-Dumbbell-Press.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Incline-Dumbbell-Press.jpg',
   ),
   ExerciseData(
     name: 'Incline Barbell Bench Press',
@@ -269,6 +299,8 @@ const List<ExerciseData> kExercises = [
       'Press back up to full extension.',
     ],
     tips: ['Bar should touch upper chest, not neck', 'Retract shoulder blades before unracking'],
+    localGifAsset: 'assets/exercise_gifs/0047-3TZduzM.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0047-3TZduzM.jpg',
   ),
   ExerciseData(
     name: 'Machine Chest Press',
@@ -284,6 +316,8 @@ const List<ExerciseData> kExercises = [
       'Return to start with control.',
     ],
     tips: ['Great for beginners learning the pressing pattern', 'Keep back against the pad'],
+    localGifAsset: 'assets/exercise_gifs/0577-T0yTjgW.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0577-T0yTjgW.jpg',
   ),
   ExerciseData(
     name: 'Pec Deck Flye',
@@ -299,6 +333,8 @@ const List<ExerciseData> kExercises = [
       'Slowly return to the open position feeling a chest stretch.',
     ],
     tips: ['Pure chest isolation', 'Squeeze hard at the peak contraction'],
+    localGifAsset: 'assets/exercise_gifs/0596-v3xmPAR.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0596-v3xmPAR.jpg',
   ),
   ExerciseData(
     name: 'Resistance Band Chest Press',
@@ -314,6 +350,8 @@ const List<ExerciseData> kExercises = [
       'Press forward until arms are extended, then return.',
     ],
     tips: ['Band increases resistance at full extension', 'Great home workout option'],
+    localGifAsset: 'assets/exercise_gifs/0596-v3xmPAR.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0596-v3xmPAR.jpg',
   ),
   ExerciseData(
     name: 'Resistance Band Chest Flye',
@@ -329,6 +367,8 @@ const List<ExerciseData> kExercises = [
       'Bring hands together in front of chest, then open back out.',
     ],
     tips: ['Mimics cable flye at home', 'Keep elbow angle fixed throughout'],
+    localGifAsset: 'assets/exercise_gifs/Resistance-Band-Chest-Flye.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Resistance-Band-Chest-Flye.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Pullover',
@@ -344,6 +384,8 @@ const List<ExerciseData> kExercises = [
       'Pull back over to the start position.',
     ],
     tips: ['Stretches the chest and lats simultaneously', 'Control the descent carefully'],
+    localGifAsset: 'assets/exercise_gifs/0375-9XjtHvS.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0375-9XjtHvS.jpg',
   ),
   ExerciseData(
     name: 'Close-Grip Push-Up',
@@ -359,6 +401,8 @@ const List<ExerciseData> kExercises = [
       'Press back up.',
     ],
     tips: ['Shifts more load to triceps vs. wide push-up', 'Elbows should graze your ribs'],
+    localGifAsset: 'assets/exercise_gifs/close-grip-push-up.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/close-grip-push-up.jpg',
   ),
 
   // BACK
@@ -377,6 +421,8 @@ const List<ExerciseData> kExercises = [
       'Lower yourself with full control to a dead hang.',
     ],
     tips: ['Initiate with the lats, not biceps', 'Full dead hang between reps for full range'],
+    localGifAsset: 'assets/exercise_gifs/0651-0V2YQjW.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0651-0V2YQjW.jpg',
   ),
   ExerciseData(
     name: 'Chin-Up',
@@ -392,6 +438,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Underhand grip increases bicep activation vs. pull-up', 'Keep core braced throughout'],
+    localGifAsset: 'assets/exercise_gifs/chin-up.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/chin-up.jpg',
   ),
   ExerciseData(
     name: 'Inverted Row',
@@ -408,6 +456,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Feet elevated increases difficulty', 'Great pull-up regression'],
+    localGifAsset: 'assets/exercise_gifs/0499-bZGHsAZ.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0499-bZGHsAZ.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Row',
@@ -424,6 +474,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control to full extension.',
     ],
     tips: ['Drive the elbow up, not the hand', 'Avoid rotating your torso'],
+    localGifAsset: 'assets/exercise_gifs/Dumbbell-Row.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Dumbbell-Row.jpg',
   ),
   ExerciseData(
     name: 'Barbell Deadlift',
@@ -442,6 +494,8 @@ const List<ExerciseData> kExercises = [
       'Lock out at the top — hips forward, shoulders back. Lower with control.',
     ],
     tips: ['Keep bar in contact with your body throughout', 'Don\'t round your lower back', 'Push the floor away, don\'t pull the bar up'],
+    localGifAsset: 'assets/exercise_gifs/0032-ila4NZS.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0032-ila4NZS.jpg',
   ),
   ExerciseData(
     name: 'Resistance Band Pull-Apart',
@@ -457,6 +511,8 @@ const List<ExerciseData> kExercises = [
       'Return to the start position with control.',
     ],
     tips: ['Excellent for shoulder health and posture', 'Keep arms straight throughout'],
+    localGifAsset: 'assets/exercise_gifs/band-pull-apart.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/band-pull-apart.jpg',
   ),
   ExerciseData(
     name: 'Lat Pulldown',
@@ -473,6 +529,8 @@ const List<ExerciseData> kExercises = [
       'Return bar with control to full arm extension.',
     ],
     tips: ['Initiate with lats, not biceps', 'Think "elbows to back pockets"'],
+    localGifAsset: 'assets/exercise_gifs/0177-CuaWCmC.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0177-CuaWCmC.jpg',
   ),
   ExerciseData(
     name: 'Seated Cable Row',
@@ -489,6 +547,8 @@ const List<ExerciseData> kExercises = [
       'Return with control, allowing a slight forward lean.',
     ],
     tips: ['Don\'t use momentum', 'Squeeze shoulder blades together at the end of each rep'],
+    localGifAsset: 'assets/exercise_gifs/0861-fUBheHs.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0861-fUBheHs.jpg',
   ),
   ExerciseData(
     name: 'Barbell Bent-Over Row',
@@ -505,6 +565,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Keep lower back neutral', 'Brace core hard throughout'],
+    localGifAsset: 'assets/exercise_gifs/0027-eZyBC3j.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0027-eZyBC3j.jpg',
   ),
   ExerciseData(
     name: 'Barbell Romanian Deadlift',
@@ -521,6 +583,8 @@ const List<ExerciseData> kExercises = [
       'Drive hips forward to return to standing.',
     ],
     tips: ['Bar stays close to legs throughout', 'Keep slight bend in knees'],
+    localGifAsset: 'assets/exercise_gifs/0085-wQ2c4XD.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0085-wQ2c4XD.jpg',
   ),
   ExerciseData(
     name: 'Single-Arm Cable Row',
@@ -536,6 +600,8 @@ const List<ExerciseData> kExercises = [
       'Return with control.',
     ],
     tips: ['Allows greater range of motion than double cable row', 'Great for core anti-rotation work'],
+    localGifAsset: 'assets/exercise_gifs/cable-single-arm-row.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/cable-single-arm-row.jpg',
   ),
   ExerciseData(
     name: 'Straight-Arm Pulldown',
@@ -551,6 +617,8 @@ const List<ExerciseData> kExercises = [
       'Return with control.',
     ],
     tips: ['Pure lat isolation — no bicep involvement', 'Great for improving lat mind-muscle connection'],
+    localGifAsset: 'assets/exercise_gifs/straight-arm-pulldown.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/straight-arm-pulldown.jpg',
   ),
   ExerciseData(
     name: 'Assisted Pull-Up Machine',
@@ -567,6 +635,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Progressive overload: reduce assistance weight over time'],
+    localGifAsset: 'assets/exercise_gifs/0017-kiJ4Z2K.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0017-kiJ4Z2K.jpg',
   ),
   ExerciseData(
     name: 'Resistance Band Row',
@@ -582,6 +652,8 @@ const List<ExerciseData> kExercises = [
       'Return with control.',
     ],
     tips: ['Great home rowing alternative'],
+    localGifAsset: 'assets/exercise_gifs/Resistance-Band-Row.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Resistance-Band-Row.jpg',
   ),
   ExerciseData(
     name: 'Resistance Band Lat Pulldown',
@@ -597,6 +669,8 @@ const List<ExerciseData> kExercises = [
       'Return slowly.',
     ],
     tips: ['Mimics lat pulldown at home'],
+    localGifAsset: 'assets/exercise_gifs/band-lat-pulldown.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/band-lat-pulldown.jpg',
   ),
   ExerciseData(
     name: 'Chest-Supported Dumbbell Row',
@@ -612,21 +686,25 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Chest support eliminates lower back from the equation', 'Pure back isolation'],
+    localGifAsset: 'assets/exercise_gifs/Chest-Supported-Dumbbell-Row.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Chest-Supported-Dumbbell-Row.jpg',
   ),
   ExerciseData(
-    name: 'Renegade Row',
+    name: 'Kettlebell Renegade Row',
     muscleGroup: MuscleGroups.back,
     secondaryMuscles: ['Core', 'Triceps'],
     difficulty: 'Advanced',
-    equipment: 'Dumbbells',
+    equipment: 'Kettlebells',
     youtubeId: 'sEAOZc77wk8',
     setsRepsGuide: '3 sets × 8–10 reps each side',
     steps: [
-      'Start in a push-up position with each hand gripping a dumbbell.',
-      'Row one dumbbell toward your hip while balancing on the other.',
+      'Start in a push-up position with each hand gripping a kettlebell.',
+      'Row one kettlebell toward your hip while balancing on the other.',
       'Lower and repeat on the other side.',
     ],
     tips: ['Keep hips square — don\'t rotate', 'Wide feet base provides more stability'],
+    localGifAsset: 'assets/exercise_gifs/kettlebell-renegade-row.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/kettlebell-renegade-row.jpg',
   ),
   ExerciseData(
     name: 'Superman',
@@ -642,6 +720,8 @@ const List<ExerciseData> kExercises = [
       'Hold for 2 seconds at the top, then lower.',
     ],
     tips: ['Great for lower back endurance', 'Don\'t overextend the neck'],
+    localGifAsset: 'assets/exercise_gifs/superman.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/superman.jpg',
   ),
   ExerciseData(
     name: 'Prone Y Raise',
@@ -657,6 +737,8 @@ const List<ExerciseData> kExercises = [
       'Lower slowly.',
     ],
     tips: ['Targets lower trapezius — important for shoulder health'],
+    localGifAsset: 'assets/exercise_gifs/prone-y-raise.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/prone-y-raise.jpg',
   ),
 
   // SHOULDERS
@@ -675,6 +757,8 @@ const List<ExerciseData> kExercises = [
       'Press back up to the start position.',
     ],
     tips: ['Progression toward handstand push-up', 'Walk feet in closer to increase difficulty'],
+    localGifAsset: 'assets/exercise_gifs/pike-push-up.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/pike-push-up.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Shoulder Press',
@@ -691,6 +775,8 @@ const List<ExerciseData> kExercises = [
       'Lower back to shoulder height with control.',
     ],
     tips: ['Don\'t lean back excessively', 'Keep core braced throughout'],
+    localGifAsset: 'assets/exercise_gifs/0405-znQUdHY.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0405-znQUdHY.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Lateral Raise',
@@ -706,6 +792,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control — resist gravity on the way down.',
     ],
     tips: ['Lead with elbows, not hands', 'Slight forward lean targets medial deltoid better'],
+    localGifAsset: 'assets/exercise_gifs/0334-DsgkuIt.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0334-DsgkuIt.jpg',
   ),
   ExerciseData(
     name: 'Barbell Overhead Press',
@@ -722,6 +810,8 @@ const List<ExerciseData> kExercises = [
       'Lock out overhead, shrug at the top. Lower back to collarbone.',
     ],
     tips: ['Brace abs and glutes throughout', 'Avoid excessive back arch'],
+    localGifAsset: 'assets/exercise_gifs/0091-kTbSH9h.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0091-kTbSH9h.jpg',
   ),
   ExerciseData(
     name: 'Resistance Band Lateral Raise',
@@ -737,6 +827,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Band provides accommodating resistance — harder at top', 'Great home shoulder option'],
+    localGifAsset: 'assets/exercise_gifs/0977-sTg7iys.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0977-sTg7iys.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Front Raise',
@@ -752,6 +844,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Targets anterior deltoid', 'Avoid swinging — use lighter weight with control'],
+    localGifAsset: 'assets/exercise_gifs/0310-3eGE2JC.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0310-3eGE2JC.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Rear Delt Flye',
@@ -768,6 +862,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Most neglected deltoid head — important for shoulder balance', 'Keep neck neutral'],
+    localGifAsset: 'assets/exercise_gifs/2292-mu5Guxt.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/2292-mu5Guxt.jpg',
   ),
   ExerciseData(
     name: 'Arnold Press',
@@ -784,6 +880,8 @@ const List<ExerciseData> kExercises = [
       'Reverse the rotation as you lower.',
     ],
     tips: ['Hits all three deltoid heads due to rotation', 'Named after Arnold Schwarzenegger'],
+    localGifAsset: 'assets/exercise_gifs/2137-Xy4jlWA.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/2137-Xy4jlWA.jpg',
   ),
   ExerciseData(
     name: 'Seated Dumbbell Shoulder Press',
@@ -799,6 +897,8 @@ const List<ExerciseData> kExercises = [
       'Lower back to shoulder height.',
     ],
     tips: ['Seated reduces core demand vs standing press', 'Back support allows heavier load'],
+    localGifAsset: 'assets/exercise_gifs/0405-znQUdHY.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0405-znQUdHY.jpg',
   ),
   ExerciseData(
     name: 'Barbell Push Press',
@@ -815,6 +915,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Leg drive allows heavier overhead loading vs strict press'],
+    localGifAsset: 'assets/exercise_gifs/barbell-push-press.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/barbell-push-press.jpg',
   ),
   ExerciseData(
     name: 'Upright Row',
@@ -830,6 +932,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Keep bar close to body throughout', 'Avoid wide grip which stresses shoulder joint'],
+    localGifAsset: 'assets/exercise_gifs/0120-UDlhcO8.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0120-UDlhcO8.jpg',
   ),
   ExerciseData(
     name: 'Cable Face Pull',
@@ -846,6 +950,8 @@ const List<ExerciseData> kExercises = [
       'Return with control.',
     ],
     tips: ['Essential for shoulder health and posture', 'High rep, moderate weight works best'],
+    localGifAsset: 'assets/exercise_gifs/cable-face-pull.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/cable-face-pull.jpg',
   ),
   ExerciseData(
     name: 'Machine Shoulder Press',
@@ -861,6 +967,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Good for beginners learning the overhead pressing pattern'],
+    localGifAsset: 'assets/exercise_gifs/machine-shoulder-press.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/machine-shoulder-press.jpg',
   ),
   ExerciseData(
     name: 'Resistance Band Face Pull',
@@ -876,6 +984,8 @@ const List<ExerciseData> kExercises = [
       'Return with control.',
     ],
     tips: ['Home alternative to cable face pull'],
+    localGifAsset: 'assets/exercise_gifs/cable-face-pull.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/cable-face-pull.jpg',
   ),
   ExerciseData(
     name: 'Wall Walk',
@@ -892,6 +1002,8 @@ const List<ExerciseData> kExercises = [
       'Walk back down.',
     ],
     tips: ['Handstand pressing progression', 'Keep core tight throughout'],
+    localGifAsset: 'assets/exercise_gifs/wall-walk.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/wall-walk.jpg',
   ),
   ExerciseData(
     name: 'Handstand Hold',
@@ -907,6 +1019,8 @@ const List<ExerciseData> kExercises = [
       'Hold for time, breathing steadily.',
     ],
     tips: ['Press through the floor actively', 'Hollow body position is key'],
+    localGifAsset: 'assets/exercise_gifs/3302-XooAdhl.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/3302-XooAdhl.jpg',
   ),
 
   // ARMS
@@ -924,9 +1038,11 @@ const List<ExerciseData> kExercises = [
       'Press back up to full extension.',
     ],
     tips: ['Lean slightly forward to shift emphasis to chest', 'Stay upright for pure tricep focus'],
+    localGifAsset: 'assets/exercise_gifs/0019-J60bN17.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0019-J60bN17.jpg',
   ),
   ExerciseData(
-    name: 'Dumbbell Bicep Curl',
+    name: 'Dumbbell Seated Bicep Curl',
     muscleGroup: MuscleGroups.arms,
     secondaryMuscles: ['Forearms'],
     difficulty: 'Beginner',
@@ -935,11 +1051,13 @@ const List<ExerciseData> kExercises = [
     hasPoseDetection: true,
     setsRepsGuide: '3 sets × 10–12 reps',
     steps: [
-      'Stand holding dumbbells at your sides, palms facing forward.',
+      'Sit holding dumbbells at your sides, palms facing forward.',
       'Curl both dumbbells toward your shoulders, squeezing biceps at the top.',
       'Lower with control to full extension.',
     ],
     tips: ['Don\'t swing — use strict form', 'Supinate wrist at the top for peak contraction'],
+    localGifAsset: 'assets/exercise_gifs/1677-xiA6lRr.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/1677-xiA6lRr.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Hammer Curl',
@@ -955,6 +1073,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Neutral grip targets brachialis — adds arm thickness', 'Great complement to standard curl'],
+    localGifAsset: 'assets/exercise_gifs/0313-slDvUAU.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0313-slDvUAU.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Tricep Overhead Extension',
@@ -970,6 +1090,8 @@ const List<ExerciseData> kExercises = [
       'Press back to full extension.',
     ],
     tips: ['Targets the long head of the tricep', 'Keep elbows pointing forward, not flaring'],
+    localGifAsset: 'assets/exercise_gifs/1738-5fKX7wi.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/1738-5fKX7wi.jpg',
   ),
   ExerciseData(
     name: 'Barbell Curl',
@@ -985,6 +1107,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Allows heavier loading than dumbbell curls', 'EZ-bar reduces wrist stress'],
+    localGifAsset: 'assets/exercise_gifs/0031-25GPyDY.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0031-25GPyDY.jpg',
   ),
   ExerciseData(
     name: 'Resistance Band Bicep Curl',
@@ -1000,6 +1124,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Band provides accommodating resistance', 'Great home bicep option'],
+    localGifAsset: 'assets/exercise_gifs/Resistance-Band-Bicep-Curl.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Resistance-Band-Bicep-Curl.jpg',
   ),
   ExerciseData(
     name: 'Cable Tricep Pushdown',
@@ -1016,6 +1142,8 @@ const List<ExerciseData> kExercises = [
       'Return with control.',
     ],
     tips: ['Elbows fixed is the key cue', 'Great pump exercise for triceps'],
+    localGifAsset: 'assets/exercise_gifs/1723-qRZ5S1N.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/1723-qRZ5S1N.jpg',
   ),
   ExerciseData(
     name: 'Bench Dip',
@@ -1031,6 +1159,8 @@ const List<ExerciseData> kExercises = [
       'Press back up.',
     ],
     tips: ['Feet elevated increases difficulty', 'Keep hips close to the bench'],
+    localGifAsset: 'assets/exercise_gifs/0129-RrLske5.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0129-RrLske5.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Concentration Curl',
@@ -1046,6 +1176,8 @@ const List<ExerciseData> kExercises = [
       'Lower slowly to full extension.',
     ],
     tips: ['Excellent peak contraction isolation exercise', 'Brace eliminates cheating'],
+    localGifAsset: 'assets/exercise_gifs/0297-gvsWLQw.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0297-gvsWLQw.jpg',
   ),
   ExerciseData(
     name: 'Incline Dumbbell Curl',
@@ -1060,6 +1192,8 @@ const List<ExerciseData> kExercises = [
       'Curl dumbbells toward shoulders.',
       'Lower to full extension.',
     ],
+    localGifAsset: 'assets/exercise_gifs/0318-ae9UoXQ.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0318-ae9UoXQ.jpg',
     tips: ['Incline stretches long head of bicep at bottom', 'Greater range of motion than standing curl'],
   ),
   ExerciseData(
@@ -1076,6 +1210,8 @@ const List<ExerciseData> kExercises = [
       'Extend back to the top.',
     ],
     tips: ['Keep elbows pointing at the ceiling throughout', 'Control the weight carefully'],
+    localGifAsset: 'assets/exercise_gifs/dumbbell-skull-crusher.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/dumbbell-skull-crusher.jpg',
   ),
   ExerciseData(
     name: 'Close-Grip Bench Press',
@@ -1090,6 +1226,8 @@ const List<ExerciseData> kExercises = [
       'Lower to mid-chest with elbows tucked.',
       'Press back up.',
     ],
+    localGifAsset: 'assets/exercise_gifs/0030-J6Dx1Mu.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0030-J6Dx1Mu.jpg',
     tips: ['Primary tricep compound movement', 'Don\'t grip too narrow — increases wrist strain'],
   ),
   ExerciseData(
@@ -1106,6 +1244,8 @@ const List<ExerciseData> kExercises = [
       'Extend back to the start.',
     ],
     tips: ['EZ-bar reduces wrist strain', 'Keep upper arms completely vertical'],
+    localGifAsset: 'assets/exercise_gifs/barbell-skull-crusher.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/barbell-skull-crusher.jpg',
   ),
   ExerciseData(
     name: 'Cable Bicep Curl',
@@ -1120,6 +1260,8 @@ const List<ExerciseData> kExercises = [
       'Curl handle toward shoulders, keeping elbows fixed at sides.',
       'Return with control.',
     ],
+    localGifAsset: 'assets/exercise_gifs/cable-bicep-curl.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/cable-bicep-curl.jpg',
     tips: ['Cable maintains constant tension throughout the range of motion'],
   ),
   ExerciseData(
@@ -1137,6 +1279,8 @@ const List<ExerciseData> kExercises = [
       'Return with control.',
     ],
     tips: ['Targets long head of tricep under stretch', 'Keep elbows from flaring'],
+    localGifAsset: 'assets/exercise_gifs/1724-NN8nSNT.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/1724-NN8nSNT.jpg',
   ),
   ExerciseData(
     name: 'Resistance Band Tricep Pushdown',
@@ -1152,6 +1296,8 @@ const List<ExerciseData> kExercises = [
       'Return slowly.',
     ],
     tips: ['Home alternative to cable pushdown'],
+    localGifAsset: 'assets/exercise_gifs/band-tricep-pushdown.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/band-tricep-pushdown.jpg',
   ),
 
   // LEGS
@@ -1171,6 +1317,8 @@ const List<ExerciseData> kExercises = [
       'Drive through heels to return to standing.',
     ],
     tips: ['Keep chest tall throughout', 'Knees track over toes', 'Full depth is goal'],
+    localGifAsset: 'assets/exercise_gifs/bodyweight-squat.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/bodyweight-squat.jpg',
   ),
   ExerciseData(
     name: 'Reverse Lunge',
@@ -1187,6 +1335,8 @@ const List<ExerciseData> kExercises = [
       'Drive through front heel to return to standing.',
     ],
     tips: ['Reverse lunge is more knee-friendly than forward lunge', 'Keep torso upright'],
+    localGifAsset: 'assets/exercise_gifs/reverse-lunge.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/reverse-lunge.jpg',
   ),
   ExerciseData(
     name: 'Jump Squat',
@@ -1203,6 +1353,8 @@ const List<ExerciseData> kExercises = [
       'Land softly by absorbing through hips and knees.',
     ],
     tips: ['Land softly to protect joints', 'Great for power and cardiovascular training'],
+    localGifAsset: 'assets/exercise_gifs/0514-LIlE5Tn.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0514-LIlE5Tn.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Goblet Squat',
@@ -1218,6 +1370,8 @@ const List<ExerciseData> kExercises = [
       'Drive back up to standing.',
     ],
     tips: ['Front load helps maintain upright torso', 'Great squat teaching tool for beginners'],
+    localGifAsset: 'assets/exercise_gifs/1760-yn8yg1r.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/1760-yn8yg1r.jpg',
   ),
   ExerciseData(
     name: 'Dumbbell Romanian Deadlift',
@@ -1234,6 +1388,8 @@ const List<ExerciseData> kExercises = [
       'Drive hips forward to return to standing.',
     ],
     tips: ['Keep slight bend in knees throughout', 'Dumbbells stay close to legs'],
+    localGifAsset: 'assets/exercise_gifs/1459-rR0LJzx.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/1459-rR0LJzx.jpg'
   ),
   ExerciseData(
     name: 'Barbell Squat',
@@ -1252,6 +1408,8 @@ const List<ExerciseData> kExercises = [
       'Drive through mid-foot back to standing.',
     ],
     tips: ['Brace core like you\'re about to get punched', 'Knees track over toes', 'Chest stays tall'],
+    localGifAsset: 'assets/exercise_gifs/barbell-squat.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/barbell-squat.jpg'
   ),
   ExerciseData(
     name: 'Leg Press',
@@ -1268,6 +1426,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Don\'t lock knees at the top', 'Foot position shifts emphasis: high = more glutes, low = more quads'],
+    localGifAsset: 'assets/exercise_gifs/Leg-Press.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Leg-Press.jpg'
   ),
   ExerciseData(
     name: 'Leg Curl',
@@ -1283,6 +1443,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control to full extension.',
     ],
     tips: ['Isolated hamstring exercise', 'Full extension at the bottom for full range of motion'],
+    localGifAsset: 'assets/exercise_gifs/Leg-Curl.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Leg-Curl.jpg'
   ),
   ExerciseData(
     name: 'Forward Lunge',
@@ -1299,6 +1461,8 @@ const List<ExerciseData> kExercises = [
       'Push off front foot to return to start.',
     ],
     tips: ['Keep front knee behind toes', 'Stay upright throughout'],
+    localGifAsset: 'assets/exercise_gifs/bodyweight-lunges.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/bodyweight-lunges.jpg'
   ),
   ExerciseData(
     name: 'Split Squat',
@@ -1314,6 +1478,8 @@ const List<ExerciseData> kExercises = [
       'Press through front heel to return to start.',
     ],
     tips: ['Static base is more stable than a lunge', 'Great progression to Bulgarian split squat'],
+    localGifAsset: 'assets/exercise_gifs/Bodyweight-Bulgarian-Split-Squat.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Bodyweight-Bulgarian-Split-Squat.jpg'
   ),
   ExerciseData(
     name: 'Bulgarian Split Squat',
@@ -1329,6 +1495,8 @@ const List<ExerciseData> kExercises = [
       'Drive through front heel to return.',
     ],
     tips: ['One of the most effective single-leg exercises', 'Requires good hip flexibility'],
+    localGifAsset: 'assets/exercise_gifs/Dumbbell-Bulgarian-Split-Squat.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Dumbbell-Bulgarian-Split-Squat.jpg'
   ),
   ExerciseData(
     name: 'Wall Sit',
@@ -1344,6 +1512,8 @@ const List<ExerciseData> kExercises = [
       'Hold for target time.',
     ],
     tips: ['Isometric quad endurance exercise', 'Keep back flat against wall'],
+    localGifAsset: 'assets/exercise_gifs/wall-sit.jpg',
+    thumbnailAsset: 'assets/exercise_thumbnails/wall-sit.jpg'
   ),
   ExerciseData(
     name: 'Step-Up',
@@ -1360,6 +1530,8 @@ const List<ExerciseData> kExercises = [
       'Step back down.',
     ],
     tips: ['Drive through the working leg, not the back leg', 'Box height determines difficulty'],
+    localGifAsset: 'assets/exercise_gifs/Dumbeel-Step-Up.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Dumbeel-Step-Up.jpg'
   ),
   ExerciseData(
     name: 'Dumbbell Walking Lunge',
@@ -1375,6 +1547,8 @@ const List<ExerciseData> kExercises = [
       'Drive forward into the next lunge, alternating legs.',
     ],
     tips: ['Continuously moving version of the lunge', 'Stay upright throughout'],
+    localGifAsset: 'assets/exercise_gifs/dumbbell-lunges.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/dumbbell-lunges.jpg'
   ),
   ExerciseData(
     name: 'Dumbbell Bulgarian Split Squat',
@@ -1389,6 +1563,8 @@ const List<ExerciseData> kExercises = [
       'Lower front hip toward the floor.',
       'Drive through front heel to return.',
     ],
+    localGifAsset: 'assets/exercise_gifs/Dumbbell-Bulgarian-Split-Squat.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Dumbbell-Bulgarian-Split-Squat.jpg',
     tips: ['Loaded version of the Bulgarian split squat'],
   ),
   ExerciseData(
@@ -1405,6 +1581,8 @@ const List<ExerciseData> kExercises = [
       'Drive through mid-foot to standing.',
     ],
     tips: ['Requires good thoracic and wrist mobility', 'More upright torso than back squat'],
+    localGifAsset: 'assets/exercise_gifs/0042-zG0zs85.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0042-zG0zs85.jpg'
   ),
   ExerciseData(
     name: 'Barbell Lunge',
@@ -1420,6 +1598,8 @@ const List<ExerciseData> kExercises = [
       'Return to standing and alternate legs.',
     ],
     tips: ['Requires good balance and core strength', 'Start with lighter weight'],
+    localGifAsset: 'assets/exercise_gifs/0054-t8iSghb.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0054-t8iSghb.jpg'
   ),
   ExerciseData(
     name: 'Leg Extension',
@@ -1435,6 +1615,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Pure quad isolation', 'Don\'t use momentum'],
+    localGifAsset: 'assets/exercise_gifs/0585-my33uHU.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0585-my33uHU.jpg'
   ),
   ExerciseData(
     name: 'Standing Calf Raise',
@@ -1450,6 +1632,8 @@ const List<ExerciseData> kExercises = [
       'Lower heels below the step level for a full stretch.',
     ],
     tips: ['Slow descent maximizes stretch', 'Pause at top for full contraction'],
+    localGifAsset: 'assets/exercise_gifs/1373-bJYHBIN.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/1373-bJYHBIN.jpg'
   ),
   ExerciseData(
     name: 'Seated Calf Raise',
@@ -1465,6 +1649,8 @@ const List<ExerciseData> kExercises = [
       'Lower fully.',
     ],
     tips: ['Seated position emphasizes soleus (deeper calf muscle)'],
+    localGifAsset: 'assets/exercise_gifs/0594-bOOdeyc.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0594-bOOdeyc.jpg'
   ),
   ExerciseData(
     name: 'Resistance Band Squat',
@@ -1480,6 +1666,8 @@ const List<ExerciseData> kExercises = [
       'Drive back up.',
     ],
     tips: ['Great home leg day starter'],
+    localGifAsset: 'assets/exercise_gifs/1004-TUZLh71.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/1004-TUZLh71.jpg'
   ),
   ExerciseData(
     name: 'Resistance Band Leg Curl',
@@ -1495,6 +1683,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Home hamstring isolation alternative'],
+    localGifAsset: 'assets/exercise_gifs/Banded-Leg-Curl.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Banded-Leg-Curl.jpg'
   ),
 
   // GLUTES
@@ -1513,6 +1703,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Full hip extension at the top', 'Posterior pelvic tilt at peak contraction'],
+    localGifAsset: 'assets/exercise_gifs/Glute-Bridge.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Glute-Bridge.jpg'
   ),
   ExerciseData(
     name: 'Hip Thrust',
@@ -1529,6 +1721,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Most effective glute exercise per research', 'Chin tucked throughout'],
+    localGifAsset: 'assets/exercise_gifs/bodyweight-hip-thrust.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/bodyweight-hip-thrust.jpg'
   ),
   ExerciseData(
     name: 'Barbell Hip Thrust',
@@ -1545,6 +1739,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Use a pad for comfort with the barbell', 'One of the highest glute EMG exercises'],
+    localGifAsset: 'assets/exercise_gifs/Barbell-Hip-Thrust.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/bodyweight-hip-thrust.jpg'
   ),
   ExerciseData(
     name: 'Resistance Band Kickback',
@@ -1560,6 +1756,8 @@ const List<ExerciseData> kExercises = [
       'Return with control.',
     ],
     tips: ['Squeeze glute at full extension', 'Avoid swinging momentum'],
+    localGifAsset: 'assets/exercise_gifs/Banded-Standing-Glute-Kickback.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Banded-Standing-Glute-Kickback.jpg'
   ),
   ExerciseData(
     name: 'Single-Leg Glute Bridge',
@@ -1576,6 +1774,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Identifies left-right glute strength imbalances'],
+    localGifAsset: 'assets/exercise_gifs/Single-Leg-Bridge.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Single-Leg-Bridge.jpg'
   ),
   ExerciseData(
     name: 'Frog Pump',
@@ -1591,6 +1791,8 @@ const List<ExerciseData> kExercises = [
       'Lower and repeat.',
     ],
     tips: ['Great burnout exercise', 'Frog position reduces hamstring involvement'],
+    localGifAsset: 'assets/exercise_gifs/Frog-Pump.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Frog-Pump.jpg'
   ),
   ExerciseData(
     name: 'Fire Hydrant',
@@ -1606,6 +1808,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Targets gluteus medius', 'Keep hips square throughout'],
+    localGifAsset: 'assets/exercise_gifs/Fire-Hydrant.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Fire-Hydrant.jpg'
   ),
   ExerciseData(
     name: 'Donkey Kick',
@@ -1636,6 +1840,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Dumbbell hip thrust is accessible without a barbell'],
+    localGifAsset: 'assets/exercise_gifs/dumbbell-hip-thurst.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/dumbbell-hip-thurst.jpg'
   ),
   ExerciseData(
     name: 'Dumbbell Step-Up',
@@ -1651,6 +1857,8 @@ const List<ExerciseData> kExercises = [
       'Step back down.',
     ],
     tips: ['Focus on the glute of the working leg'],
+    localGifAsset: 'assets/exercise_gifs/0431-aXtJhlg.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0431-aXtJhlg.jpg'
   ),
   ExerciseData(
     name: 'Cable Pull-Through',
@@ -1666,6 +1874,8 @@ const List<ExerciseData> kExercises = [
       'Drive hips forward to stand up, squeezing glutes.',
     ],
     tips: ['Teaches the hip hinge pattern under load', 'Good deadlift accessory'],
+    localGifAsset: 'assets/exercise_gifs/0196-OM46QHm.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0196-OM46QHm.jpg'
   ),
   ExerciseData(
     name: 'Cable Glute Kickback',
@@ -1681,6 +1891,8 @@ const List<ExerciseData> kExercises = [
       'Return with control.',
     ],
     tips: ['Slight forward lean engages glutes more'],
+    localGifAsset: 'assets/exercise_gifs/cable-glute-kickback.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/cable-glute-kickback.jpg'
   ),
   ExerciseData(
     name: 'Hip Abductor Machine',
@@ -1696,6 +1908,8 @@ const List<ExerciseData> kExercises = [
       'Return with control.',
     ],
     tips: ['Targets gluteus medius — important for hip stability'],
+    localGifAsset: 'assets/exercise_gifs/HiP-ABDUCTION-MACHINE.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/HiP-ABDUCTION-MACHINE.jpg'
   ),
   ExerciseData(
     name: 'Resistance Band Glute Bridge',
@@ -1711,6 +1925,8 @@ const List<ExerciseData> kExercises = [
       'Squeeze glutes at the top.',
     ],
     tips: ['Band adds lateral glute activation on top of the bridge'],
+    localGifAsset: 'assets/exercise_gifs/Banded-Glute-Bridge.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Banded-Glute-Bridge.jpg'
   ),
   ExerciseData(
     name: 'Resistance Band Lateral Walk',
@@ -1725,6 +1941,8 @@ const List<ExerciseData> kExercises = [
       'Slightly bend knees and squat down slightly.',
       'Take lateral steps, keeping tension in the band.',
     ],
+    localGifAsset: 'assets/exercise_gifs/Resistance-Band-Lateral-Walk.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Resistance-Band-Lateral-Walk.jpg',
     tips: ['Gluteus medius activation for hip stability'],
   ),
 
@@ -1744,6 +1962,8 @@ const List<ExerciseData> kExercises = [
       'Hold position without allowing hips to sag or rise.',
     ],
     tips: ['Squeeze glutes and abs simultaneously', 'Breathe steadily throughout'],
+    localGifAsset: 'assets/exercise_gifs/plank.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/plank.jpg'
   ),
   ExerciseData(
     name: 'Crunch',
@@ -1760,6 +1980,8 @@ const List<ExerciseData> kExercises = [
       'Lower with control.',
     ],
     tips: ['Short range of motion — only shoulders lift', 'Exhale on the way up'],
+    localGifAsset: 'assets/exercise_gifs/Crunch.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Crunch.jpg'
   ),
   ExerciseData(
     name: 'Leg Raise',
@@ -1774,6 +1996,8 @@ const List<ExerciseData> kExercises = [
       'Keep legs straight and raise them to 90 degrees.',
       'Lower slowly — don\'t let heels touch the floor.',
     ],
+    localGifAsset: 'assets/exercise_gifs/Lying-Leg-Raise.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Lying-Leg-Raise.jpg',
     tips: ['Press lower back into floor throughout', 'Slower lowering = harder'],
   ),
   ExerciseData(
@@ -1790,6 +2014,8 @@ const List<ExerciseData> kExercises = [
       'Quickly switch legs, keeping hips low and core braced.',
     ],
     tips: ['Keep hips from bouncing up', 'Great cardio + core combination'],
+    localGifAsset: 'assets/exercise_gifs/Mountain-climber.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Mountain-climber.jpg'
   ),
   ExerciseData(
     name: 'Russian Twist',
@@ -1804,6 +2030,8 @@ const List<ExerciseData> kExercises = [
       'Rotate your torso to one side, then the other.',
     ],
     tips: ['Add a weight for extra resistance', 'Focus on oblique contraction not arm swing'],
+    localGifAsset: 'assets/exercise_gifs/0687-XVDdcoj.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0687-XVDdcoj.jpg'
   ),
   ExerciseData(
     name: 'Hanging Knee Raise',
@@ -1818,6 +2046,8 @@ const List<ExerciseData> kExercises = [
       'Draw knees toward chest, curling the pelvis up.',
       'Lower with control.',
     ],
+    localGifAsset: 'assets/exercise_gifs/1761-BaE7O6U.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/1761-BaE7O6U.jpg',
     tips: ['The pelvic tilt at the end activates lower abs more', 'Avoid swinging'],
   ),
   ExerciseData(
@@ -1834,6 +2064,8 @@ const List<ExerciseData> kExercises = [
       'Hold without letting hips drop.',
     ],
     tips: ['Stack feet or stagger for stability', 'Great oblique and hip stability exercise'],
+    localGifAsset: 'assets/exercise_gifs/side-plank.jpg',
+    thumbnailAsset: 'assets/exercise_thumbnails/side-plank.jpg'
   ),
   ExerciseData(
     name: 'Dead Bug',
@@ -1848,6 +2080,8 @@ const List<ExerciseData> kExercises = [
       'Slowly lower opposite arm and leg toward the floor simultaneously.',
       'Return to start and repeat other side.',
     ],
+    localGifAsset: 'assets/exercise_gifs/0276-iny3m5y.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0276-iny3m5y.jpg',
     tips: ['Keep lower back pressed into the floor throughout', 'Breathe out as you extend'],
   ),
   ExerciseData(
@@ -1863,6 +2097,8 @@ const List<ExerciseData> kExercises = [
       'Extend opposite arm and leg simultaneously.',
       'Hold 2 seconds, return, repeat other side.',
     ],
+    localGifAsset: 'assets/exercise_gifs/Bird-Dog.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Bird-Dog.jpg',
     tips: ['Spine stays neutral throughout', 'Excellent for lower back health'],
   ),
   ExerciseData(
@@ -1879,6 +2115,8 @@ const List<ExerciseData> kExercises = [
       'Alternate sides in a cycling motion.',
     ],
     tips: ['Slow and controlled is better than fast and sloppy', 'Don\'t pull on your neck'],
+    localGifAsset: 'assets/exercise_gifs/Bicycle-Crunch.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Bicycle-Crunch.jpg'
   ),
   ExerciseData(
     name: 'Flutter Kick',
@@ -1894,6 +2132,8 @@ const List<ExerciseData> kExercises = [
       'Alternate kicking legs up and down in small, quick movements.',
     ],
     tips: ['Keep lower back from arching off floor', 'Great hip flexor and lower ab endurance exercise'],
+    localGifAsset: 'assets/exercise_gifs/0459-UVo2Qs2.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0459-UVo2Qs2.jpg'
   ),
   ExerciseData(
     name: 'V-Up',
@@ -1908,6 +2148,8 @@ const List<ExerciseData> kExercises = [
       'Simultaneously raise legs and torso, reaching hands toward feet.',
       'Lower with control.',
     ],
+    localGifAsset: 'assets/exercise_gifs/Jackknife-Sit-ups.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/Jackknife-Sit-ups.jpg',
     tips: ['Full body contraction at the peak', 'Regression: bend knees'],
   ),
   ExerciseData(
@@ -1924,6 +2166,8 @@ const List<ExerciseData> kExercises = [
       'Raise legs and shoulders just off the floor — maintain the curve.',
       'Hold position.',
     ],
+    localGifAsset: 'assets/exercise_gifs/hollow-hold.jpg',
+    thumbnailAsset: 'assets/exercise_thumbnails/hollow-hold.jpg',
     tips: ['Foundation of gymnastics strength', 'The lower the legs, the harder it is'],
   ),
   ExerciseData(
@@ -1940,6 +2184,8 @@ const List<ExerciseData> kExercises = [
       'Replace and repeat other side, keeping hips still.',
     ],
     tips: ['Wider feet base makes this easier', 'Resist rotating — that\'s the challenge'],
+    localGifAsset: 'assets/exercise_gifs/3699-yRpV5TC.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/3699-yRpV5TC.jpg'
   ),
   ExerciseData(
     name: 'Ab Wheel Rollout',
@@ -1954,6 +2200,8 @@ const List<ExerciseData> kExercises = [
       'Roll forward, extending your body as far as possible while keeping back neutral.',
       'Roll back by contracting your abs.',
     ],
+    localGifAsset: 'assets/exercise_gifs/0857-NAgVB3t.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0857-NAgVB3t.jpg',
     tips: ['Start with short rolls if new to this', 'Never let lower back arch'],
   ),
   ExerciseData(
@@ -1969,26 +2217,30 @@ const List<ExerciseData> kExercises = [
       'Crunch downward, bringing elbows toward knees.',
       'Return slowly.',
     ],
+    localGifAsset: 'assets/exercise_gifs/0175-WW95auq.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0175-WW95auq.jpg',
     tips: ['Weighted abdominal exercise — allows progressive overload on abs'],
   ),
   ExerciseData(
-    name: 'Pallof Press',
+    name: 'Resistance Band Horizontal Pallof Press',
     muscleGroup: MuscleGroups.core,
-    secondaryMuscles: ['Obliques', 'Shoulders'],
+    secondaryMuscles: ['Obliques'],
     difficulty: 'Intermediate',
-    equipment: 'Cable Machine',
+    equipment: 'Resistance Band',
     youtubeId: 'syYBcVbEAFk',
     setsRepsGuide: '3 sets × 10–12 reps each side',
     steps: [
-      'Set cable at chest height, stand perpendicular to it.',
-      'Hold cable handle at chest, elbows tucked.',
-      'Press handle straight out, resisting rotation.',
-      'Return to chest.',
+      'Attach the band to a sturdy anchor point at waist height.',
+      'Stand perpendicular to the anchor point with your feet shoulder-width apart.',
+      'Hold the extended position for a few seconds, focusing on maintaining tension in your core.',
+      'Slowly bring your hands back to your chest, resisting the pull of the band.',
     ],
+    localGifAsset: 'assets/exercise_gifs/0979-9pa4H5m.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0979-9pa4H5m.jpg',
     tips: ['Anti-rotation core training — very functional', 'Keep shoulders square'],
   ),
   ExerciseData(
-    name: 'Resistance Band Pallof Press',
+    name: 'Resistance Band Vertical Pallof Press',
     muscleGroup: MuscleGroups.core,
     secondaryMuscles: ['Obliques'],
     difficulty: 'Intermediate',
@@ -1996,10 +2248,16 @@ const List<ExerciseData> kExercises = [
     youtubeId: 'suXbr509tFQ',
     setsRepsGuide: '3 sets × 10–12 reps each side',
     steps: [
-      'Anchor band at chest height. Stand perpendicular to anchor.',
-      'Hold band at chest, press straight out, resisting rotation.',
-      'Return to chest.',
+      "Stand with your feet shoulder-width apart and wrap the band around a sturdy object at chest height.",
+      "Hold the band with both hands and step away from the anchor point, creating tension in the band.",
+      "Position yourself perpendicular to the anchor point, with your side facing the band.",
+      "Extend your arms straight out in front of you, keeping your hands at chest height.",
+      "Engage your core and press the band away from your chest, fully extending your arms.",
+      "Hold the position for a few seconds, then slowly bring the band back towards your chest.",
+      "Repeat for the desired number of repetitions, then switch sides."
     ],
+    localGifAsset: 'assets/exercise_gifs/1015-G7PXMlT.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/1015-G7PXMlT.jpg',
     tips: ['Home alternative to cable Pallof press'],
   ),
   ExerciseData(
@@ -2016,5 +2274,7 @@ const List<ExerciseData> kExercises = [
       'Lower with control — don\'t swing.',
     ],
     tips: ['Harder than hanging knee raise', 'Tilt pelvis at the top for lower ab activation'],
+    localGifAsset: 'assets/exercise_gifs/0472-I3tsCnC.gif',
+    thumbnailAsset: 'assets/exercise_thumbnails/0472-I3tsCnC.jpg'
   ),
 ];

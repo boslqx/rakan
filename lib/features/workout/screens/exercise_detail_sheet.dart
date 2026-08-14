@@ -17,13 +17,16 @@ class ExerciseDetailSheet extends StatefulWidget {
 }
 
 class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
-  late final WebViewController _webController;
+  WebViewController? _webController;
   bool _videoLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _initWebView();
+    // Only spin up the WebView if we'll actually need it (no GIF, but a real YouTube ID)
+    if (widget.exercise.localGifAsset == null && widget.exercise.youtubeId.isNotEmpty) {
+      _initWebView();
+    }
   }
 
   void _initWebView() {
@@ -256,24 +259,49 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
 
   // Video player with loading state
   Widget _buildVideoPlayer() {
-    return SizedBox(
-      // 16:9 aspect ratio for video
-      height: MediaQuery.of(context).size.width * 9 / 16,
-      child: Stack(
-        children: [
-          WebViewWidget(controller: _webController),
-          // Loading shimmer shown until page finishes loading
-          if (!_videoLoaded)
-            Container(
-              color: AppColors.surfaceContainerHigh,
-              child: const Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.5,
-                  color: AppColors.primary,
+    // Case 1: GIF available — show it directly, no WebView involved
+    if (widget.exercise.localGifAsset != null) {
+      return SizedBox(
+        height: MediaQuery.of(context).size.width * 9 / 16,
+        child: Image.asset(
+          widget.exercise.localGifAsset!,
+          fit: BoxFit.cover,
+          width: double.infinity,
+        ),
+      );
+    }
+
+    // Case 2: no GIF, but a real YouTube ID — existing WebView behaviour
+    if (widget.exercise.youtubeId.isNotEmpty) {
+      return SizedBox(
+        height: MediaQuery.of(context).size.width * 9 / 16,
+        child: Stack(
+          children: [
+            WebViewWidget(controller: _webController!),
+            if (!_videoLoaded)
+              Container(
+                color: AppColors.surfaceContainerHigh,
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
+      );
+    }
+
+    // Case 3: neither — empty state instead of a blank/broken player
+    return SizedBox(
+      height: MediaQuery.of(context).size.width * 9 / 16,
+      child: Container(
+        color: AppColors.surfaceContainerHigh,
+        child: const Center(
+          child: Icon(Icons.videocam_off_rounded,
+              size: 32, color: AppColors.onSurfaceVariant),
+        ),
       ),
     );
   }
