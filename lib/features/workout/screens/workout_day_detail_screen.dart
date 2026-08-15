@@ -219,6 +219,75 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
     if (picked != null) _addExercise(picked);
   }
 
+  Widget _buildDetailMedia(ExerciseData data) {
+    // Case 1: GIF — full-size, tappable, opens the same full-screen GIF viewer
+    if (data.localGifAsset != null) {
+      return GestureDetector(
+        onTap: () => _openGifFullscreen(data.localGifAsset!, data.name),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: Container(
+              color: AppColors.surfaceContainerHigh,
+              child: Image.asset(data.localGifAsset!, fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Case 2: no GIF, real YouTube ID — existing thumbnail + play icon
+    if (data.youtubeId.isNotEmpty) {
+      return GestureDetector(
+        onTap: () => _openVideo(data.youtubeId, data.name),
+        child: Container(
+          height: 180,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(16),
+            image: DecorationImage(
+              image: NetworkImage('https://img.youtube.com/vi/${data.youtubeId}/mqdefault.jpg'),
+              fit: BoxFit.cover,
+            ),
+          ),
+          child: const Center(
+            child: Icon(Icons.play_circle_fill_rounded, size: 48, color: Colors.white),
+          ),
+        ),
+      );
+    }
+
+    // Case 3: neither
+    return Container(
+      height: 180,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: const Center(
+        child: Icon(Icons.fitness_center_rounded, size: 40, color: AppColors.onSurfaceVariant),
+      ),
+    );
+  }
+
+  void _openGifFullscreen(String gifAsset, String title) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            title: Text(title, style: const TextStyle(color: Colors.white)),
+          ),
+          body: Center(
+            child: Image.asset(gifAsset, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _openExerciseDetail(String exerciseName) {
     final data = findExerciseByName(exerciseName);
     if (data == null) return;
@@ -248,23 +317,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
               style: GoogleFonts.manrope(fontSize: 11, letterSpacing: 1, color: AppColors.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
-            GestureDetector(
-              onTap: () => _openVideo(data.youtubeId, data.name),
-              child: Container(
-                height: 180,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(16),
-                  image: DecorationImage(
-                    image: NetworkImage('https://img.youtube.com/vi/${data.youtubeId}/mqdefault.jpg'),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                child: const Center(
-                  child: Icon(Icons.play_circle_fill_rounded, size: 48, color: Colors.white),
-                ),
-              ),
-            ),
+            _buildDetailMedia(data),
             const SizedBox(height: 20),
             Text('HOW TO PERFORM',
                 style: GoogleFonts.manrope(
@@ -731,17 +784,19 @@ class _ExercisePickerScreenState extends State<_ExercisePickerScreen> {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(10),
-                              child: Image.network(
-                                'https://img.youtube.com/vi/${ex.youtubeId}/mqdefault.jpg',
-                                width: 48,
-                                height: 48,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                  width: 48,
-                                  height: 48,
-                                  color: AppColors.surfaceContainerHigh,
-                                ),
-                              ),
+                              child: ex.thumbnailAsset != null
+                                  ? Image.asset(ex.thumbnailAsset!, width: 48, height: 48, fit: BoxFit.cover)
+                                  : Image.network(
+                                      'https://img.youtube.com/vi/${ex.youtubeId}/mqdefault.jpg',
+                                      width: 48,
+                                      height: 48,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        width: 48,
+                                        height: 48,
+                                        color: AppColors.surfaceContainerHigh,
+                                      ),
+                                    ),
                             ),
                             const SizedBox(width: 14),
                             Expanded(

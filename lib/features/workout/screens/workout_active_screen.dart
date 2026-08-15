@@ -871,6 +871,59 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
     );
   }
 
+  /// Builds the media component for the info sheet
+  Widget _buildInfoSheetMedia(ExerciseData data) {
+    // Case 1: GIF — square media, full animation visible via AspectRatio + contain
+    if (data.localGifAsset != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: Container(
+            color: AppColors.surfaceContainerHigh,
+            child: Image.asset(
+              data.localGifAsset!,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Case 2: no GIF, but a real YouTube ID — same static thumbnail + play icon as before
+    if (data.youtubeId.isNotEmpty) {
+      return Container(
+        height: 180,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(16),
+          image: DecorationImage(
+            image: NetworkImage(
+                'https://img.youtube.com/vi/${data.youtubeId}/mqdefault.jpg'),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: const Center(
+          child: Icon(Icons.play_circle_fill_rounded,
+              size: 48, color: Colors.white),
+        ),
+      );
+    }
+
+    // Case 3: neither — placeholder
+    return Container(
+      height: 180,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: const Center(
+        child: Icon(Icons.fitness_center_rounded,
+            size: 40, color: AppColors.onSurfaceVariant),
+      ),
+    );
+  }
+
   /// Instructional bottom sheet: steps, tips, and a video link
   void _openInfoSheet(ExerciseSessionState ex) {
     final data = ex.data;
@@ -910,22 +963,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Container(
-              height: 180,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(16),
-                image: DecorationImage(
-                  image: NetworkImage(
-                      'https://img.youtube.com/vi/${data.youtubeId}/mqdefault.jpg'),
-                  fit: BoxFit.cover,
-                ),
-              ),
-              child: const Center(
-                child: Icon(Icons.play_circle_fill_rounded,
-                    size: 48, color: Colors.white),
-              ),
-            ),
+            _buildInfoSheetMedia(data),
             const SizedBox(height: 20),
             Text(
               'HOW TO PERFORM',

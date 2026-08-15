@@ -676,7 +676,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
               child: data != null
-                  ? _LoopingVideo(youtubeId: data.youtubeId)
+                  ? _buildLoopingMedia(data)
                   : Container(color: Colors.white10),
             ),
           ),
@@ -710,6 +710,23 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
         ),
       ],
     );
+  }
+
+  Widget _buildLoopingMedia(dynamic data) {
+    if (data.localGifAsset != null) {
+      return Image.asset(
+        data.localGifAsset!,
+        fit: BoxFit.contain,
+        // gaplessPlayback avoids a flash to nothing when Flutter briefly
+        // rebuilds this widget (e.g. on a hot state change) — animated
+        // GIFs otherwise restart from frame 1 on every rebuild.
+        gaplessPlayback: true,
+      );
+    }
+    if (data.youtubeId.isNotEmpty) {
+      return _LoopingVideo(youtubeId: data.youtubeId);
+    }
+    return Container(color: Colors.white10);
   }
 
   // RESTING phase

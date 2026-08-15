@@ -261,12 +261,20 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
   Widget _buildVideoPlayer() {
     // Case 1: GIF available — show it directly, no WebView involved
     if (widget.exercise.localGifAsset != null) {
-      return SizedBox(
-        height: MediaQuery.of(context).size.width * 9 / 16,
-        child: Image.asset(
-          widget.exercise.localGifAsset!,
-          fit: BoxFit.cover,
-          width: double.infinity,
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Image.asset(
+              widget.exercise.localGifAsset!,
+              fit: BoxFit.contain,
+            ),
+          ),
         ),
       );
     }
