@@ -9,6 +9,7 @@ import '../../workout/services/workout_log_service.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../../onboarding/models/onboarding_data.dart';
 import '../../onboarding/screens/plan_generation_screen.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 /// Maps each broad muscle group used by `muscleRecovery` docs onto the
 const Map<String, List<Muscle>> kBroadMuscleGroupToHeatmapMuscles = {
@@ -48,6 +49,22 @@ class _CoachScreenState extends State<CoachScreen> {
   int _workoutsThisWeek = 0;
   int _plannedThisWeek = 0;
 
+  // Adherence (4-week)
+  bool _adherenceLoading = true;
+  int _completedLast4Weeks = 0;
+  int _targetLast4Weeks = 0;
+
+  // Exercise progression
+  List<String> _loggedExerciseNames = [];
+  String? _selectedExercise;
+  bool _progressionLoading = false;
+  List<Map<String, dynamic>> _progressionData = []; // [{date, maxWeight, rpe}]
+
+  // 0 = 7 days, 1 = 30 days, 2 = 90 days, 3 = all time
+  int _progressionRangeIndex = 1; // default: 30 days
+  static const List<int?> _progressionRangeDays = [7, 30, 90, null];
+  static const List<String> _progressionRangeLabels = ['7D', '30D', '90D', 'ALL'];
+
   // Recovery / Injury data
   bool _recoveryLoading = true;
   List<Map<String, dynamic>> _injuries = [];
@@ -61,9 +78,162 @@ class _CoachScreenState extends State<CoachScreen> {
     super.initState();
     _loadStats();
     _loadRecovery();
+    _loadAdherence();
+    _loadLoggedExerciseNames();
   }
 
   // DATA LOADING
+  Future<void> _loadAdherence() async {
+    if (_uid == null) return;
+    setState(() => _adherenceLoading = true);
+
+    try {
+      final windowStart = DateTime.now().subtract(const Duration(days: 28));
+
+      // Count completed logs in the last 28 days
+      final logsSnap = await _db
+          .collection('users')
+          .doc(_uid)
+          .collection('workoutLogs')
+          .get();
+
+      int completed = 0;
+      for (final doc in logsSnap.docs) {
+        final data = doc.data();
+        final isCompleted = data['isCompleted'] as bool? ?? false;
+        if (!isCompleted) continue;
+        final completedStr = data['completedAt'] as String? ?? '';
+        final completedAt = DateTime.tryParse(completedStr);
+        if (completedAt == null) continue;
+        if (completedAt.isAfter(windowStart)) completed++;
+      }
+
+      // Target: current plan's workout-day count × 4
+      final plan = await WorkoutPlanService().getActivePlan(_uid!);
+      int workoutDaysInPlan = 0;
+      if (plan != null) {
+        final days = plan['days'] as List<dynamic>? ?? [];
+        for (final day in days) {
+          final dayType = day['dayType'] as String? ?? '';
+          if (dayType == 'workout') workoutDaysInPlan++;
+        }
+      }
+
+      setState(() {
+        _completedLast4Weeks = completed;
+        _targetLast4Weeks = workoutDaysInPlan * 4;
+        _adherenceLoading = false;
+      });
+    } catch (e) {
+      debugPrint('CoachScreen adherence error: $e');
+      setState(() => _adherenceLoading = false);
+    }
+  }
+
+  Future<void> _loadLoggedExerciseNames() async {
+    if (_uid == null) return;
+
+    try {
+      final logsSnap = await _db
+          .collection('users')
+          .doc(_uid)
+          .collection('workoutLogs')
+          .get();
+
+      final Set<String> names = {};
+      for (final logDoc in logsSnap.docs) {
+        final exLogs = await logDoc.reference.collection('exerciseLogs').get();
+        for (final ex in exLogs.docs) {
+          final name = ex.data()['exerciseName'] as String?;
+          if (name != null && name.isNotEmpty) names.add(name);
+        }
+      }
+
+      final sortedNames = names.toList()..sort();
+      if (!mounted) return;
+      setState(() {
+        _loggedExerciseNames = sortedNames;
+        if (sortedNames.isNotEmpty) {
+          _selectedExercise = sortedNames.first;
+          _loadExerciseProgression(sortedNames.first);
+        }
+      });
+    } catch (e) {
+      debugPrint('CoachScreen exercise names error: $e');
+    }
+  }
+
+  Future<void> _loadExerciseProgression(String exerciseName) async {
+    if (_uid == null) return;
+    setState(() => _progressionLoading = true);
+
+    try {
+      final rangeDays = _progressionRangeDays[_progressionRangeIndex];
+      final windowStart = rangeDays != null
+          ? DateTime.now().subtract(Duration(days: rangeDays))
+          : null;
+
+      final logsSnap = await _db
+          .collection('users')
+          .doc(_uid)
+          .collection('workoutLogs')
+          .get();
+
+      final List<Map<String, dynamic>> points = [];
+
+      for (final logDoc in logsSnap.docs) {
+        final logData = logDoc.data();
+        final completedStr = logData['completedAt'] as String? ?? '';
+        final completedAt = DateTime.tryParse(completedStr);
+        if (completedAt == null) continue;
+
+        // Skip logs outside the selected window (all-time skips this check)
+        if (windowStart != null && completedAt.isBefore(windowStart)) continue;
+
+        final exLogs = await logDoc.reference
+            .collection('exerciseLogs')
+            .where('exerciseName', isEqualTo: exerciseName)
+            .get();
+
+        for (final ex in exLogs.docs) {
+          final data = ex.data();
+          final setDetails = data['setDetails'] as List<dynamic>? ?? [];
+          double maxWeight = 0.0;
+          for (final s in setDetails) {
+            final w = (s['weightKg'] as num?)?.toDouble() ?? 0.0;
+            if (w > maxWeight) maxWeight = w;
+          }
+          final rpe = (data['rpeScale'] as num?)?.toDouble() ?? 0.0;
+
+          points.add({
+            'date': completedAt,
+            'maxWeight': maxWeight,
+            'rpe': rpe,
+          });
+        }
+      }
+
+      points.sort((a, b) =>
+          (a['date'] as DateTime).compareTo(b['date'] as DateTime));
+
+      if (!mounted) return;
+      setState(() {
+        _progressionData = points;
+        _progressionLoading = false;
+      });
+    } catch (e) {
+      debugPrint('CoachScreen progression error: $e');
+      setState(() => _progressionLoading = false);
+    }
+  }
+
+  void _onRangeChanged(int index) {
+    setState(() => _progressionRangeIndex = index);
+    if (_selectedExercise != null) {
+      _loadExerciseProgression(_selectedExercise!);
+    }
+  }
+
   Future<void> _loadStats() async {
     if (_uid == null) return;
     setState(() => _statsLoading = true);
@@ -106,8 +276,8 @@ class _CoachScreenState extends State<CoachScreen> {
       if (plan != null) {
         final days = plan['days'] as List<dynamic>? ?? [];
         for (final day in days) {
-          final isRest = day['isRestDay'] as bool? ?? true;
-          if (!isRest) plannedThisWeek++;
+          final dayType = day['dayType'] as String? ?? '';
+          if (dayType == 'workout') plannedThisWeek++;
         }
       }
 
@@ -350,9 +520,13 @@ class _CoachScreenState extends State<CoachScreen> {
       children: [
         _buildWeeklyVolumeCard(),
         const SizedBox(height: 16),
+        _buildAdherenceCard(),
+        const SizedBox(height: 16),
         _buildConsistencyCard(),
         const SizedBox(height: 16),
         _buildMuscleBreakdownCard(),
+        const SizedBox(height: 16),
+        _buildProgressionCard(),
         const SizedBox(height: 24),
         _buildResetPlanButton(),
       ],
@@ -652,6 +826,365 @@ class _CoachScreenState extends State<CoachScreen> {
               ),
             );
           }),
+        ],
+      ),
+    );
+  }
+
+  // 4-Week Adherence Card
+  Widget _buildAdherenceCard() {
+    if (_adherenceLoading) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
+    }
+
+    final rate = _targetLast4Weeks > 0
+        ? (_completedLast4Weeks / _targetLast4Weeks).clamp(0.0, 1.0)
+        : 0.0;
+    final pct = (rate * 100).round();
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '4-Week Adherence',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Consistency against your active plan',
+            style: GoogleFonts.manrope(
+              fontSize: 11,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              SizedBox(
+                width: 72,
+                height: 72,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 72,
+                      height: 72,
+                      child: CircularProgressIndicator(
+                        value: rate,
+                        strokeWidth: 7,
+                        backgroundColor: AppColors.surfaceContainerHigh,
+                        valueColor:
+                            const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                        strokeCap: StrokeCap.round,
+                      ),
+                    ),
+                    Text(
+                      '$pct%',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Text(
+                  _targetLast4Weeks > 0
+                      ? '$_completedLast4Weeks of $_targetLast4Weeks planned sessions completed over the last 28 days.'
+                      : 'No active plan to compare against.',
+                  style: GoogleFonts.manrope(
+                    fontSize: 13,
+                    color: AppColors.onSurfaceVariant,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Exercise Progression Card
+  Widget _buildProgressionCard() {
+    if (_loggedExerciseNames.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Text(
+          'Log a few workouts to see your strength progression.',
+          style: GoogleFonts.manrope(
+            fontSize: 13,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Exercise Progression',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.onSurface,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Exercise picker
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedExercise,
+                isExpanded: true,
+                dropdownColor: AppColors.surfaceContainerHigh,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.onSurfaceVariant),
+                style: GoogleFonts.manrope(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.onSurface,
+                ),
+                items: _loggedExerciseNames
+                    .map((name) => DropdownMenuItem(
+                          value: name,
+                          child: Text(name),
+                        ))
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _selectedExercise = value);
+                  _loadExerciseProgression(value);
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Range chips
+          Row(
+            children: List.generate(_progressionRangeLabels.length, (i) {
+              final isSelected = _progressionRangeIndex == i;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: () => _onRangeChanged(i),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      _progressionRangeLabels[i],
+                      style: GoogleFonts.manrope(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: isSelected
+                            ? AppColors.onPrimary
+                            : AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 20),
+
+          // Chart
+          SizedBox(
+            height: 200,
+            child: _progressionLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  )
+                : _progressionData.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No logs for this exercise in the selected range.',
+                          style: GoogleFonts.manrope(
+                            fontSize: 12,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      )
+                    : _buildProgressionChart(),
+          ),
+          const SizedBox(height: 12),
+
+          // Legend
+          Row(
+            children: [
+              _buildLegendDot(AppColors.primary, 'Max Weight (kg)'),
+              const SizedBox(width: 16),
+              _buildLegendDot(const Color(0xFFE8A87C), 'RPE (1-10)'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressionChart() {
+    final maxWeight = _progressionData
+        .map((p) => p['maxWeight'] as double)
+        .reduce((a, b) => a > b ? a : b);
+    final chartMaxY = maxWeight <= 0 ? 10.0 : maxWeight * 1.2;
+
+    final weightSpots = <FlSpot>[];
+    final rpeSpots = <FlSpot>[]; // RPE scaled onto the weight axis for display
+
+    for (int i = 0; i < _progressionData.length; i++) {
+      final point = _progressionData[i];
+      final weight = point['maxWeight'] as double;
+      final rpe = point['rpe'] as double;
+      weightSpots.add(FlSpot(i.toDouble(), weight));
+      rpeSpots.add(FlSpot(i.toDouble(), (rpe / 10) * chartMaxY));
+    }
+
+    return LineChart(
+      LineChartData(
+        minY: 0,
+        maxY: chartMaxY,
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: chartMaxY / 4,
+          getDrawingHorizontalLine: (_) => FlLine(
+            color: AppColors.outlineVariant.withValues(alpha: 0.15),
+            strokeWidth: 1,
+          ),
+        ),
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 34,
+              interval: chartMaxY / 4,
+              getTitlesWidget: (value, meta) => Text(
+                value.toStringAsFixed(0),
+                style: GoogleFonts.manrope(
+                  fontSize: 9,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 24,
+              interval: (_progressionData.length / 4).clamp(1, double.infinity),
+              getTitlesWidget: (value, meta) {
+                final idx = value.toInt();
+                if (idx < 0 || idx >= _progressionData.length) {
+                  return const SizedBox.shrink();
+                }
+                final date = _progressionData[idx]['date'] as DateTime;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    '${date.day}/${date.month}',
+                    style: GoogleFonts.manrope(
+                      fontSize: 9,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (_) => AppColors.surfaceContainerHigh,
+            getTooltipItems: (spots) {
+              return spots.map((spot) {
+                final idx = spot.x.toInt();
+                if (idx < 0 || idx >= _progressionData.length) return null;
+                final point = _progressionData[idx];
+                final isWeightLine = spot.barIndex == 0;
+                return LineTooltipItem(
+                  isWeightLine
+                      ? '${point['maxWeight']} kg'
+                      : 'RPE ${point['rpe']}',
+                  GoogleFonts.manrope(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isWeightLine ? AppColors.primary : const Color(0xFFE8A87C),
+                  ),
+                );
+              }).whereType<LineTooltipItem>().toList();
+            },
+          ),
+        ),
+        lineBarsData: [
+          LineChartBarData(
+            spots: weightSpots,
+            isCurved: true,
+            color: AppColors.primary,
+            barWidth: 2.5,
+            dotData: const FlDotData(show: true),
+            belowBarData: BarAreaData(
+              show: true,
+              color: AppColors.primary.withValues(alpha: 0.08),
+            ),
+          ),
+          LineChartBarData(
+            spots: rpeSpots,
+            isCurved: true,
+            color: const Color(0xFFE8A87C),
+            barWidth: 2,
+            dotData: const FlDotData(show: true),
+          ),
         ],
       ),
     );
