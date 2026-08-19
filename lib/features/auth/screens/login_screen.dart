@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/validators.dart';
 import '../services/auth_service.dart';
 import '../../../shared/widgets/main_shell.dart';
 import 'register_screen.dart';
@@ -13,17 +14,70 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
   final AuthService _authService = AuthService();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
+
   bool _obscurePassword = true;
   bool _isLoading = false;
+
+  // Per-field error text, shown inline under each input.
+  String? _emailError;
+  String? _passwordError;
+
+  // Tracks whether a field has been visited yet
+  bool _emailTouched = false;
+  bool _passwordTouched = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailFocus.addListener(() {
+      if (!_emailFocus.hasFocus) _validateEmail(force: true);
+    });
+    _passwordFocus.addListener(() {
+      if (!_passwordFocus.hasFocus) _validatePassword(force: true);
+    });
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
     super.dispose();
+  }
+
+  void _validateEmail({bool force = false}) {
+    if (!_emailTouched && !force) return;
+    setState(() {
+      _emailTouched = true;
+      _emailError = Validators.email(_emailController.text);
+    });
+  }
+
+  void _validatePassword({bool force = false}) {
+    if (!_passwordTouched && !force) return;
+    setState(() {
+      _passwordTouched = true;
+      _passwordError = Validators.loginPassword(_passwordController.text);
+    });
+  }
+
+  /// Force-validates every field, regardless of touched state.
+  /// Returns true if the whole form is valid.
+  bool _validateAll() {
+    setState(() {
+      _emailTouched = true;
+      _passwordTouched = true;
+      _emailError = Validators.email(_emailController.text);
+      _passwordError = Validators.loginPassword(_passwordController.text);
+    });
+    return _emailError == null && _passwordError == null;
   }
 
   void _showError(String message) {
@@ -47,10 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _signInWithEmail() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      _showError('Please fill in all fields');
-      return;
-    }
+    if (!_validateAll()) return; // stop before hitting the network
 
     setState(() => _isLoading = true);
     try {
@@ -88,8 +139,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _forgotPassword() async {
-    if (_emailController.text.isEmpty) {
-      _showError('Enter your email above first');
+    final error = Validators.email(_emailController.text);
+    if (error != null) {
+      setState(() {
+        _emailTouched = true;
+        _emailError = error;
+      });
       return;
     }
     try {
@@ -107,241 +162,245 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            children: [
-              const SizedBox(height: 48),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                const SizedBox(height: 48),
 
-              // Logo
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.surfaceContainerLow,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withOpacity(0.1),
-                      blurRadius: 40,
-                      spreadRadius: 10,
-                    ),
-                  ],
-                ),
-                child: Center(
-                  // Replace with Image.asset('assets/images/logo.png')
-                  child: Text(
-                    'R',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 42,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
+                // Logo
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.surfaceContainerLow,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withOpacity(0.1),
+                        blurRadius: 40,
+                        spreadRadius: 10,
+                      ),
+                    ],
                   ),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // Title
-              Text(
-                'RAKAN',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
-                  letterSpacing: 4,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'HIGH PERFORMANCE AI',
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 3,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-
-              const SizedBox(height: 48),
-
-              // Email input
-              _AuthLabel('IDENTIFIER'),
-              const SizedBox(height: 8),
-              _buildInput(
-                controller: _emailController,
-                hint: 'Email or Username',
-                inputType: TextInputType.emailAddress,
-              ),
-
-              const SizedBox(height: 24),
-
-              // Password input
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _AuthLabel('ACCESS KEY'),
-                  GestureDetector(
-                    onTap: _forgotPassword,
+                  child: Center(
                     child: Text(
-                      'FORGOT?',
-                      style: GoogleFonts.manrope(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.5,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              _buildInput(
-                controller: _passwordController,
-                hint: '••••••••',
-                obscure: _obscurePassword,
-                suffix: IconButton(
-                  icon: Icon(
-                    _obscurePassword
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
-                    color: AppColors.onSurfaceVariant,
-                    size: 20,
-                  ),
-                  onPressed: () =>
-                      setState(() => _obscurePassword = !_obscurePassword),
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              // Login button
-              ElevatedButton(
-                onPressed: _isLoading ? null : _signInWithEmail,
-                child: _isLoading
-                    ? SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.onPrimary,
-                        ),
-                      )
-                    : Text(
-                        'LOG IN →',
-                        style: GoogleFonts.spaceGrotesk(
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 2,
-                        ),
-                      ),
-              ),
-
-              const SizedBox(height: 32),
-
-              // Connect via divider
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      height: 1,
-                      color: AppColors.outlineVariant,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'CONNECT VIA',
-                      style: GoogleFonts.manrope(
-                        fontSize: 10,
-                        letterSpacing: 2,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      height: 1,
-                      color: AppColors.outlineVariant,
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // Social buttons
-              Row(
-                children: [
-                  // Google
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: _isLoading ? null : _signInWithGoogle,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(48),
-                          border: Border.all(color: AppColors.outlineVariant),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'G',
-                              style: GoogleFonts.spaceGrotesk(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.onSurface,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'GMAIL',
-                              style: GoogleFonts.manrope(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 1,
-                                color: AppColors.onSurface,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 32),
-
-              // Join link
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    "Don't have an account?  ",
-                    style: GoogleFonts.manrope(
-                      fontSize: 13,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                    ),
-                    child: Text(
-                      'Join Rakan AI',
-                      style: GoogleFonts.manrope(
-                        fontSize: 13,
+                      'R',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 42,
                         fontWeight: FontWeight.w700,
                         color: AppColors.primary,
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
 
-              const SizedBox(height: 32),
-            ],
+                const SizedBox(height: 20),
+
+                Text(
+                  'RAKAN',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                    letterSpacing: 4,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'HIGH PERFORMANCE AI',
+                  style: GoogleFonts.manrope(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 3,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+
+                const SizedBox(height: 48),
+
+                // Email input
+                _AuthLabel('IDENTIFIER'),
+                const SizedBox(height: 8),
+                _buildInput(
+                  controller: _emailController,
+                  focusNode: _emailFocus,
+                  hint: 'Email address',
+                  inputType: TextInputType.emailAddress,
+                  errorText: _emailError,
+                  onChanged: (_) => _validateEmail(),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Password input
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _AuthLabel('ACCESS KEY'),
+                    GestureDetector(
+                      onTap: _forgotPassword,
+                      child: Text(
+                        'FORGOT?',
+                        style: GoogleFonts.manrope(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.5,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _buildInput(
+                  controller: _passwordController,
+                  focusNode: _passwordFocus,
+                  hint: '••••••••',
+                  obscure: _obscurePassword,
+                  errorText: _passwordError,
+                  onChanged: (_) => _validatePassword(),
+                  suffix: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      color: AppColors.onSurfaceVariant,
+                      size: 20,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _signInWithEmail,
+                  child: _isLoading
+                      ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.onPrimary,
+                          ),
+                        )
+                      : Text(
+                          'LOG IN →',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                ),
+
+                const SizedBox(height: 32),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 1,
+                        color: AppColors.outlineVariant,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'CONNECT VIA',
+                        style: GoogleFonts.manrope(
+                          fontSize: 10,
+                          letterSpacing: 2,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Container(
+                        height: 1,
+                        color: AppColors.outlineVariant,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: _isLoading ? null : _signInWithGoogle,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(48),
+                            border:
+                                Border.all(color: AppColors.outlineVariant),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'G',
+                                style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.onSurface,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'GMAIL',
+                                style: GoogleFonts.manrope(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 1,
+                                  color: AppColors.onSurface,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 32),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Don't have an account?  ",
+                      style: GoogleFonts.manrope(
+                        fontSize: 13,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => const RegisterScreen()),
+                      ),
+                      child: Text(
+                        'Join Rakan AI',
+                        style: GoogleFonts.manrope(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 32),
+              ],
+            ),
           ),
         ),
       ),
@@ -351,20 +410,30 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildInput({
     required TextEditingController controller,
     required String hint,
+    FocusNode? focusNode,
     bool obscure = false,
     TextInputType inputType = TextInputType.text,
     Widget? suffix,
+    String? errorText,
+    ValueChanged<String>? onChanged,
   }) {
     return Container(
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: AppColors.outlineVariant, width: 1),
+          bottom: BorderSide(
+            color: errorText != null
+                ? AppColors.error
+                : AppColors.outlineVariant,
+            width: 1,
+          ),
         ),
       ),
-      child: TextField(
+      child: TextFormField(
         controller: controller,
+        focusNode: focusNode,
         obscureText: obscure,
         keyboardType: inputType,
+        onChanged: onChanged,
         style: GoogleFonts.manrope(fontSize: 16, color: AppColors.onSurface),
         decoration: InputDecoration(
           hintText: hint,
@@ -375,13 +444,18 @@ class _LoginScreenState extends State<LoginScreen> {
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 14),
           suffixIcon: suffix,
+          errorText: errorText,
+          errorStyle: GoogleFonts.manrope(
+            fontSize: 12,
+            color: AppColors.error,
+          ),
+          errorMaxLines: 2,
         ),
       ),
     );
   }
 }
 
-// Auth Label widget
 class _AuthLabel extends StatelessWidget {
   final String text;
   const _AuthLabel(this.text);

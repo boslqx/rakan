@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../core/utils/validators.dart';
 import '../services/auth_service.dart';
 import '../../onboarding/screens/onboarding_shell.dart';
 import '../../../shared/widgets/main_shell.dart';
@@ -16,16 +17,92 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final AuthService _authService = AuthService();
+
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmController = TextEditingController();
+
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
+  final FocusNode _confirmFocus = FocusNode();
+
   bool _obscurePassword = true;
+  bool _obscureConfirm = true;
   bool _isLoading = false;
+
+  String? _emailError;
+  String? _confirmError;
+  // Password field itself uses the live checklist
+  bool _passwordValid = false;
+
+  bool _emailTouched = false;
+  bool _confirmTouched = false;
+  bool _passwordHasContent = false; // controls checklist visibility
+
+  @override
+  void initState() {
+    super.initState();
+    _emailFocus.addListener(() {
+      if (!_emailFocus.hasFocus) _validateEmail(force: true);
+    });
+    _confirmFocus.addListener(() {
+      if (!_confirmFocus.hasFocus) _validateConfirm(force: true);
+    });
+    // If the user edits password after already filling confirm,
+    // re-check the match live so a stale "match" error doesn't linger.
+    _passwordController.addListener(() {
+      setState(() {
+        _passwordHasContent = _passwordController.text.isNotEmpty;
+        _passwordValid =
+            Validators.registerPassword(_passwordController.text) == null;
+      });
+      if (_confirmTouched) _validateConfirm();
+    });
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmController.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
+    _confirmFocus.dispose();
     super.dispose();
+  }
+
+  void _validateEmail({bool force = false}) {
+    if (!_emailTouched && !force) return;
+    setState(() {
+      _emailTouched = true;
+      _emailError = Validators.email(_emailController.text);
+    });
+  }
+
+  void _validateConfirm({bool force = false}) {
+    if (!_confirmTouched && !force) return;
+    setState(() {
+      _confirmTouched = true;
+      _confirmError = Validators.confirmPassword(
+        _confirmController.text,
+        _passwordController.text,
+      );
+    });
+  }
+
+  bool _validateAll() {
+    setState(() {
+      _emailTouched = true;
+      _confirmTouched = true;
+      _emailError = Validators.email(_emailController.text);
+      _confirmError = Validators.confirmPassword(
+        _confirmController.text,
+        _passwordController.text,
+      );
+      _passwordValid =
+          Validators.registerPassword(_passwordController.text) == null;
+    });
+    return _emailError == null && _confirmError == null && _passwordValid;
   }
 
   void _showError(String message) {
@@ -39,14 +116,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _registerWithEmail() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      _showError('Please fill in all fields');
-      return;
-    }
-    if (_passwordController.text.length < 6) {
-      _showError('Password must be at least 6 characters');
-      return;
-    }
+    if (!_validateAll()) return;
 
     setState(() => _isLoading = true);
     try {
@@ -55,7 +125,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passwordController.text,
       );
       if (!mounted) return;
-      // After registration → go to onboarding
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const OnboardingShell()),
         (_) => false,
@@ -73,8 +142,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final result = await _authService.signInWithGoogle();
       if (result == null) return;
       if (!mounted) return;
-      // New Google user → onboarding
-      // Existing Google user → home
       await _routeAfterLogin();
     } catch (e) {
       _showError(e.toString());
@@ -115,7 +182,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             children: [
               const SizedBox(height: 32),
 
-              // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -149,7 +215,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               const SizedBox(height: 32),
 
-              // Headline
               Text(
                 'JOIN THE\nELITE',
                 style: GoogleFonts.spaceGrotesk(
@@ -182,7 +247,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 child: Column(
                   children: [
-                    // Google button
                     GestureDetector(
                       onTap: _isLoading ? null : _signInWithGoogle,
                       child: Container(
@@ -191,8 +255,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         decoration: BoxDecoration(
                           color: AppColors.surfaceContainerHigh,
                           borderRadius: BorderRadius.circular(48),
-                          border: Border.all(
-                              color: AppColors.outlineVariant),
+                          border: Border.all(color: AppColors.outlineVariant),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -219,9 +282,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 16),
-
                     Text(
                       'SECURE END-TO-END ENCRYPTED\nAUTHENTICATION PROTOCOLS.',
                       textAlign: TextAlign.center,
@@ -248,22 +309,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Email
-                    _AuthLabel('CORPORATE EMAIL'),
+                    _AuthLabel('EMAIL'),
                     const SizedBox(height: 8),
                     _buildInput(
                       controller: _emailController,
-                      hint: 'name@domain.ai',
+                      focusNode: _emailFocus,
+                      hint: 'name@domain.com',
                       inputType: TextInputType.emailAddress,
+                      errorText: _emailError,
+                      onChanged: (_) => _validateEmail(),
                     ),
 
                     const SizedBox(height: 20),
 
-                    // Password
                     _AuthLabel('ACCESS CREDENTIALS'),
                     const SizedBox(height: 8),
                     _buildInput(
                       controller: _passwordController,
+                      focusNode: _passwordFocus,
                       hint: '••••••••',
                       obscure: _obscurePassword,
                       suffix: IconButton(
@@ -280,9 +343,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
 
+                    // Live checklist — only shown once the user starts
+                    if (_passwordHasContent) ...[
+                      const SizedBox(height: 10),
+                      _PasswordChecklist(password: _passwordController.text),
+                    ],
+
+                    const SizedBox(height: 20),
+
+                    _AuthLabel('CONFIRM PASSWORD'),
+                    const SizedBox(height: 8),
+                    _buildInput(
+                      controller: _confirmController,
+                      focusNode: _confirmFocus,
+                      hint: '••••••••',
+                      obscure: _obscureConfirm,
+                      errorText: _confirmError,
+                      onChanged: (_) => _validateConfirm(),
+                      suffix: IconButton(
+                        icon: Icon(
+                          _obscureConfirm
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          color: AppColors.onSurfaceVariant,
+                          size: 20,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscureConfirm = !_obscureConfirm,
+                        ),
+                      ),
+                    ),
+
                     const SizedBox(height: 24),
 
-                    // Register button
                     ElevatedButton(
                       onPressed: _isLoading ? null : _registerWithEmail,
                       child: _isLoading
@@ -308,7 +401,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               const SizedBox(height: 20),
 
-              // Security footer
               Center(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -324,8 +416,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       style: GoogleFonts.manrope(
                         fontSize: 10,
                         letterSpacing: 1.5,
-                        color:
-                            AppColors.onSurfaceVariant.withOpacity(0.4),
+                        color: AppColors.onSurfaceVariant.withOpacity(0.4),
                       ),
                     ),
                   ],
@@ -343,24 +434,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget _buildInput({
     required TextEditingController controller,
     required String hint,
+    FocusNode? focusNode,
     bool obscure = false,
     TextInputType inputType = TextInputType.text,
     Widget? suffix,
+    String? errorText,
+    ValueChanged<String>? onChanged,
   }) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.outlineVariant),
+        border: Border.all(
+          color: errorText != null ? AppColors.error : AppColors.outlineVariant,
+        ),
       ),
-      child: TextField(
+      child: TextFormField(
         controller: controller,
+        focusNode: focusNode,
         obscureText: obscure,
         keyboardType: inputType,
-        style: GoogleFonts.manrope(
-          fontSize: 15,
-          color: AppColors.onSurface,
-        ),
+        onChanged: onChanged,
+        style: GoogleFonts.manrope(fontSize: 15, color: AppColors.onSurface),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: GoogleFonts.manrope(
@@ -368,13 +463,50 @@ class _RegisterScreenState extends State<RegisterScreen> {
             color: AppColors.onSurfaceVariant.withOpacity(0.4),
           ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           suffixIcon: suffix,
+          errorText: errorText,
+          errorStyle: GoogleFonts.manrope(fontSize: 12, color: AppColors.error),
+          errorMaxLines: 2,
         ),
       ),
+    );
+  }
+}
+
+/// Live password-strength checklist
+class _PasswordChecklist extends StatelessWidget {
+  final String password;
+  const _PasswordChecklist({required this.password});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: Validators.passwordRequirements.map((req) {
+        final met = req.test(password);
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              Icon(
+                met ? Icons.check_circle : Icons.circle_outlined,
+                size: 14,
+                color: met ? AppColors.primary : AppColors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                req.label,
+                style: GoogleFonts.manrope(
+                  fontSize: 12,
+                  color: met ? AppColors.onSurface : AppColors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }
