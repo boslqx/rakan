@@ -5,6 +5,7 @@ import '../../../core/utils/validators.dart';
 import '../services/auth_service.dart';
 import '../../../shared/widgets/main_shell.dart';
 import 'register_screen.dart';
+import '../services/auth_navigation_service.dart';  
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -100,43 +101,47 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<void> _signInWithEmail() async {
-    if (!_validateAll()) return; // stop before hitting the network
+    Future<void> _signInWithEmail() async {
+      if (!_validateAll()) return;
 
-    setState(() => _isLoading = true);
-    try {
-      await _authService.signInWithEmail(
-        email: _emailController.text,
-        password: _passwordController.text,
-      );
-      if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MainShell()),
-        (_) => false,
-      );
-    } catch (e) {
-      _showError(e.toString());
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      setState(() => _isLoading = true);
+      try {
+        await _authService.signInWithEmail(
+          email: _emailController.text,
+          password: _passwordController.text,
+        );
+        if (!mounted) return;
+        final next = await AuthNavigationService().resolveNextScreen();
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => next),
+          (_) => false,
+        );
+      } catch (e) {
+        _showError(e.toString());
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
-  }
 
-  Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
-    try {
-      final result = await _authService.signInWithGoogle();
-      if (result == null) return; // user cancelled
-      if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MainShell()),
-        (_) => false,
-      );
-    } catch (e) {
-      _showError(e.toString());
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    Future<void> _signInWithGoogle() async {
+      setState(() => _isLoading = true);
+      try {
+        final result = await _authService.signInWithGoogle();
+        if (result == null) return; // user cancelled
+        if (!mounted) return;
+        final next = await AuthNavigationService().resolveNextScreen();
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => next),
+          (_) => false,
+        );
+      } catch (e) {
+        _showError(e.toString());
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
-  }
 
   Future<void> _forgotPassword() async {
     final error = Validators.email(_emailController.text);

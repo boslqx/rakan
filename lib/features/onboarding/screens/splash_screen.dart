@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/main_shell.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../auth/screens/register_screen.dart';
+import '../../auth/services/auth_navigation_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -22,24 +23,28 @@ class _SplashScreenState extends State<SplashScreen> {
     _checkAuthAndRoute();
   }
 
-  Future<void> _checkAuthAndRoute() async {
-    // Wait for Firebase to restore persisted session.
-    final user = await FirebaseAuth.instance.authStateChanges().first;
+    Future<void> _checkAuthAndRoute() async {
+      // Wait for Firebase to restore persisted session.
+      final user = await FirebaseAuth.instance.authStateChanges().first;
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (user == null) {
-      // Not logged in → show splash UI
-      setState(() => _isCheckingAuth = false);
-      return;
+      if (user == null) {
+        // Not logged in → show splash UI
+        setState(() => _isCheckingAuth = false);
+        return;
+      }
+
+      // Logged in → let the centralized navigation service decide
+      // whether that means MainShell, OnboardingShell, or the
+      // email-verification gate.
+      final next = await AuthNavigationService().resolveNextScreen();
+      if (!mounted) return;
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => next),
+      );
     }
-
-    // Already logged in -> go straight home.
-    // New registrations still enter onboarding from RegisterScreen.
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => const MainShell()));
-  }
 
   @override
   Widget build(BuildContext context) {

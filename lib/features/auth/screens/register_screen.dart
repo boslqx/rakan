@@ -7,6 +7,8 @@ import '../../onboarding/screens/onboarding_shell.dart';
 import '../../../shared/widgets/main_shell.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../features/onboarding/services/user_profile_service.dart';
+import 'email_verification_screen.dart';
+import '../services/auth_navigation_service.dart'; 
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -115,61 +117,50 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Future<void> _registerWithEmail() async {
-    if (!_validateAll()) return;
+    Future<void> _registerWithEmail() async {
+      if (!_validateAll()) return;
 
-    setState(() => _isLoading = true);
-    try {
-      await _authService.signUpWithEmail(
-        email: _emailController.text,
-        password: _passwordController.text,
-      );
-      if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const OnboardingShell()),
-        (_) => false,
-      );
-    } catch (e) {
-      _showError(e.toString());
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      setState(() => _isLoading = true);
+      try {
+        await _authService.signUpWithEmail(
+          email: _emailController.text,
+          password: _passwordController.text,
+        );
+        if (!mounted) return;
+        // Verification email already sent inside signUpWithEmail.
+        // New email/password accounts always go to the verification
+        // gate first — never straight to onboarding.
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const EmailVerificationScreen()),
+          (_) => false,
+        );
+      } catch (e) {
+        _showError(e.toString());
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
-  }
 
-  Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
-    try {
-      final result = await _authService.signInWithGoogle();
-      if (result == null) return;
-      if (!mounted) return;
-      await _routeAfterLogin();
-    } catch (e) {
-      _showError(e.toString());
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    Future<void> _signInWithGoogle() async {
+      setState(() => _isLoading = true);
+      try {
+        final result = await _authService.signInWithGoogle();
+        if (result == null) return;
+        if (!mounted) return;
+        final next = await AuthNavigationService().resolveNextScreen();
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => next),
+          (_) => false,
+        );
+      } catch (e) {
+        _showError(e.toString());
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
-  }
 
-  Future<void> _routeAfterLogin() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    final hasProfile = await UserProfileService().hasCompletedOnboarding(uid);
-    if (!mounted) return;
-
-    if (hasProfile) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MainShell()),
-        (_) => false,
-      );
-    } else {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const OnboardingShell()),
-        (_) => false,
-      );
-    }
-  }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(

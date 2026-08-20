@@ -6,7 +6,6 @@ class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   // Current user stream — UI listens to this
-  // Emits User when logged in, null when logged out
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   // Current user — null if not logged in
@@ -22,7 +21,7 @@ class AuthService {
         email: email.trim(),
         password: password,
       );
-      // Send email verification
+      // Send email verification immediately after account creation.
       await credential.user?.sendEmailVerification();
       return credential;
     } on FirebaseAuthException catch (e) {
@@ -48,25 +47,40 @@ class AuthService {
   // Google Sign In
   Future<UserCredential?> signInWithGoogle() async {
     try {
-      // Trigger the Google Sign In flow
       await _googleSignIn.signOut();
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null; // user cancelled
 
-      // User cancelled the sign in
-      if (googleUser == null) return null;
-
-      // Get auth details from the request
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
-      // Create a new credential for Firebase
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      // Sign in to Firebase with the Google credential
+      // Firebase marks federated (Google) sign-ins as emailVerified=true
       return await _auth.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    }
+  }
+
+  // Whether the CURRENTLY CACHED user object is verified
+  bool get isEmailVerified => _auth.currentUser?.emailVerified ?? false;
+
+  // Forces Firebase to re-fetch the user's current verification status
+  Future<bool> reloadAndCheckVerified() async {
+    await _auth.currentUser?.reload();
+    return _auth.currentUser?.emailVerified ?? false;
+  }
+
+  // Resend the verification email
+  Future<void> resendVerificationEmail() async {
+    final user = _auth.currentUser;
+    if (user == null || user.emailVerified) return;
+    try {
+      await user.sendEmailVerification();
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     }
@@ -87,7 +101,6 @@ class AuthService {
   }
 
   // Error Handler
-  // Converts Firebase error codes into human-readable messages
   String _handleAuthException(FirebaseAuthException e) {
     switch (e.code) {
       case 'user-not-found':
