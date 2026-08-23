@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../models/active_session_state.dart';
 import '../services/pose_service.dart';
 import '../services/angle_calculator.dart';
+import '../widgets/pose_countdown_overlay.dart';
 import 'pose_detection_screen.dart';
 
 
@@ -45,6 +46,9 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   int _frameRotation = 0;
 
   bool _permissionGranted = false;
+
+  // Countdown state
+  bool _countingDown = true;
 
   ExerciseSessionState get _currentExercise => widget.exercises[_exerciseIndex];
   bool get _isLastExercise => _exerciseIndex == widget.exercises.length - 1;
@@ -118,6 +122,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
       _poseDetected = false;
       _landmarks = [];
       _lastResult = null;
+      _countingDown = true; // NEW — every set re-arms the countdown
       _startPoseStream();
     }
     setState(() => _phase = _ScreenPhase.active);
@@ -143,6 +148,19 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
         final landmarks = rawLandmarks
             .map((l) => Landmark.fromMap(Map<String, dynamic>.from(l as Map)))
             .toList();
+
+        // Same gate as PoseDetectionScreen: show the skeleton, never touch
+        // the analyser while counting down.
+        if (_countingDown) {
+          setState(() {
+            _poseDetected = true;
+            _landmarks = landmarks;
+            _frameWidth = (data['frameWidth'] as int?) ?? 640;
+            _frameHeight = (data['frameHeight'] as int?) ?? 480;
+            _frameRotation = (data['frameRotation'] as int?) ?? 0;
+          });
+          return;
+        }
 
         final result = _analyser.analyse(landmarks);
 
@@ -562,6 +580,12 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                       style: GoogleFonts.manrope(color: Colors.white38, fontSize: 15)),
                 ],
               ),
+            ),
+          ),
+        if (_countingDown)
+          Positioned.fill(
+            child: PoseCountdownOverlay(
+              onComplete: () => setState(() => _countingDown = false),
             ),
           ),
         Positioned(

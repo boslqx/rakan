@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../services/pose_service.dart';
 import '../services/angle_calculator.dart';
+import '../widgets/pose_countdown_overlay.dart';
 
 class PoseDetectionScreen extends StatefulWidget {
   final String exerciseName;
@@ -38,6 +39,9 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
   // Camera permission state
   bool _permissionGranted = false;
   bool _permissionChecked = false;
+
+  // Countdown state
+  bool _countingDown = true;
 
   // Image dimensions from Kotlin (updated field names)
   int _frameWidth = 640;
@@ -88,15 +92,28 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
           return;
         }
 
-        // Parse landmarks from the map data sent by Kotlin
         final rawLandmarks = data['landmarks'] as List<dynamic>;
         final landmarks = rawLandmarks
             .map((l) => Landmark.fromMap(Map<String, dynamic>.from(l as Map)))
             .toList();
 
-        // Run exercise-specific analysis — dispatches through the shared
-        // PostureAnalyser interface, so this line never needs to change
-        // no matter how many exercise analysers get added in future.
+        // While counting down: update the skeleton overlay so the user gets
+        // positioning feedback, but NEVER call _analyser.analyse(). This is
+        // the gate — the analyser object exists (freshly constructed in
+        // initState) but is never invoked until the countdown finishes, so
+        // its hysteresis state (_phase, _hasReachedFlexed, etc.) cannot be
+        // corrupted by unstable setup-phase frames.
+        if (_countingDown) {
+          setState(() {
+            _poseDetected = true;
+            _landmarks = landmarks;
+            _frameWidth = (data['frameWidth'] as int?) ?? 640;
+            _frameHeight = (data['frameHeight'] as int?) ?? 480;
+            _frameRotation = (data['frameRotation'] as int?) ?? 0;
+          });
+          return;
+        }
+
         final result = _analyser.analyse(landmarks);
 
         setState(() {
@@ -107,7 +124,6 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
           _frameHeight = (data['frameHeight'] as int?) ?? 480;
           _frameRotation = (data['frameRotation'] as int?) ?? 0;
 
-          // Update rep count logic
           if (result.countRep) {
             _repCount = _analyser.repCount;
             if (_repCount >= widget.targetReps) {
@@ -181,6 +197,14 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
                       ),
                     ],
                   ),
+                ),
+              ),
+
+            // Countdown overlay — blocks rep counting, not the camera preview itself
+            if (_countingDown && _permissionGranted)
+              Positioned.fill(
+                child: PoseCountdownOverlay(
+                  onComplete: () => setState(() => _countingDown = false),
                 ),
               ),
 
