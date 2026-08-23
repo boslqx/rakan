@@ -1,6 +1,6 @@
 import random
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from data.exercises import get_exercises_for_equipment, filter_by_difficulty
 
 # How many exercises per workout session based on experience
@@ -174,6 +174,113 @@ def generate_plan(
     }
 
     return plan
+
+def regenerate_days(
+    day_specs: list[dict],       # [{dayPlanId, dayNumber, dayName, workoutName(splitName)}]
+    excluded_muscle_groups: list[str],
+    goal: str,
+    experience: str,
+    equipment: list[str],
+    session_duration: str,
+    focus_areas: list[str],
+) -> list[dict]:
+    
+    available = get_exercises_for_equipment(equipment)
+    available = filter_by_difficulty(available, experience)
+
+    ex_per_session = EXERCISES_PER_SESSION.get(experience, 4)
+    if session_duration == "thirtyMin":
+        ex_per_session = max(3, ex_per_session - 1)
+    elif session_duration == "ninetyPlusMin":
+        ex_per_session = ex_per_session + 1
+
+    muscle_priority = GOAL_MUSCLE_PRIORITY.get(goal, GOAL_MUSCLE_PRIORITY["muscleGain"])
+    excluded_set = set(excluded_muscle_groups)
+
+    updated_days = []
+
+    for spec in day_specs:
+        split_name = spec.get("workoutName", "Full Body")
+        target_muscles = SPLIT_MUSCLES.get(split_name, ["chest"])
+
+        # Remove injured muscle groups from this day's target focus
+        safe_targets = [m for m in target_muscles if m not in excluded_set]
+
+        # Edge case: the day's entire focus was excluded
+        used_fallback = False
+        if not safe_targets:
+            safe_targets = [m for m in muscle_priority if m not in excluded_set][:2]
+            used_fallback = True
+
+        if not safe_targets:
+            # Every muscle group is excluded
+            updated_days.append({
+                "dayPlanId": spec["dayPlanId"],
+                "dayNumber": spec["dayNumber"],
+                "dayName": spec["dayName"],
+                "dayType": "rest",
+                "workoutName": "Rest Day",
+                "focusDescription": "Recovery (injury-adjusted)",
+                "durationMinutes": 0,
+                "exercises": [],
+            })
+            continue
+
+        raw_exercises = _select_raw_exercises(
+            available=available,
+            target_muscles=safe_targets,
+            muscle_priority=muscle_priority,
+            count=ex_per_session,
+            focus_areas=[f for f in focus_areas if f not in excluded_set],
+        )
+
+        est_minutes = sum(
+            (ex["sets"] * ex["rest_seconds"] + ex["sets"] * 45) // 60
+            for ex in raw_exercises
+        )
+        exercises = [_format_exercise(ex) for ex in raw_exercises]
+
+        focus_label = ", ".join(safe_targets).title()
+        if used_fallback:
+            focus_label += " (Adjusted)"
+
+        updated_days.append({
+            "dayPlanId": spec["dayPlanId"],
+            "dayNumber": spec["dayNumber"],
+            "dayName": spec["dayName"],
+            "dayType": "workout" if exercises else "rest",
+            "workoutName": split_name if not used_fallback else f"{split_name} (Adjusted)",
+            "focusDescription": focus_label,
+            "durationMinutes": est_minutes,
+            "exercises": exercises,
+        })
+
+    return updated_days
+
+
+def get_logged_day_numbers_this_week(db, uid: str) -> set[int]:
+    # Queries workoutLogs for entries completed within the current Mon-Sun week
+    today = datetime.utcnow()
+    monday = today - timedelta(days=today.weekday())
+    monday_start = datetime(monday.year, monday.month, monday.day)
+
+    logs_ref = (
+        db.collection("users").document(uid).collection("workoutLogs")
+        .where("completedAt", ">=", monday_start.isoformat())
+    )
+    logged_weekdays = set()
+    for doc in logs_ref.stream():
+        data = doc.to_dict()
+        completed_at = data.get("completedAt")
+        if not completed_at:
+            continue
+        try:
+            dt = datetime.fromisoformat(completed_at)
+            logged_weekdays.add(dt.isoweekday())  # 1=Mon..7=Sun, matches dayNumber
+        except (ValueError, TypeError):
+            continue
+
+    return logged_weekdays
 
 
 def _select_raw_exercises(

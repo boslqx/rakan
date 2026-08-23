@@ -36,8 +36,6 @@ class _SplashScreenState extends State<SplashScreen> {
       }
 
       // Logged in → let the centralized navigation service decide
-      // whether that means MainShell, OnboardingShell, or the
-      // email-verification gate.
       final next = await AuthNavigationService().resolveNextScreen();
       if (!mounted) return;
 

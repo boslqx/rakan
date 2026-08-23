@@ -8,6 +8,7 @@ import 'package:flutter_body_heatmap/flutter_body_heatmap.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../workout/services/workout_log_service.dart';
 import '../../workout/services/workout_plan_service.dart';
+import '../services/injury_service.dart';
 import '../../workout/data/exercise_data.dart';
 import 'dart:convert';
 import '../models/weight_record.dart';
@@ -3680,6 +3681,15 @@ class _CoachScreenState extends State<CoachScreen> {
       'loggedAt': FieldValue.serverTimestamp(),
       'recoveredAt': null,
     });
+
+    final plan = await WorkoutPlanService().getActivePlan(_uid!);
+    if (plan != null) {
+      await InjuryService().triggerRegeneration(
+        uid: _uid!,
+        planId: plan['id'] as String,
+      );
+    }
+
     await _loadRecovery(); // refresh
   }
 
@@ -3790,6 +3800,15 @@ class _CoachScreenState extends State<CoachScreen> {
       if (newStatus == 'recovered')
         'recoveredAt': FieldValue.serverTimestamp(),
     });
+
+    final plan = await WorkoutPlanService().getActivePlan(_uid!);
+    if (plan != null) {
+      await InjuryService().triggerRegeneration(
+        uid: _uid!,
+        planId: plan['id'] as String,
+      );
+    }
+
     await _loadRecovery(); // refresh UI
   }
 

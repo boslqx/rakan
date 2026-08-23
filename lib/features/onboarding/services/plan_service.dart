@@ -20,7 +20,7 @@ class PlanService {
       'goal': data.fitnessGoal?.name ?? 'muscleGain',
       'experience': data.experienceLevel?.name ?? 'beginner',
       'equipment': data.equipment.map((e) => e.name).toList(),
-      'workout_days': data.workoutDays.map((d) => d + 1).toList(),
+      'workout_days': data.workoutDays.toList(),
       'session_duration': data.sessionDuration?.name ?? 'sixtyMin',
       'focus_areas': data.focusAreas.map((f) => f.name).toList(),
     });
