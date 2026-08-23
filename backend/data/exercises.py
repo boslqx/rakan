@@ -1299,17 +1299,16 @@ EXERCISES.extend(ADDITIONAL_EXERCISES)
 
 
 def get_exercises_for_equipment(equipment_list: list[str]) -> list[dict]:
-    """
-    Returns exercises the user CAN do given their equipment.
-    fullGym = return everything.
-    Otherwise match ALL required equipment against user's list.
-    """
     if "fullGym" in equipment_list:
         return EXERCISES
 
     available = []
     for ex in EXERCISES:
-        can_do = all(eq in equipment_list for eq in ex["equipment"])
+        # 'noEquipment'-tagged exercises are always available
+        can_do = all(
+            eq == "noEquipment" or eq in equipment_list
+            for eq in ex["equipment"]
+        )
         if can_do:
             available.append(ex)
     return available
