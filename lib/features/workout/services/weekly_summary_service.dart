@@ -177,6 +177,7 @@ class WeeklySummaryService {
 
     // apply resolved adjustments + write summary, all in ONE batch
     final batch = _db.batch();
+    final List<Map<String, dynamic>> weeklyChanges = [];
 
     // Advance the mesocycle week counter
     if (planId != null) {
@@ -195,6 +196,7 @@ class WeeklySummaryService {
         final proposalId = resolved['proposal_id'] as String;
         final finalAdjustment = (resolved['final_adjustment'] as num).toDouble();
         final tier = resolved['tier'] as String;
+        final reason = resolved['reason'] as String;
         final muscleGroup = muscleGroupByProposalId[proposalId]!;
 
         // Apply to every future exercise whose primary muscleGroup matches
@@ -205,7 +207,9 @@ class WeeklySummaryService {
           muscleGroup: muscleGroup,
           adjustment: finalAdjustment,
           tier: tier,
+          reason: reason,
           todayWeekday: now.weekday,
+          changesOut: weeklyChanges,
         );
 
         // Mark this proposal committed
@@ -235,12 +239,16 @@ class WeeklySummaryService {
       'weekNumber': newWeekNumber,
       'isDeloadWeek': isDeloadWeek,
       'generatedAt': now.toIso8601String(),
+      'changes': weeklyChanges,
+      'changesAcknowledged': false,
     });
 
     await batch.commit();
   }
 
   /// Finds every exercise in every future workout day whose primary
+  /// muscle group matches [muscleGroup], applies [adjustment], and records
+  /// a summary entry only when at least one exercise actually changes.
   Future<void> _applyAdjustmentToMuscleGroup({
     required WriteBatch batch,
     required String uid,
@@ -248,7 +256,9 @@ class WeeklySummaryService {
     required String muscleGroup,
     required double adjustment,
     required String tier,
+    required String reason,
     required int todayWeekday,
+    required List<Map<String, dynamic>> changesOut,
   }) async {
     // planId is resolved once, up in _generateSummary, and threaded 
     if (planId == null) return;
@@ -260,6 +270,8 @@ class WeeklySummaryService {
         .doc(planId)
         .collection('days')
         .get();
+
+    int exercisesAffected = 0;
 
     for (final dayDoc in daysSnap.docs) {
       final dayData = dayDoc.data();
@@ -291,8 +303,21 @@ class WeeklySummaryService {
             'fatigueLevel': tier,
             'adaptationSource': 'engine_v2',
           });
+          exercisesAffected++;
         }
       }
+    }
+
+    // Capture the diff here, while both the pre- and post-adjustment values
+    // are available in memory. Do not surface resolutions that changed nothing.
+    if (exercisesAffected > 0) {
+      changesOut.add({
+        'muscleGroup': muscleGroup,
+        'tier': tier,
+        'reason': reason,
+        'adjustment': adjustment,
+        'exercisesAffected': exercisesAffected,
+      });
     }
   }
 
@@ -321,5 +346,53 @@ class WeeklySummaryService {
     });
 
     return summaries.take(limit).toList();
+  }
+
+  /// Returns the newest summary with changes the user has not yet seen.
+  Future<Map<String, dynamic>?> getLatestUnacknowledgedChanges(
+    String uid,
+  ) async {
+    final snap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('weeklySummaries')
+        .where('changesAcknowledged', isEqualTo: false)
+        .orderBy('generatedAt', descending: true)
+        .limit(1)
+        .get();
+
+    if (snap.docs.isEmpty) return null;
+
+    final doc = snap.docs.first;
+    final changes = doc.data()['changes'] as List<dynamic>? ?? [];
+    if (changes.isEmpty) return null;
+
+    return {'id': doc.id, ...doc.data()};
+  }
+
+  /// Marks a summary's changes as acknowledged after the user dismisses them.
+  Future<void> acknowledgeChanges(String uid, String summaryId) async {
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('weeklySummaries')
+        .doc(summaryId)
+        .update({'changesAcknowledged': true});
+  }
+
+  /// Returns the 30 most recent summaries that contain at least one change.
+  Future<List<Map<String, dynamic>>> getChangeHistory(String uid) async {
+    final snap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('weeklySummaries')
+        .orderBy('generatedAt', descending: true)
+        .limit(30)
+        .get();
+
+    return snap.docs
+        .map((d) => <String, dynamic>{'id': d.id, ...d.data()})
+        .where((data) => (data['changes'] as List<dynamic>? ?? []).isNotEmpty)
+        .toList();
   }
 }

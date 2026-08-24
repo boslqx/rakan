@@ -10,6 +10,7 @@ import '../../workout/screens/workout_preview_screen.dart';
 import '../../workout/screens/workout_log_detail_screen.dart';
 import '../../workout/services/workout_log_service.dart';
 import '../../workout/services/weekly_summary_service.dart';
+import '../widgets/plan_changes_dialog.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -101,7 +102,30 @@ class _HomeScreenState extends State<HomeScreen> {
         _weekNumber = plan?['weekNumber'] as int?;
         _isLoading = false;
       });
+      // Check for plan changes after the initial load and UI are ready
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _checkForPlanChanges();
+      });
     }
+  }
+
+  Future<void> _checkForPlanChanges() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final summary = await WeeklySummaryService().getLatestUnacknowledgedChanges(uid);
+    if (summary == null || !mounted) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PlanChangesDialog(
+        changes: summary['changes'] as List<dynamic>,
+        trend: summary['trend'] as String?,
+      ),
+    );
+
+    await WeeklySummaryService().acknowledgeChanges(uid, summary['id'] as String);
   }
 
   // Calendar → plan day / log resolution

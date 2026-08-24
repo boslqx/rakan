@@ -19,6 +19,9 @@ import 'all_records_screen.dart';
 import '../../onboarding/models/onboarding_data.dart';
 import '../../onboarding/screens/plan_generation_screen.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../widgets/plan_changes_section.dart';
+
+enum _RecordsView { bodyJourney, workoutRecords, planChanges }
 
 /// Maps each broad muscle group used by `muscleRecovery` docs onto the
 const Map<String, List<Muscle>> kBroadMuscleGroupToHeatmapMuscles = {
@@ -107,6 +110,9 @@ class CoachScreen extends StatefulWidget {
 class _CoachScreenState extends State<CoachScreen> {
   // Segmented switch
   int _selectedTab = 0; // 0 = Stats Report, 1 = Recovery Map, 2 = Records
+
+  // Records sub-tab view
+  _RecordsView _selectedRecordsView = _RecordsView.bodyJourney;
 
   // Records tab — Body Journey (weight timeline)
   bool _bodyJourneyLoading = true;
@@ -2799,33 +2805,95 @@ class _CoachScreenState extends State<CoachScreen> {
       );
     }
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+    return Column(
       children: [
-        Text(
-          'BODY JOURNEY',
-          style: GoogleFonts.manrope(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1,
-            color: AppColors.onSurfaceVariant,
+        // Records sub-tab segmented control
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            padding: const EdgeInsets.all(4),
+            child: Row(
+              children: [
+                _buildRecordsSegmentBtn('BODY JOURNEY', Icons.show_chart_rounded, _RecordsView.bodyJourney),
+                _buildRecordsSegmentBtn('WORKOUT RECORDS', Icons.emoji_events_rounded, _RecordsView.workoutRecords),
+                _buildRecordsSegmentBtn('CHANGES', Icons.auto_graph_rounded, _RecordsView.planChanges),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
+        // Content based on selected view
+        Expanded(
+          child: _selectedRecordsView == _RecordsView.bodyJourney
+              ? _buildBodyJourneyView()
+              : _selectedRecordsView == _RecordsView.workoutRecords
+                  ? _buildWorkoutRecordsView()
+                  : const PlanChangesSection(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecordsSegmentBtn(String label, IconData icon, _RecordsView view) {
+    final isSelected = _selectedRecordsView == view;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          setState(() => _selectedRecordsView = view);
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.surfaceContainerHigh : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected ? AppColors.onSurface : AppColors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: GoogleFonts.manrope(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1,
+                  color: isSelected ? AppColors.onSurface : AppColors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBodyJourneyView() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+      children: [
         _buildBodyOverviewRow(),
         const SizedBox(height: 16),
         _buildWeightJourneyCard(),
-        const SizedBox(height: 28),
-        Text(
-          'WORKOUT RECORDS',
-          style: GoogleFonts.manrope(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  Widget _buildWorkoutRecordsView() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+      children: [
         _buildWorkoutRecordsCard(),
       ],
     );
@@ -2840,32 +2908,85 @@ class _CoachScreenState extends State<CoachScreen> {
       children: [
         Expanded(
           child: GestureDetector(
-            // Weight is the only one of the 3 with somewhere to go when empty
             onTap: weight == null ? () => _openLogWeight() : null,
-            child: _buildCompactStatChip(
+            child: _buildBodyStatChip(
               icon: Icons.monitor_weight_outlined,
-              value: weight != null ? '${weight.toStringAsFixed(1)} ' : 'Tap to add',
+              value: weight != null ? '${weight.toStringAsFixed(1)} kg' : 'Tap to add',
               label: 'Weight',
             ),
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: _buildCompactStatChip(
+          child: _buildBodyStatChip(
             icon: Icons.height_rounded,
-            value: height != null ? '${height.toStringAsFixed(0)} ' : 'Not set',
+            value: height != null ? '${height.toStringAsFixed(0)} cm' : 'Not set',
             label: 'Height',
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: _buildCompactStatChip(
+          child: _buildBodyStatChip(
             icon: Icons.calculate_outlined,
             value: bmi != null ? bmi.toStringAsFixed(1) : '--',
             label: 'BMI',
           ),
         ),
       ],
+    );
+  }
+
+  /// Dedicated stat chip for the 3-column Weight/Height/BMI row. Icon sits
+  /// ABOVE the value/label, not beside it — this removes the horizontal
+  /// icon-vs-text width competition entirely, so it can't RenderFlex
+  /// overflow no matter how long the value string is. FittedBox on the
+  /// value is a second layer of defence: if a future value is still too
+  /// wide for the column (e.g. a locale with longer decimal formatting),
+  /// it scales the text down instead of throwing, rather than relying on
+  /// ellipsis truncation alone.
+  Widget _buildBodyStatChip({
+    required IconData icon,
+    required String value,
+    required String label,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: AppColors.primary),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.manrope(
+              fontSize: 10,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
