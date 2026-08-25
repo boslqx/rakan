@@ -21,8 +21,6 @@ import '../../onboarding/screens/plan_generation_screen.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../widgets/plan_changes_section.dart';
 
-enum _RecordsView { bodyJourney, workoutRecords, planChanges }
-
 /// Maps each broad muscle group used by `muscleRecovery` docs onto the
 const Map<String, List<Muscle>> kBroadMuscleGroupToHeatmapMuscles = {
   'Chest': [Muscle.chest],
@@ -110,9 +108,6 @@ class CoachScreen extends StatefulWidget {
 class _CoachScreenState extends State<CoachScreen> {
   // Segmented switch
   int _selectedTab = 0; // 0 = Stats Report, 1 = Recovery Map, 2 = Records
-
-  // Records sub-tab view
-  _RecordsView _selectedRecordsView = _RecordsView.bodyJourney;
 
   // Records tab — Body Journey (weight timeline)
   bool _bodyJourneyLoading = true;
@@ -2805,97 +2800,33 @@ class _CoachScreenState extends State<CoachScreen> {
       );
     }
 
-    return Column(
-      children: [
-        // Records sub-tab segmented control
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            padding: const EdgeInsets.all(4),
-            child: Row(
-              children: [
-                _buildRecordsSegmentBtn('BODY JOURNEY', Icons.show_chart_rounded, _RecordsView.bodyJourney),
-                _buildRecordsSegmentBtn('WORKOUT RECORDS', Icons.emoji_events_rounded, _RecordsView.workoutRecords),
-                _buildRecordsSegmentBtn('CHANGES', Icons.auto_graph_rounded, _RecordsView.planChanges),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Content based on selected view
-        Expanded(
-          child: _selectedRecordsView == _RecordsView.bodyJourney
-              ? _buildBodyJourneyView()
-              : _selectedRecordsView == _RecordsView.workoutRecords
-                  ? _buildWorkoutRecordsView()
-                  : const PlanChangesSection(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecordsSegmentBtn(String label, IconData icon, _RecordsView view) {
-    final isSelected = _selectedRecordsView == view;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          setState(() => _selectedRecordsView = view);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.surfaceContainerHigh : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: isSelected ? AppColors.onSurface : AppColors.onSurfaceVariant,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1,
-                  color: isSelected ? AppColors.onSurface : AppColors.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBodyJourneyView() {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
       children: [
         _buildBodyOverviewRow(),
         const SizedBox(height: 16),
         _buildWeightJourneyCard(),
+        const SizedBox(height: 32),
+        _sectionHeader('WORKOUT RECORDS'),
+        const SizedBox(height: 12),
+        _buildWorkoutRecordsCard(),
+        const SizedBox(height: 32),
+        _sectionHeader('PLAN CHANGES'),
+        const SizedBox(height: 12),
+        const PlanChangesSection(),
       ],
     );
   }
 
-  Widget _buildWorkoutRecordsView() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-      children: [
-        _buildWorkoutRecordsCard(),
-      ],
+  Widget _sectionHeader(String label) {
+    return Text(
+      label,
+      style: GoogleFonts.manrope(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.5,
+        color: AppColors.onSurfaceVariant,
+      ),
     );
   }
 
