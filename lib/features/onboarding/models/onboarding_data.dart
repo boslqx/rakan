@@ -228,4 +228,19 @@ OnboardingData:
       'onboardingCompleted': true, 
     };
   }
+
+  /// Parses a list of enum-name strings (as stored by toMap()) back into a Set of EquipmentType enums
+  static Set<EquipmentType> equipmentFromNames(List<dynamic>? raw) {
+    if (raw == null) return {};
+    final result = <EquipmentType>{};
+    for (final name in raw) {
+      for (final type in EquipmentType.values) {
+        if (type.name == name) {
+          result.add(type);
+          break;
+        }
+      }
+    }
+    return result;
+  }
 }

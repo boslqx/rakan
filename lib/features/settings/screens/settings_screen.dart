@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../auth/services/auth_service.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../../workout/services/notification_service.dart';
 import 'change_password_dialog.dart';
 import 'edit_profile_screen.dart';
+import 'edit_equipment_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -394,7 +395,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => ChangePasswordDialog.show(context),
             ),
 
-            // Reminders card (custom — has toggle + time) ────────
+            _SettingsTile(
+              icon: Icons.fitness_center_rounded,
+              label: 'Edit Equipment',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const EditEquipmentScreen()),
+                );
+              },
+            ),
+
+            // Reminders card (custom — has toggle + time)
             _buildRemindersCard(),
 
             _SettingsTile(

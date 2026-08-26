@@ -42,4 +42,20 @@ class UserProfileService {
     if (!doc.exists) return null;
     return doc.data();
   }
+
+  /// Updates only the `equipment` field on an existing profile doc
+  Future<void> updateEquipment({
+    required String uid,
+    required Set<EquipmentType> equipment,
+  }) async {
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('profile')
+        .doc('data')
+        .set(
+      {'equipment': equipment.map((e) => e.name).toList()},
+      SetOptions(merge: true),
+    );
+  }
 }
