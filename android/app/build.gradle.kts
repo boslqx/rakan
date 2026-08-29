@@ -42,6 +42,12 @@ flutter {
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
+    // Required by FlutterFragmentActivity (MainActivity's base class)
+    implementation("androidx.fragment:fragment-ktx:1.8.4")
+
+    // Required by image_cropper's native UCrop screen
+    implementation("androidx.appcompat:appcompat:1.6.1")
+
     // CameraX — handles camera lifecycle and frame capture
     implementation("androidx.camera:camera-core:1.3.1")
     implementation("androidx.camera:camera-camera2:1.3.1")

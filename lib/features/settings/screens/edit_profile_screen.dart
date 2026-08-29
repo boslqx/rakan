@@ -3,7 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/theme/app_colors.dart';
-
+import '../../../../shared/widgets/user_avatar.dart';
+import '../services/profile_picture_service.dart';
+import '../../onboarding/services/user_profile_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -14,9 +16,14 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _nameController = TextEditingController();
+  final _pictureService = ProfilePictureService();
+  final _profileService = UserProfileService();
+
   Map<String, dynamic>? _profileData;
+  String? _photoBase64;
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _isUpdatingPhoto = false;
 
   @override
   void initState() {
@@ -47,6 +54,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (mounted) {
         setState(() {
           _profileData = doc.data();
+          _photoBase64 = doc.data()?['profilePictureBase64'] as String?;
           _isLoading = false;
         });
       }
@@ -106,6 +114,133 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  Future<void> _changePhoto() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final bytes = await _pictureService.pickCropAndCompress();
+    if (bytes == null) return; // user cancelled — no-op, not an error
+
+    setState(() => _isUpdatingPhoto = true);
+    try {
+      final base64Image = _pictureService.encodeToBase64(bytes);
+      await _profileService.updateProfilePicture(
+        uid: user.uid,
+        base64Image: base64Image,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _photoBase64 = base64Image;
+        _isUpdatingPhoto = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Profile picture updated',
+              style: GoogleFonts.manrope(color: AppColors.onSurface)),
+          backgroundColor: AppColors.surfaceContainerHigh,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isUpdatingPhoto = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not update profile picture',
+              style: GoogleFonts.manrope(color: AppColors.onSurface)),
+          backgroundColor: AppColors.surfaceContainerHigh,
+        ),
+      );
+    }
+  }
+
+  Future<void> _removePhoto() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    setState(() => _isUpdatingPhoto = true);
+    try {
+      await _profileService.removeProfilePicture(user.uid);
+
+      if (!mounted) return;
+      setState(() {
+        _photoBase64 = null;
+        _isUpdatingPhoto = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isUpdatingPhoto = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not remove profile picture',
+              style: GoogleFonts.manrope(color: AppColors.onSurface)),
+          backgroundColor: AppColors.surfaceContainerHigh,
+        ),
+      );
+    }
+  }
+
+  void _showPhotoOptions() {
+    final hasPhoto = _photoBase64 != null && _photoBase64!.isNotEmpty;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined,
+                  color: AppColors.onSurface),
+              title: Text(
+                hasPhoto ? 'Change Photo' : 'Upload Photo',
+                style: GoogleFonts.manrope(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _changePhoto();
+              },
+            ),
+            if (hasPhoto)
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded,
+                    color: AppColors.error),
+                title: Text(
+                  'Remove Photo',
+                  style: GoogleFonts.manrope(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.error,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _removePhoto();
+                },
+              ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -150,6 +285,65 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         ),
                       ),
                     ],
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  // Avatar — tap to change/remove photo
+                  Center(
+                    child: GestureDetector(
+                      onTap: _isUpdatingPhoto ? null : _showPhotoOptions,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Opacity(
+                            opacity: _isUpdatingPhoto ? 0.4 : 1.0,
+                            child: UserAvatar(
+                              photoBase64: _photoBase64,
+                              initialsSource: user?.displayName?.isNotEmpty ==
+                                      true
+                                  ? user!.displayName!
+                                  : (user?.email ?? 'R'),
+                              size: 96,
+                            ),
+                          ),
+                          if (_isUpdatingPhoto)
+                            const Positioned.fill(
+                              child: Center(
+                                child: SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: AppColors.surface,
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.edit_rounded,
+                                size: 14,
+                                color: AppColors.onPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
 
                   const SizedBox(height: 32),

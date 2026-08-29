@@ -3,8 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/widgets/user_avatar.dart';
 import '../../auth/services/auth_service.dart';
 import '../../auth/screens/login_screen.dart';
+import '../../onboarding/services/user_profile_service.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../../workout/services/notification_service.dart';
 import 'change_password_dialog.dart';
@@ -19,6 +21,13 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final _profileService = UserProfileService();
+
+  // Profile picture — loaded from Firestore, not Firebase Auth's
+  // photoURL, since the photo is stored as base64 (see
+  // ProfilePictureService for why Storage isn't used).
+  String? _photoBase64;
+
   // Reminder state 
   bool _remindersEnabled = false;
   TimeOfDay _reminderTime = const TimeOfDay(hour: 8, minute: 0);
@@ -33,6 +42,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadReminderPrefs();
+    _loadProfilePicture();
+  }
+
+  Future<void> _loadProfilePicture() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final profile = await _profileService.getUserProfile(uid);
+    if (!mounted) return;
+    setState(() {
+      _photoBase64 = profile?['profilePictureBase64'] as String?;
+    });
   }
 
   Future<void> _loadReminderPrefs() async {
@@ -317,8 +337,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const EditProfileScreen()),
                 ).then((_) {
-                  // Refresh in case displayName changed
+                  // Refresh in case displayName or photo changed
                   setState(() {});
+                  _loadProfilePicture();
                 });
               },
               child: Container(
@@ -329,26 +350,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.surfaceContainerHigh,
-                      ),
-                      child: Center(
-                        child: Text(
-                          (user?.displayName?.isNotEmpty == true
-                                  ? user!.displayName!
-                                  : (user?.email ?? 'R'))[0]
-                              .toUpperCase(),
-                          style: GoogleFonts.spaceGrotesk(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
+                    UserAvatar(
+                      photoBase64: _photoBase64,
+                      initialsSource: user?.displayName?.isNotEmpty == true
+                          ? user!.displayName!
+                          : (user?.email ?? 'R'),
+                      size: 52,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -405,7 +412,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
 
-            // Reminders card (custom — has toggle + time)
+            // Reminders card (custom — has toggle + time) ────────
             _buildRemindersCard(),
 
             _SettingsTile(
