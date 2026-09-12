@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/exercise_data.dart';
+import 'schedule_matcher.dart';
 
 class WorkoutPlanService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -337,6 +338,57 @@ class WorkoutPlanService {
     batch.delete(dayRef.collection('exercises').doc(exerciseDocId));
     batch.update(dayRef, {'durationMinutes': newDurationMinutes});
     await batch.commit();
+  }
+
+  /// One-time schedule overrides for this user's plan — see
+  /// [ScheduleMatcher.resolvedDayForDate]. Each override is keyed by its
+  /// own calendar date, independent of the recurring weekly template.
+  Future<List<Map<String, dynamic>>> getScheduleOverrides(String uid) async {
+    final snapshot = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('scheduleOverrides')
+        .get();
+
+    return snapshot.docs.map((d) => d.data()).toList();
+  }
+
+  /// Records a one-time move of [muscleGroup]'s missed session onto
+  /// [date] (Phase 25 reschedule flow). This does not touch the
+  /// recurring weekly template — only this specific calendar date gets
+  /// this content; the weekday it was originally scheduled on is
+  /// unaffected in every other week.
+  ///
+  /// Doc IDs include [muscleGroup], not just the date: a single missed
+  /// day can carry several muscle groups (e.g. a combined Push day), each
+  /// resolved independently, and two of them can legitimately land on the
+  /// same candidate date. Keying by date alone would let the second
+  /// overwrite the first — [ScheduleMatcher.overrideForDate] merges every
+  /// override doc for a date back into one synthetic day for reads.
+  Future<void> addScheduleOverride({
+    required String uid,
+    required DateTime date,
+    required String muscleGroup,
+    required String workoutName,
+    required List<Map<String, dynamic>> exercises,
+    required String sourceMissedDate,
+  }) async {
+    final dateStr = ScheduleMatcher.dateKey(date);
+
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('scheduleOverrides')
+        .doc('${dateStr}__$muscleGroup')
+        .set({
+      'date': dateStr,
+      'dayType': 'workout',
+      'workoutName': workoutName,
+      'muscleGroup': muscleGroup,
+      'exercises': exercises,
+      'sourceMissedDate': sourceMissedDate,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
   /// Persists a new exercise order for a day, after the user drags to

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 
 // A landmark is a point in 3D space from MediaPipe
 // x, y are normalized (0.0 to 1.0) relative to image dimensions
@@ -115,6 +116,13 @@ class SquatAnalyser implements PostureAnalyser {
   // intermediate phase to have been visited on its own frame.
   bool _hasReachedBottom = false;
 
+  // --- Validation logging only (Objective 2 accuracy study) ---
+  // Tracks the deepest (minimum) knee angle seen during the current rep,
+  // so we can log ONE correct/incorrect verdict per completed rep, evaluated
+  // at the rep's true low point — not per-frame, where isCorrect is
+  // meaningless at standing/going_down/coming_up phases (see PostureResult).
+  double? _repMinAngle;
+
   int repCount = 0;
 
   PostureResult analyse(List<Landmark> landmarks) {
@@ -153,10 +161,19 @@ class SquatAnalyser implements PostureAnalyser {
     // --- Rep counting: hysteresis-based, order-independent ---
     if (kneeAngle <= _bottomAngleMax) {
       _hasReachedBottom = true;
+      _repMinAngle = (_repMinAngle == null) ? kneeAngle : math.min(_repMinAngle!, kneeAngle);
     }
     if (kneeAngle > _standingAngleMin && _hasReachedBottom) {
       repCount++;
       countRep = true;
+
+      // --- Validation logging only ---
+      final repIsCorrect = _repMinAngle != null &&
+          _repMinAngle! >= _bottomAngleMin &&
+          _repMinAngle! <= _bottomAngleMax;
+      debugPrint('VALIDATION|squat|$repCount|${_repMinAngle?.toStringAsFixed(1)}|$repIsCorrect');
+      _repMinAngle = null;
+
       _hasReachedBottom = false;
     }
 
@@ -207,24 +224,35 @@ class SquatAnalyser implements PostureAnalyser {
   void reset() {
     _phase = 'standing';
     _hasReachedBottom = false;
+    _repMinAngle = null;
     repCount = 0;
   }
 }
+
 
 // Push-up Analyser
 class PushUpAnalyser implements PostureAnalyser {
   static const double _bottomAngleMax = 110.0;
   static const double _topAngleMin = 145.0;
+  // Body-line (shoulder-hip-ankle) tolerance: a straight plank is ~180°.
+  // 20° tolerance band, matching the width convention used by every other
+  // exercise's depth window in this file (e.g. squat's 80-100°), rather
+  // than an independently invented number.
+  static const double _bodyLineMinAngle = 160.0;
 
   String _phase = 'up';
   bool _hasReachedBottom = false;
   int repCount = 0;
 
+  // --- Validation logging + real-time correctness tracking ---
+  double? _repMinElbowAngle;
+  double? _repMinBodyLineAngle;
+
   PostureResult analyse(List<Landmark> landmarks) {
-    if (landmarks.length < 17) {
+    if (landmarks.length < 29) {
       return const PostureResult(
         isCorrect: false,
-        feedback: 'Position yourself so your upper body is visible',
+        feedback: 'Position yourself so your full body is visible',
         phase: 'unknown',
       );
     }
@@ -232,9 +260,13 @@ class PushUpAnalyser implements PostureAnalyser {
     final leftShoulder = landmarks[PoseLandmarkIndex.leftShoulder];
     final leftElbow = landmarks[PoseLandmarkIndex.leftElbow];
     final leftWrist = landmarks[PoseLandmarkIndex.leftWrist];
+    final leftHip = landmarks[PoseLandmarkIndex.leftHip];
+    final leftAnkle = landmarks[PoseLandmarkIndex.leftAnkle];
     final rightShoulder = landmarks[PoseLandmarkIndex.rightShoulder];
     final rightElbow = landmarks[PoseLandmarkIndex.rightElbow];
     final rightWrist = landmarks[PoseLandmarkIndex.rightWrist];
+    final rightHip = landmarks[PoseLandmarkIndex.rightHip];
+    final rightAnkle = landmarks[PoseLandmarkIndex.rightAnkle];
 
     final leftElbowAngle = AngleCalculator.calculateAngle(leftShoulder, leftElbow, leftWrist);
     final rightElbowAngle = AngleCalculator.calculateAngle(rightShoulder, rightElbow, rightWrist);
@@ -249,14 +281,50 @@ class PushUpAnalyser implements PostureAnalyser {
       );
     }
 
+    // Body-line check needs hip + ankle visible too — separate guard so a
+    // partially-cropped frame (legs out of shot) still gives useful feedback
+    // instead of silently skipping the straightness check.
+    final bodyLineVisible = leftHip.visibility >= 0.5 &&
+        rightHip.visibility >= 0.5 &&
+        leftAnkle.visibility >= 0.5 &&
+        rightAnkle.visibility >= 0.5;
+
+    // Body-line check uses whichever side is better tracked
+    double? bodyLineAngle;
+    if (leftHip.visibility >= 0.5 && leftAnkle.visibility >= 0.5) {
+      bodyLineAngle = AngleCalculator.calculateAngle(leftShoulder, leftHip, leftAnkle);
+    } else if (rightHip.visibility >= 0.5 && rightAnkle.visibility >= 0.5) {
+      bodyLineAngle = AngleCalculator.calculateAngle(rightShoulder, rightHip, rightAnkle);
+    }
+
     bool countRep = false;
 
     if (elbowAngle <= _bottomAngleMax) {
       _hasReachedBottom = true;
+      _repMinElbowAngle = (_repMinElbowAngle == null)
+          ? elbowAngle
+          : math.min(_repMinElbowAngle!, elbowAngle);
+      if (bodyLineAngle != null) {
+        _repMinBodyLineAngle = (_repMinBodyLineAngle == null)
+            ? bodyLineAngle
+            : math.min(_repMinBodyLineAngle!, bodyLineAngle);
+      }
     }
     if (elbowAngle > _topAngleMin && _hasReachedBottom) {
       repCount++;
       countRep = true;
+
+      // --- Validation logging (Objective 2 accuracy study) ---
+      final depthReached = _repMinElbowAngle != null && _repMinElbowAngle! <= _bottomAngleMax;
+      final bodyLineOk = _repMinBodyLineAngle == null || _repMinBodyLineAngle! >= _bodyLineMinAngle;
+      final repIsCorrect = depthReached && bodyLineOk;
+      debugPrint(
+        'VALIDATION|pushup|$repCount|${_repMinElbowAngle?.toStringAsFixed(1)}|'
+        '${_repMinBodyLineAngle?.toStringAsFixed(1)}|$repIsCorrect',
+      );
+      _repMinElbowAngle = null;
+      _repMinBodyLineAngle = null;
+
       _hasReachedBottom = false;
     }
 
@@ -270,10 +338,19 @@ class PushUpAnalyser implements PostureAnalyser {
       _phase = 'going_down';
     }
 
+    // Body-line check takes feedback priority when it fails — a
+    // straightness fault is a more important safety cue than depth.
+    final bodyLineFailing = bodyLineAngle != null && bodyLineAngle < _bodyLineMinAngle;
+
     String feedback;
     bool isCorrect;
 
-    if (_phase == 'up') {
+    if (bodyLineFailing) {
+      feedback = bodyLineAngle! < 170
+          ? 'Keep your hips level — don\'t let them sag or pike'
+          : 'Tighten your core — keep your body in a straight line';
+      isCorrect = false;
+    } else if (_phase == 'up') {
       feedback = countRep
           ? 'Rep $repCount complete! Lower slowly'
           : 'Arms extended — lower your chest to the ground';
@@ -307,6 +384,8 @@ class PushUpAnalyser implements PostureAnalyser {
     _phase = 'up';
     _hasReachedBottom = false;
     repCount = 0;
+    _repMinElbowAngle = null;
+    _repMinBodyLineAngle = null;
   }
 }
 
@@ -407,6 +486,10 @@ class DeadliftAnalyser implements PostureAnalyser {
 
   String _phase = 'lockout';
   bool _hasReachedBottom = false;
+
+  // --- Validation logging only (Objective 2 accuracy study) ---
+  double? _repMinAngle;
+
   int repCount = 0;
 
   PostureResult analyse(List<Landmark> landmarks) {
@@ -443,10 +526,17 @@ class DeadliftAnalyser implements PostureAnalyser {
     // --- Rep counting: hysteresis-based, order-independent ---
     if (hipAngle <= _bottomAngleMax) {
       _hasReachedBottom = true;
+      _repMinAngle = (_repMinAngle == null) ? hipAngle : math.min(_repMinAngle!, hipAngle);
     }
     if (hipAngle >= _lockoutAngleMin && _hasReachedBottom) {
       repCount++;
       countRep = true;
+
+      // --- Validation logging only ---
+      final repIsCorrect = _repMinAngle != null && _repMinAngle! <= _bottomAngleMax;
+      debugPrint('VALIDATION|deadlift|$repCount|${_repMinAngle?.toStringAsFixed(1)}|$repIsCorrect');
+      _repMinAngle = null;
+
       _hasReachedBottom = false;
     }
 
@@ -492,6 +582,7 @@ class DeadliftAnalyser implements PostureAnalyser {
   void reset() {
     _phase = 'lockout';
     _hasReachedBottom = false;
+    _repMinAngle = null;
     repCount = 0;
   }
 }

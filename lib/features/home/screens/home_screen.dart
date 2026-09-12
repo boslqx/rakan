@@ -10,7 +10,10 @@ import '../../workout/screens/workout_preview_screen.dart';
 import '../../workout/screens/workout_log_detail_screen.dart';
 import '../../workout/services/workout_log_service.dart';
 import '../../workout/services/weekly_summary_service.dart';
+import '../../workout/services/schedule_matcher.dart';
+import '../../workout/services/adapt_service.dart';
 import '../widgets/plan_changes_dialog.dart';
+import '../widgets/missed_day_dialog.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -26,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _allLogs = [];
   List<Map<String, dynamic>> _planDays = [];
+  List<Map<String, dynamic>> _scheduleOverrides = [];
 
   Map<String, dynamic>? _todayDay;
   String? _loadError;
@@ -46,11 +50,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (uid == null) return;
 
     _debugUid = uid;
-    final todayNumber = DateTime.now().weekday; 
 
     Map<String, dynamic>? profile;
     List<Map<String, dynamic>> allLogs = [];
     Map<String, dynamic>? plan;
+    List<Map<String, dynamic>> scheduleOverrides = [];
     String? loadError;
 
     try {
@@ -79,17 +83,21 @@ class _HomeScreenState extends State<HomeScreen> {
       loadError ??= 'Unable to load your workout plan. Please try again.';
     }
 
+    try {
+      scheduleOverrides = await WorkoutPlanService().getScheduleOverrides(uid);
+    } catch (e, st) {
+      debugPrint('HomeScreen: schedule overrides load failed for uid=$uid: $e');
+      debugPrint(st.toString());
+    }
+
     WeeklySummaryService().checkAndGenerateWeeklySummary(uid);
 
     Map<String, dynamic>? todayDay;
     List<Map<String, dynamic>> planDays = [];
     if (plan != null) {
       planDays = (plan['days'] as List).cast<Map<String, dynamic>>();
-      todayDay = planDays.firstWhere(
-        (d) => d['dayNumber'] == todayNumber,
-        orElse: () => {},
-      );
-      if (todayDay!.isEmpty) todayDay = null;
+      todayDay = ScheduleMatcher.resolvedDayForDate(
+        planDays, scheduleOverrides, DateTime.now());
     }
 
     if (mounted) {
@@ -97,15 +105,67 @@ class _HomeScreenState extends State<HomeScreen> {
         _profile = profile;
         _allLogs = allLogs;
         _planDays = planDays;
+        _scheduleOverrides = scheduleOverrides;
         _todayDay = todayDay;
         _loadError = loadError;
         _weekNumber = plan?['weekNumber'] as int?;
         _isLoading = false;
       });
-      // Check for plan changes after the initial load and UI are ready
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _checkForPlanChanges();
+      // Check for missed days, then plan changes, after the initial load
+      // and UI are ready. Missed days first — resolving one can change
+      // what's scheduled today/this week, so it takes priority.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await _checkForMissedDays();
+        if (mounted) await _checkForPlanChanges();
       });
+    }
+  }
+
+  Future<void> _checkForMissedDays() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    // findMissedDays also auto-resolves (as skipped) anything past the
+    // 7-day reschedule window before returning — autoSkipped is what it
+    // just resolved, shown read-only; actionable is what's still live.
+    final swept = await AdaptService().findMissedDays(uid);
+    if ((swept.actionable.isEmpty && swept.autoSkipped.isEmpty) || !mounted) {
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => MissedDayDialog(
+        uid: uid,
+        actionable: swept.actionable,
+        autoSkipped: swept.autoSkipped,
+      ),
+    );
+
+    // A reschedule may have added a schedule override that affects what's
+    // shown today/this week — refresh just that state (not the full
+    // _loadProfile, which would re-queue the missed-day/plan-changes
+    // checks and could double-show the plan changes dialog).
+    if (mounted) await _refreshScheduleOverrides();
+  }
+
+  Future<void> _refreshScheduleOverrides() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final scheduleOverrides = await WorkoutPlanService().getScheduleOverrides(uid);
+      if (!mounted) return;
+      setState(() {
+        _scheduleOverrides = scheduleOverrides;
+        _todayDay = ScheduleMatcher.resolvedDayForDate(
+            _planDays, scheduleOverrides, DateTime.now());
+      });
+    } catch (e, st) {
+      debugPrint('HomeScreen: schedule overrides refresh failed for uid=$uid: $e');
+      debugPrint(st.toString());
     }
   }
 
@@ -128,33 +188,17 @@ class _HomeScreenState extends State<HomeScreen> {
     await WeeklySummaryService().acknowledgeChanges(uid, summary['id'] as String);
   }
 
-  // Calendar → plan day / log resolution
-  Map<String, dynamic>? _planDayForWeekday(int weekday) {
-    if (_planDays.isEmpty) return null;
-    final match = _planDays.firstWhere(
-      (d) => d['dayNumber'] == weekday,
-      orElse: () => {},
-    );
-    return match.isEmpty ? null : match;
+  // Calendar → plan day / log resolution. Goes through
+  // ScheduleMatcher.resolvedDayForDate so a Phase 25 reschedule override
+  // for this specific date takes precedence over the recurring weekday
+  // template — the same lookup the "start workout" flow uses.
+  Map<String, dynamic>? _resolvedDayForDate(DateTime date) {
+    return ScheduleMatcher.resolvedDayForDate(_planDays, _scheduleOverrides, date);
   }
 
   /// Finds a completed workout log whose completed
   Map<String, dynamic>? _logForDate(DateTime date) {
-    for (final log in _allLogs) {
-      final completedAt = log['completedAt'] as String?;
-      if (completedAt == null) continue;
-      try {
-        final logDate = DateTime.parse(completedAt);
-        if (logDate.year == date.year &&
-            logDate.month == date.month &&
-            logDate.day == date.day) {
-          return log;
-        }
-      } catch (_) {
-        continue;
-      }
-    }
-    return null;
+    return ScheduleMatcher.logForDate(_allLogs, date);
   }
 
   /// TODAY is the only date a workout can be started or resumed from the
@@ -163,7 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// anything, so the calendar can't be used to "start" a workout early or
   /// re-do/skip-ahead into a day that isn't the current one.
   void _onCalendarDayTap(DateTime date) {
-    final day = _planDayForWeekday(date.weekday);
+    final day = _resolvedDayForDate(date);
 
     if (day == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -360,9 +404,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    final todayNumber = DateTime.now().weekday;
-    debugPrint('TODAY WEEKDAY: $todayNumber'); 
-
     final plan = await WorkoutPlanService().getActivePlan(uid);
     if (plan == null) {
       if (mounted) {
@@ -378,12 +419,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final days = (plan['days'] as List).cast<Map<String, dynamic>>();
-    final todayDay = days.firstWhere(
-      (d) => d['dayNumber'] == todayNumber,
-      orElse: () => {},
-    );
+    final overrides = await WorkoutPlanService().getScheduleOverrides(uid);
+    final todayDay =
+        ScheduleMatcher.resolvedDayForDate(days, overrides, DateTime.now());
 
-    if (todayDay.isEmpty || todayDay['dayType'] == 'rest') {
+    if (todayDay == null || todayDay['dayType'] == 'rest') {
       if (mounted) {
         _showRestDaySheet(_goalLabel(_profile?['fitnessGoal'] as String?));
       }
@@ -1122,7 +1162,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 date.month == today.month &&
                 date.day == today.day;
 
-            final planDay = _planDayForWeekday(date.weekday);
+            final planDay = _resolvedDayForDate(date);
             final isWorkoutDay = planDay != null && planDay['dayType'] != 'rest';
             final isCompleted = isWorkoutDay && _logForDate(date) != null;
 

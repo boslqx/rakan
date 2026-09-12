@@ -127,7 +127,20 @@ class WeeklySummaryService {
     for (final propDoc in proposalsSnap.docs) {
       final data = propDoc.data();
       final muscleGroup = data['muscleGroup'] as String;
-      final fatigueScore = (data['sessionFatigueScore'] as num).toDouble();
+      final trigger = data['trigger'] as String? ?? 'session';
+      // Skip-triggered proposals carry no session, so this is null
+      // (Decision #45) — resolve_adjustment's return_from_break tier
+      // handles that case without a fatigue score.
+      final fatigueScore = (data['sessionFatigueScore'] as num?)?.toDouble();
+
+      final daysSinceLastTrained = data['daysSinceLastTrained'] as int?;
+      if (trigger == 'skip' && daysSinceLastTrained == null) {
+        // The user hasn't actually trained this muscle group again yet —
+        // the return-from-break gap can't be computed until they do
+        // (AdaptService.predictAndAdapt fills this in on that session).
+        // Leave pending and retry next weekly run.
+        continue;
+      }
 
       // Read this muscle group's current recovery score
       final recoveryDoc = await _db
@@ -148,6 +161,9 @@ class WeeklySummaryService {
         'proposal_id': propDoc.id,
         'fatigue_score': fatigueScore,
         'muscle_recovery_score': recoveryScore,
+        'trigger': trigger,
+        if (daysSinceLastTrained != null)
+          'days_since_last_trained': daysSinceLastTrained,
       });
       proposalRefsById[propDoc.id] = propDoc.reference;
       muscleGroupByProposalId[propDoc.id] = muscleGroup;

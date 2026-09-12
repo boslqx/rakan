@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
+from typing import Literal, Optional
 
 from services.adaptation_engine import compute_trend, resolve_adjustment
 
@@ -8,8 +9,14 @@ router = APIRouter()
 
 class ProposalInput(BaseModel):
     proposal_id: str
-    fatigue_score: float
+    fatigue_score: Optional[float] = None
     muscle_recovery_score: float
+    trigger: Literal["session", "skip"] = "session"
+    # Only meaningful when trigger == "skip": days elapsed between this
+    # session and the muscle group's actual prior last-trained date.
+    # Unknown/omitted until the user actually returns to train this
+    # muscle group (see AdaptService.predictAndAdapt).
+    days_since_last_trained: Optional[int] = None
 
 
 class CommitAdaptationsRequest(BaseModel):
@@ -48,6 +55,8 @@ def commit_adaptations(req: CommitAdaptationsRequest):
             weekly_trend_adjustment=trend_result.trend_adjustment,
             weekly_trend=trend_result.trend,
             is_deload_week=req.is_deload_week,
+            trigger=proposal.trigger,
+            days_since_last_trained=proposal.days_since_last_trained,
         )
         resolved.append(
             ResolvedProposal(

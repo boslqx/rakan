@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
+from typing import Literal, Optional
 
 from services.adaptation_engine import compute_trend, resolve_adjustment
 
@@ -8,8 +9,10 @@ router = APIRouter()
 
 class ProposalInput(BaseModel):
     proposal_id: str
-    fatigue_score: float
+    fatigue_score: Optional[float] = None
     muscle_recovery_score: float
+    trigger: Literal["session", "skip"] = "session"
+    days_since_last_trained: Optional[int] = None
 
 
 class CommitAdaptationsRequest(BaseModel):
@@ -48,6 +51,8 @@ def commit_adaptations(req: CommitAdaptationsRequest):
             weekly_trend_adjustment=trend_result.trend_adjustment,
             weekly_trend=trend_result.trend,
             is_deload_week=req.is_deload_week,
+            trigger=proposal.trigger,
+            days_since_last_trained=proposal.days_since_last_trained,
         )
         resolved.append(
             ResolvedProposal(
@@ -63,3 +68,55 @@ def commit_adaptations(req: CommitAdaptationsRequest):
         trend_adjustment=trend_result.trend_adjustment,
         resolved_proposals=resolved,
     )
+
+
+def test_skip_proposal_accepts_null_fatigue_score():
+    # days_since_last_trained omitted entirely — treated conservatively as
+    # a long break (same as > 28 days), not as "no reduction".
+    req = CommitAdaptationsRequest(
+        current_volume=100,
+        past_volumes=[100, 100, 100],
+        proposals=[
+            ProposalInput(
+                proposal_id="proposal-1",
+                fatigue_score=None,
+                muscle_recovery_score=0.4,
+                trigger="skip",
+            )
+        ],
+    )
+
+    res = commit_adaptations(req)
+
+    assert res.resolved_proposals[0].tier == "return_from_break"
+    assert res.resolved_proposals[0].final_adjustment == -0.175
+
+
+def _skip_proposal(days_since_last_trained):
+    return CommitAdaptationsRequest(
+        current_volume=100,
+        past_volumes=[100, 100, 100],
+        proposals=[
+            ProposalInput(
+                proposal_id="proposal-1",
+                fatigue_score=None,
+                muscle_recovery_score=0.4,
+                trigger="skip",
+                days_since_last_trained=days_since_last_trained,
+            )
+        ],
+    )
+
+
+def test_skip_proposal_at_exactly_28_days_applies_no_reduction():
+    res = commit_adaptations(_skip_proposal(28))
+
+    assert res.resolved_proposals[0].tier == "return_from_break"
+    assert res.resolved_proposals[0].final_adjustment == 0.0
+
+
+def test_skip_proposal_at_29_days_applies_full_reduction():
+    res = commit_adaptations(_skip_proposal(29))
+
+    assert res.resolved_proposals[0].tier == "return_from_break"
+    assert res.resolved_proposals[0].final_adjustment == -0.175

@@ -302,6 +302,28 @@ class WorkoutLogService {
     return snapshot.docs.map((d) => d.data()).toList();
   }
 
+  /// The actual last-completed date [muscleGroup] was trained — not a
+  /// scheduled date, the date a session for it was really logged (which
+  /// may differ from the plan if there was an earlier ad-hoc session).
+  /// Backed by the same `muscleRecovery.lastTrained` field
+  /// [updateMuscleRecovery] already maintains on every save, rather than
+  /// duplicating that computation here.
+  Future<DateTime?> getLastTrainedDate({
+    required String uid,
+    required String muscleGroup,
+  }) async {
+    final doc = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('muscleRecovery')
+        .doc(muscleGroup)
+        .get();
+
+    final lastTrainedStr = doc.data()?['lastTrained'] as String?;
+    if (lastTrainedStr == null) return null;
+    return DateTime.tryParse(lastTrainedStr);
+  }
+
   /// Fetches recent workout logs for the home screen activity feed.
   Future<List<Map<String, dynamic>>> getRecentLogs(String uid,
       {int limit = 10}) async {
