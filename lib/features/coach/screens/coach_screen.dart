@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_body_heatmap/flutter_body_heatmap.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../workout/services/adapt_service.dart';
 import '../../workout/services/workout_log_service.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../services/injury_service.dart';
@@ -172,6 +173,10 @@ class _CoachScreenState extends State<CoachScreen> {
   String? _selectedExercise;
   bool _progressionLoading = false;
   List<Map<String, dynamic>> _progressionData = []; // [{date, maxWeight, rpe}]
+  // Computed live off getRecentSessionMaxWeights + detectPlateau on every
+  // load — never persisted (design decision: on-demand only, no
+  // plateauFlags collection). False also covers "insufficient history".
+  bool _isPlateaued = false;
 
   // 0 = 7 days, 1 = 30 days, 2 = 90 days, 3 = all time
   int _progressionRangeIndex = 1; // default: 30 days
@@ -338,9 +343,19 @@ class _CoachScreenState extends State<CoachScreen> {
       points.sort((a, b) =>
           (a['date'] as DateTime).compareTo(b['date'] as DateTime));
 
+      // Plateau check always runs over the full unwindowed session history
+      // for this exercise (not the range-limited `points` above) — the
+      // rule is "last 4 transitions", not "last 4 within the chart's
+      // selected window". Computed live, never cached/written anywhere.
+      final sessionMaxWeights = await WorkoutLogService()
+          .getRecentSessionMaxWeights(uid: _uid, exerciseName: exerciseName);
+      final isPlateaued =
+          AdaptService.detectPlateau(sessionMaxWeights: sessionMaxWeights);
+
       if (!mounted) return;
       setState(() {
         _progressionData = points;
+        _isPlateaued = isPlateaued;
         _progressionLoading = false;
       });
     } catch (e) {
@@ -2526,6 +2541,40 @@ class _CoachScreenState extends State<CoachScreen> {
               const SizedBox(width: 16),
               _buildLegendDot(const Color(0xFFE8A87C), 'RPE (1-10)'),
             ],
+          ),
+          if (_isPlateaued) ...[
+            const SizedBox(height: 12),
+            _buildPlateauNotice(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Passive-only surfacing (no toast/popup) — visible purely by opening
+  /// this exercise's history on the Coach screen. See
+  /// AdaptService.detectPlateau for the underlying rule.
+  Widget _buildPlateauNotice() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.onSurfaceVariant.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.trending_flat, size: 16, color: AppColors.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              'Plateau: no session in the last 4 has beaten the one before it '
+              'by 2% or more.',
+              style: GoogleFonts.manrope(
+                fontSize: 12,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
           ),
         ],
       ),

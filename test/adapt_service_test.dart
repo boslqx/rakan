@@ -132,6 +132,7 @@ void main() {
         logs: const [],
         resolvedKeys: const {},
         today: today,
+        planStartDate: null,
         scanLimitDays: 10,
       );
 
@@ -157,6 +158,7 @@ void main() {
         logs: const [],
         resolvedKeys: {'Chest|${_dateKey(daysAgo(1))}'},
         today: today,
+        planStartDate: null,
         scanLimitDays: 1,
       );
 
@@ -183,6 +185,7 @@ void main() {
         logs: logs,
         resolvedKeys: const {},
         today: today,
+        planStartDate: null,
         scanLimitDays: 1,
       );
 
@@ -199,10 +202,103 @@ void main() {
         logs: const [],
         resolvedKeys: const {},
         today: today,
+        planStartDate: null,
         scanLimitDays: 1,
       );
 
       expect(result, isEmpty);
+    });
+
+    test('never flags a date before the plan was generated, even if the '
+        'weekday recurs within the scan window (regression: brand-new user, '
+        'plan just generated, must not show phantom missed days from before '
+        'the plan existed)', () {
+      // Plan trains Chest every day of the week, generated 3 days ago.
+      // Naively scanning the full window would flag every day before that
+      // too, purely because the weekday recurs.
+      final planStartDate = daysAgo(3);
+      final planDays = [
+        for (final weekday in [1, 2, 3, 4, 5, 6, 7])
+          {
+            'dayNumber': weekday,
+            'dayType': 'workout',
+            'exercises': [
+              {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+            ],
+          },
+      ];
+
+      final result = AdaptService.computeMissedDays(
+        planDays: planDays,
+        logs: const [],
+        resolvedKeys: const {},
+        today: today,
+        planStartDate: planStartDate,
+        scanLimitDays: 10,
+      );
+
+      // Only the days since the plan existed (offsets 1-3) can be missed —
+      // nothing from before generation, even though offsets 4-10 also
+      // match a scheduled weekday.
+      expect(result, hasLength(3));
+      expect(
+        result.map((m) => m.date),
+        containsAll([daysAgo(1), daysAgo(2), daysAgo(3)]),
+      );
+    });
+
+    test('a plan generated exactly on the scanned date still counts that '
+        'date (the boundary itself is not excluded)', () {
+      final planStartDate = daysAgo(1);
+      final planDays = [
+        {
+          'dayNumber': daysAgo(1).weekday,
+          'dayType': 'workout',
+          'exercises': [
+            {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+          ],
+        },
+      ];
+
+      final result = AdaptService.computeMissedDays(
+        planDays: planDays,
+        logs: const [],
+        resolvedKeys: const {},
+        today: today,
+        planStartDate: planStartDate,
+        scanLimitDays: 10,
+      );
+
+      expect(result, hasLength(1));
+      expect(result.first.date, daysAgo(1));
+    });
+
+    test('a null planStartDate leaves the scan unbounded (old plans written '
+        'before generatedAt existed)', () {
+      // Same weekday as daysAgo(1), one week further back — with no
+      // planStartDate bound, both occurrences are still flagged.
+      final chestDayNumber = daysAgo(8).weekday;
+      final planDays = [
+        {
+          'dayNumber': chestDayNumber,
+          'dayType': 'workout',
+          'exercises': [
+            {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+          ],
+        },
+      ];
+
+      final result = AdaptService.computeMissedDays(
+        planDays: planDays,
+        logs: const [],
+        resolvedKeys: const {},
+        today: today,
+        planStartDate: null,
+        scanLimitDays: 10,
+      );
+
+      expect(result, hasLength(2));
+      expect(result.map((m) => m.date), containsAll([daysAgo(1), daysAgo(8)]));
     });
   });
 
@@ -375,6 +471,58 @@ void main() {
         DateTime(2024, 1, 14),
       ]);
     });
+
+    test(
+        'a muscle group trained on two split days a week gets a much '
+        'narrower (or zero) window than one trained on only one — not a '
+        'bug, just constraint 3 reacting to how soon it recurs (mirrors a '
+        'live Push/Monday + Pull/Wednesday split where Arms has no valid '
+        'reschedule day but Chest, trained only on Push day, does)', () {
+      final monday = DateTime(2024, 1, 8); // Push: Chest + Arms
+      final wednesday = DateTime(2024, 1, 10); // Pull: Arms + Back
+
+      List<Map<String, dynamic>> pushPullPlan() => [
+            {
+              'dayNumber': monday.weekday,
+              'dayType': 'workout',
+              'exercises': [
+                {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+                {'exerciseName': 'Tricep Dip', 'muscleGroup': 'Arms'},
+              ],
+            },
+            {
+              'dayNumber': wednesday.weekday,
+              'dayType': 'workout',
+              'exercises': [
+                {'exerciseName': 'Dumbbell Row', 'muscleGroup': 'Back'},
+                {'exerciseName': 'Dumbbell Bicep Curl', 'muscleGroup': 'Arms'},
+              ],
+            },
+          ];
+
+      // Viewing the dialog on the Wednesday itself (the day Arms recurs) —
+      // by then there's no calendar slot left before Arms is due again.
+      final armsResult = AdaptService.computeValidRescheduleDays(
+        planDays: pushPullPlan(),
+        overrides: const [],
+        muscleGroup: 'Arms',
+        missedDate: monday,
+        lastTrainedDate: null,
+        today: wednesday,
+      );
+      expect(armsResult, isEmpty);
+
+      // Chest only recurs the following Monday — six clear days remain.
+      final chestResult = AdaptService.computeValidRescheduleDays(
+        planDays: pushPullPlan(),
+        overrides: const [],
+        muscleGroup: 'Chest',
+        missedDate: monday,
+        lastTrainedDate: null,
+        today: wednesday,
+      );
+      expect(chestResult, isNotEmpty);
+    });
   });
 
   group('AdaptService.partitionMissedDaysByExpiry', () {
@@ -484,6 +632,101 @@ void main() {
 
       expect(decision.suppressSessionProposal, isTrue);
       expect(decision.daysSinceLastTrained, isNull);
+    });
+  });
+
+  group('AdaptService.detectPlateau', () {
+    test('fewer than 5 sessions is insufficient history, not a plateau', () {
+      // n=4 transitions need n+1=5 raw session values.
+      final result = AdaptService.detectPlateau(
+        sessionMaxWeights: [100, 100, 100, 100], // only 4 — one short
+      );
+
+      expect(result, isFalse);
+    });
+
+    test('exactly 5 sessions with no qualifying increase is a plateau '
+        '(boundary: minimum history needed for detection to first fire)', () {
+      final result = AdaptService.detectPlateau(
+        sessionMaxWeights: [100, 100, 100, 100, 100],
+      );
+
+      expect(result, isTrue);
+    });
+
+    test('a genuine plateau: weight flat/declining across all 4 transitions', () {
+      final result = AdaptService.detectPlateau(
+        sessionMaxWeights: [100, 100, 99, 100, 98],
+      );
+
+      expect(result, isTrue);
+    });
+
+    test('one qualifying >=2% increase among the 4 transitions clears the plateau', () {
+      // 100 -> 100 -> 103 (+3%, clears it) -> 103 -> 103
+      final result = AdaptService.detectPlateau(
+        sessionMaxWeights: [100, 100, 103, 103, 103],
+      );
+
+      expect(result, isFalse);
+    });
+
+    test('an increase below the 2% threshold does not clear the plateau', () {
+      // 100 -> 101 is +1%, under the 2% threshold — every transition here
+      // is either flat or under-threshold, so it still counts as a plateau.
+      final result = AdaptService.detectPlateau(
+        sessionMaxWeights: [100, 101, 101, 100, 100],
+      );
+
+      expect(result, isTrue);
+    });
+
+    test('an increase of exactly 2% clears the plateau (inclusive threshold)', () {
+      final result = AdaptService.detectPlateau(
+        sessionMaxWeights: [100, 100, 100, 100, 102],
+      );
+
+      expect(result, isFalse);
+    });
+
+    test('only the most recent n+1 sessions are considered — an old increase '
+        'outside the window does not clear a current plateau', () {
+      // The leading 103 (a +3% jump from a hypothetical earlier session) is
+      // outside the last-5 window and must not count.
+      final result = AdaptService.detectPlateau(
+        sessionMaxWeights: [80, 103, 103, 103, 103, 103],
+      );
+
+      expect(result, isTrue);
+    });
+
+    test('an empty history is insufficient, not a plateau', () {
+      final result = AdaptService.detectPlateau(sessionMaxWeights: []);
+
+      expect(result, isFalse);
+    });
+
+    test('a zero-weight prior session is skipped rather than producing a '
+        'divide-by-zero false positive', () {
+      // 0 -> 50 has no defined % change and is skipped; the remaining
+      // transitions (50->50, 50->50, 50->50) are all flat, so this still
+      // reads as a plateau rather than throwing or crashing.
+      final result = AdaptService.detectPlateau(
+        sessionMaxWeights: [0, 50, 50, 50, 50],
+      );
+
+      expect(result, isTrue);
+    });
+
+    test('custom n and thresholdPct are honored', () {
+      // n=2 needs 3 values; a 5% threshold means the +3% jump no longer clears it.
+      final result = AdaptService.detectPlateau(
+        sessionMaxWeights: [100, 103, 103],
+        n: 2,
+        thresholdPct: 0.05,
+      );
+
+      expect(result, isTrue);
     });
   });
 }

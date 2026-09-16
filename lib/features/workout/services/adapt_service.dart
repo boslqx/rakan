@@ -116,18 +116,36 @@ class AdaptService {
   /// [resolveMissedDayAsSkipped]). This is purely detection for the
   /// popup — it does not create proposals or gate on a streak length;
   /// Phase 25 replaced streak-counting with the user's explicit choice.
+  ///
+  /// [planStartDate] bounds how far back the scan can go: a plan's
+  /// `days` are a recurring weekday template with no calendar anchor of
+  /// their own (Monday's slot matches every Monday, forever), so without
+  /// this bound the scan can't tell "this weekday was scheduled and
+  /// skipped" apart from "this weekday recurs, but the plan didn't exist
+  /// yet" — a brand-new plan generated on a Wednesday would otherwise see
+  /// last Monday's slot and flag it missed, even though the user had no
+  /// plan (and nothing to miss) that Monday. Pass null only when the
+  /// plan's generation date genuinely isn't known (e.g. an old plan
+  /// written before that field existed) — never to intentionally widen
+  /// the scan.
   static List<MissedDay> computeMissedDays({
     required List<Map<String, dynamic>> planDays,
     required List<Map<String, dynamic>> logs,
     required Set<String> resolvedKeys,
     required DateTime today,
+    required DateTime? planStartDate,
     int scanLimitDays = _scheduleScanLimitDays,
   }) {
     final missed = <MissedDay>[];
+    final startDateOnly = planStartDate != null ? _dateOnly(planStartDate) : null;
 
     for (int offset = 1; offset <= scanLimitDays; offset++) {
       final date = DateTime(today.year, today.month, today.day)
           .subtract(Duration(days: offset));
+
+      // Scanning strictly backward in time — once a date is before the
+      // plan's start, every earlier offset will be too.
+      if (startDateOnly != null && date.isBefore(startDateOnly)) break;
 
       final planDay = ScheduleMatcher.planDayForWeekday(planDays, date.weekday);
       if (planDay == null || planDay['dayType'] == 'rest') continue;
@@ -303,11 +321,20 @@ class AdaptService {
         .getRecentLogs(uid, limit: _scheduleScanLimitDays);
     final resolvedKeys = await _getResolvedMissedDayKeys(uid);
 
+    // Bounds the backward scan to when this plan actually came into
+    // existence — see computeMissedDays' planStartDate doc. Old plans
+    // written before generatedAt existed fall back to null (unbounded),
+    // same as before this fix.
+    final generatedAtStr = plan['generatedAt'] as String?;
+    final planStartDate =
+        generatedAtStr != null ? DateTime.tryParse(generatedAtStr) : null;
+
     final allMissed = computeMissedDays(
       planDays: planDays,
       logs: logs,
       resolvedKeys: resolvedKeys,
       today: DateTime.now(),
+      planStartDate: planStartDate,
     );
 
     final partition = partitionMissedDaysByExpiry(
@@ -536,6 +563,49 @@ class AdaptService {
         : null;
 
     return (suppressSessionProposal: true, daysSinceLastTrained: daysSinceLastTrained);
+  }
+
+  /// Pure decision step for exercise-level plateau detection — no
+  /// Firestore access, mirroring [computeMissedDays]'s split from its
+  /// Firestore-fetching caller. Callers get the raw series from
+  /// `WorkoutLogService.getRecentSessionMaxWeights` (oldest-first) and pass
+  /// it straight in.
+  ///
+  /// A plateau is flagged when NONE of the last [n] session-to-session
+  /// transitions shows a max-weight increase of at least [thresholdPct]
+  /// versus the immediately prior session.
+  ///
+  /// [n] transitions require n+1 raw session values (n=4 needs 5 sessions:
+  /// session 1->2, 2->3, 3->4, 4->5). Until the user has logged that many
+  /// sessions for this exercise, this returns false ("insufficient
+  /// history", not "plateaued") rather than guessing from a partial
+  /// window — detection can only first fire on a user's 5th logged
+  /// session of a given exercise.
+  ///
+  /// Known limitation (deliberate FYP scope decision, not an oversight):
+  /// a transition spanning a long calendar gap (e.g. a session after a
+  /// multi-week break) is treated identically to a normal week-to-week
+  /// transition. This mirrors how other reactive signals in this codebase
+  /// accept a similar simplification rather than cross-referencing break
+  /// history — see the return-from-break tier's own gap handling in
+  /// adaptation_engine.py for the analogous tradeoff on the backend side.
+  static bool detectPlateau({
+    required List<double> sessionMaxWeights, // oldest -> newest
+    int n = 4,
+    double thresholdPct = 0.02,
+  }) {
+    if (sessionMaxWeights.length < n + 1) return false;
+
+    final window = sessionMaxWeights.sublist(sessionMaxWeights.length - (n + 1));
+
+    for (int i = 1; i < window.length; i++) {
+      final prior = window[i - 1];
+      if (prior <= 0) continue; // no meaningful % change to compute from zero/negative
+      final pctChange = (window[i] - prior) / prior;
+      if (pctChange >= thresholdPct) return false; // one qualifying increase clears the plateau
+    }
+
+    return true;
   }
 
   /// Predicts fatigue and writes one adaptation proposal per unique primary

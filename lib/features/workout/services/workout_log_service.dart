@@ -286,6 +286,65 @@ class WorkoutLogService {
     return runningMax;
   }
 
+  /// Returns up to [limit] most-recent per-session max weights for
+  /// [exerciseName], oldest-first — one entry per session that logged this
+  /// exercise with at least one set > 0kg. Same scan/query shape as
+  /// [getMaxWeightForExercise], but keeps each session's max separate
+  /// instead of folding everything into one running max — this is what
+  /// plateau detection (AdaptService.detectPlateau) needs: a chronological
+  /// series, not a single all-time PR.
+  Future<List<double>> getRecentSessionMaxWeights({
+    required String uid,
+    required String exerciseName,
+    int limit = 4,
+    int scanLimit = 30,
+  }) async {
+    final snapshot =
+        await _db.collection('users').doc(uid).collection('workoutLogs').get();
+
+    final logs = snapshot.docs.map((d) => d.data()).toList();
+    logs.sort((a, b) {
+      final aDate = a['completedAt'] as String? ?? '';
+      final bDate = b['completedAt'] as String? ?? '';
+      return bDate.compareTo(aDate);
+    });
+
+    final sessionMaxesNewestFirst = <double>[];
+
+    for (final log in logs.take(scanLimit)) {
+      if (sessionMaxesNewestFirst.length >= limit) break;
+
+      final logId = log['logId'] as String?;
+      if (logId == null) continue;
+
+      final exerciseLogsSnap = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('workoutLogs')
+          .doc(logId)
+          .collection('exerciseLogs')
+          .where('exerciseName', isEqualTo: exerciseName)
+          .limit(1)
+          .get();
+
+      if (exerciseLogsSnap.docs.isEmpty) continue; // this session didn't include the exercise
+
+      final data = exerciseLogsSnap.docs.first.data();
+      final setDetails =
+          (data['setDetails'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+      double sessionMax = 0;
+      for (final set in setDetails) {
+        final w = (set['weightKg'] as num?)?.toDouble() ?? 0;
+        if (w > sessionMax) sessionMax = w;
+      }
+
+      if (sessionMax > 0) sessionMaxesNewestFirst.add(sessionMax);
+    }
+
+    return sessionMaxesNewestFirst.reversed.toList(); // oldest-first
+  }
+
   /// Fetches the per-exercise breakdown
   Future<List<Map<String, dynamic>>> getExerciseLogsForWorkout({
     required String uid,
