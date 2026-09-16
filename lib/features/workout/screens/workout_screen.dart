@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../services/workout_plan_service.dart';
+import '../services/notification_service.dart';
 import 'workout_day_detail_screen.dart';
 import 'exercise_library_screen.dart';
 import '../data/exercise_data.dart';
@@ -57,7 +58,7 @@ class WorkoutScreen extends StatefulWidget {
 }
 
 class _WorkoutScreenState extends State<WorkoutScreen> {
-  // Segment state 
+  // Segment state
   // 0 = Schedule, 1 = Exercise Library
   int _segmentIndex = 0;
 
@@ -148,7 +149,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _segmentIndex == 0 ? 'Your 7-Day Plan' : 'Master Your Mechanics',
+                      _segmentIndex == 0
+                          ? 'Your 7-Day Plan'
+                          : 'Master Your Mechanics',
                       style: GoogleFonts.spaceGrotesk(
                         fontSize: 26,
                         fontWeight: FontWeight.w700,
@@ -164,7 +167,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 GestureDetector(
                   onTap: () => setState(() => _isEditMode = !_isEditMode),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: _isEditMode
                           ? AppColors.primary
@@ -175,9 +181,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          _isEditMode ? Icons.check_rounded : Icons.edit_calendar_rounded,
+                          _isEditMode
+                              ? Icons.check_rounded
+                              : Icons.edit_calendar_rounded,
                           size: 16,
-                          color: _isEditMode ? AppColors.onPrimary : AppColors.onSurfaceVariant,
+                          color: _isEditMode
+                              ? AppColors.onPrimary
+                              : AppColors.onSurfaceVariant,
                         ),
                         const SizedBox(width: 6),
                         Text(
@@ -186,7 +196,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 1,
-                            color: _isEditMode ? AppColors.onPrimary : AppColors.onSurfaceVariant,
+                            color: _isEditMode
+                                ? AppColors.onPrimary
+                                : AppColors.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -224,12 +236,19 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline_rounded, size: 14, color: AppColors.primary),
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    size: 14,
+                    color: AppColors.primary,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Tap a workout day to replace or cancel it. Tap a rest day to convert it.',
-                      style: GoogleFonts.manrope(fontSize: 12, color: AppColors.primary),
+                      style: GoogleFonts.manrope(
+                        fontSize: 12,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
                 ],
@@ -289,8 +308,11 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline_rounded,
-                color: AppColors.error, size: 48),
+            const Icon(
+              Icons.error_outline_rounded,
+              color: AppColors.error,
+              size: 48,
+            ),
             const SizedBox(height: 16),
             Text(
               'Failed to load plan',
@@ -315,9 +337,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 setState(() => _isLoading = true);
                 _loadPlan();
               },
-              child: Text('Retry',
-                  style: GoogleFonts.spaceGrotesk(
-                      fontWeight: FontWeight.w600)),
+              child: Text(
+                'Retry',
+                style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w600),
+              ),
             ),
           ],
         ),
@@ -332,8 +355,11 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.fitness_center_rounded,
-                color: AppColors.onSurfaceVariant, size: 48),
+            const Icon(
+              Icons.fitness_center_rounded,
+              color: AppColors.onSurfaceVariant,
+              size: 48,
+            ),
             const SizedBox(height: 16),
             Text(
               'No active plan',
@@ -413,16 +439,13 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             ),
           ),
           SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final day = days[index];
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                  child: _buildDayCard(day),
-                );
-              },
-              childCount: days.length,
-            ),
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final day = days[index];
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                child: _buildDayCard(day),
+              );
+            }, childCount: days.length),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
         ],
@@ -433,18 +456,24 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   Widget _buildQuickStat(String value, String label) {
     return Row(
       children: [
-        Text(value,
-            style: GoogleFonts.spaceGrotesk(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary)),
+        Text(
+          value,
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: AppColors.primary,
+          ),
+        ),
         const SizedBox(width: 6),
-        Text(label,
-            style: GoogleFonts.manrope(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1.5,
-                color: AppColors.onSurfaceVariant)),
+        Text(
+          label,
+          style: GoogleFonts.manrope(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.5,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
       ],
     );
   }
@@ -467,152 +496,403 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final VoidCallback? onTap = isRest
         ? (_isEditMode ? () => _showManageRestDaySheet(day) : null)
         : (_isEditMode
-            ? () => _showManageDaySheet(day)
-            : () => _openDayDetail(day));
+              ? () => _showManageDaySheet(day)
+              : () => _openDayDetail(day));
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: isRest
-              ? AppColors.surfaceContainerLowest
-              : AppColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(20),
-          border: Border(
-            left: BorderSide(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
               color: isRest
-                  ? Colors.transparent
-                  : (_isEditMode ? AppColors.primary : AppColors.primary.withValues(alpha: 0.6)),
-              width: _isEditMode && !isRest ? 4 : 3,
+                  ? AppColors.surfaceContainerLowest
+                  : AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(20),
+                topRight: const Radius.circular(20),
+                bottomLeft: Radius.circular(isRest ? 20 : 6),
+                bottomRight: Radius.circular(isRest ? 20 : 6),
+              ),
+              border: Border(
+                left: BorderSide(
+                  color: isRest
+                      ? Colors.transparent
+                      : (_isEditMode
+                            ? AppColors.primary
+                            : AppColors.primary.withValues(alpha: 0.6)),
+                  width: _isEditMode && !isRest ? 4 : 3,
+                ),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${dayName.toUpperCase()} • DAY ${dayNumber.toString().padLeft(2, '0')}',
+                        style: GoogleFonts.manrope(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.5,
+                          color: isRest
+                              ? AppColors.onSurfaceVariant.withValues(
+                                  alpha: 0.5,
+                                )
+                              : AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    if (_isEditMode && !isRest)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 8),
+                        child: Icon(
+                          Icons.edit_rounded,
+                          size: 14,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isRest
+                            ? AppColors.surfaceContainerLow
+                            : AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(48),
+                      ),
+                      child: Text(
+                        isRest ? 'REST DAY' : 'WORKOUT',
+                        style: GoogleFonts.manrope(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.5,
+                          color: isRest
+                              ? AppColors.onSurfaceVariant.withValues(
+                                  alpha: 0.5,
+                                )
+                              : AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  workoutName.toUpperCase(),
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: isRest
+                        ? AppColors.onSurfaceVariant.withValues(alpha: 0.4)
+                        : AppColors.onSurface,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  focusDescription,
+                  style: GoogleFonts.manrope(
+                    fontSize: 13,
+                    color: isRest
+                        ? AppColors.onSurfaceVariant.withValues(alpha: 0.3)
+                        : AppColors.onSurfaceVariant,
+                  ),
+                ),
+                if (!isRest) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.timer_outlined,
+                        size: 14,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$durationMinutes MIN',
+                        style: GoogleFonts.manrope(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      const Icon(
+                        Icons.fitness_center_rounded,
+                        size: 14,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${exercises.length} EXERCISES',
+                        style: GoogleFonts.manrope(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (exercises.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        ...exercises
+                            .take(3)
+                            .map(
+                              (ex) => _buildExerciseChip(
+                                ex['exerciseName'] as String? ?? '',
+                              ),
+                            ),
+                        if (exercises.length > 3)
+                          _buildExerciseChip(
+                            '+${exercises.length - 3} MORE',
+                            isMore: true,
+                          ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Text(
+                    _isEditMode
+                        ? 'TAP TO REPLACE OR CANCEL →'
+                        : 'TAP TO VIEW EXERCISES →',
+                    style: GoogleFonts.manrope(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.5,
+                      color: AppColors.primary.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${dayName.toUpperCase()} • DAY ${dayNumber.toString().padLeft(2, '0')}',
-                    style: GoogleFonts.manrope(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.5,
-                      color: isRest
-                          ? AppColors.onSurfaceVariant.withValues(alpha: 0.5)
-                          : AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                if (_isEditMode && !isRest)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 8),
-                    child: Icon(Icons.edit_rounded, size: 14, color: AppColors.primary),
-                  ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isRest
-                        ? AppColors.surfaceContainerLow
-                        : AppColors.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(48),
-                  ),
-                  child: Text(
-                    isRest ? 'REST DAY' : 'WORKOUT',
-                    style: GoogleFonts.manrope(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.5,
-                      color: isRest
-                          ? AppColors.onSurfaceVariant.withValues(alpha: 0.5)
-                          : AppColors.primary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              workoutName.toUpperCase(),
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: isRest
-                    ? AppColors.onSurfaceVariant.withValues(alpha: 0.4)
-                    : AppColors.onSurface,
-                height: 1.1,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              focusDescription,
-              style: GoogleFonts.manrope(
-                fontSize: 13,
-                color: isRest
-                    ? AppColors.onSurfaceVariant.withValues(alpha: 0.3)
-                    : AppColors.onSurfaceVariant,
-              ),
-            ),
-            if (!isRest) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(Icons.timer_outlined,
-                      size: 14, color: AppColors.onSurfaceVariant),
-                  const SizedBox(width: 4),
-                  Text(
-                    '$durationMinutes MIN',
-                    style: GoogleFonts.manrope(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1,
-                        color: AppColors.onSurfaceVariant),
-                  ),
-                  const SizedBox(width: 16),
-                  const Icon(Icons.fitness_center_rounded,
-                      size: 14, color: AppColors.onSurfaceVariant),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${exercises.length} EXERCISES',
-                    style: GoogleFonts.manrope(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1,
-                        color: AppColors.onSurfaceVariant),
-                  ),
-                ],
-              ),
-              if (exercises.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    ...exercises.take(3).map((ex) => _buildExerciseChip(
-                        ex['exerciseName'] as String? ?? '')),
-                    if (exercises.length > 3)
-                      _buildExerciseChip('+${exercises.length - 3} MORE',
-                          isMore: true),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 10),
-              Text(
-                _isEditMode ? 'TAP TO REPLACE OR CANCEL →' : 'TAP TO VIEW EXERCISES →',
-                style: GoogleFonts.manrope(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.5,
-                    color: AppColors.primary.withValues(alpha: 0.6)),
-              ),
-            ],
-          ],
+        if (!isRest) _buildDayReminderRow(day),
+      ],
+    );
+  }
+
+  // ── Per-day "start workout at X" reminder row ─────────────────────────
+  // Sits directly under a workout day card with no gap and squared-off
+  // top corners, so it reads as a connected extension of that card
+  // rather than a separate one. Independent of the blanket weekly
+  // reminder in Settings — this is a single day's own start-time alarm.
+
+  Widget _buildDayReminderRow(Map<String, dynamic> day) {
+    final enabled = day['reminderEnabled'] as bool? ?? false;
+    final hour = day['reminderHour'] as int? ?? 7;
+    final minute = day['reminderMinute'] as int? ?? 0;
+    final time = TimeOfDay(hour: hour, minute: minute);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        color: enabled
+            ? AppColors.surfaceContainerHigh
+            : AppColors.surfaceBright,
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(20),
+          bottomRight: Radius.circular(20),
+        ),
+        border: Border(
+          left: BorderSide(
+            color: enabled
+                ? AppColors.primary.withValues(alpha: 0.6)
+                : Colors.transparent,
+            width: 3,
+          ),
         ),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            Icons.alarm_rounded,
+            size: 16,
+            color: enabled
+                ? AppColors.primary
+                : AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: enabled ? () => _pickDayReminderTime(day) : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 200),
+                  style: GoogleFonts.manrope(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                    color: enabled
+                        ? AppColors.onSurface
+                        : AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                  ),
+                  child: Text(
+                    enabled
+                        ? 'START WORKOUT AT ${time.format(context)}'
+                        : 'START TIME REMINDER',
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Transform.scale(
+            scale: 0.8,
+            child: Switch(
+              value: enabled,
+              onChanged: (value) => _toggleDayReminder(day, value),
+              activeColor: AppColors.primary,
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  /// Flips a single day's reminder on/off, updating the UI immediately
+  /// and persisting/scheduling the underlying notification in the
+  /// background. Turning it on for the first time opens the time picker
+  /// right away so the user sets a start time in the same motion.
+  Future<void> _toggleDayReminder(Map<String, dynamic> day, bool value) async {
+    final hadTimeSet = day['reminderHour'] != null;
+    await _setDayReminder(day, enabled: value);
+    if (value && !hadTimeSet && mounted) {
+      await _pickDayReminderTime(day);
+    }
+  }
+
+  Future<void> _pickDayReminderTime(Map<String, dynamic> day) async {
+    final hour = day['reminderHour'] as int? ?? 7;
+    final minute = day['reminderMinute'] as int? ?? 0;
+
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: hour, minute: minute),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.dark(
+              primary: AppColors.primary,
+              surface: AppColors.surfaceContainerLow,
+              onSurface: AppColors.onSurface,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked == null) return;
+    await _setDayReminder(
+      day,
+      enabled: true,
+      hour: picked.hour,
+      minute: picked.minute,
+    );
+  }
+
+  /// Applies a reminder change to the specific day both locally (for an
+  /// instant, smooth toggle) and durably — Firestore for persistence,
+  /// NotificationService for the actual scheduled alarm. Reverts the local
+  /// change if either write fails, so the switch never lies about state.
+  Future<void> _setDayReminder(
+    Map<String, dynamic> day, {
+    required bool enabled,
+    int? hour,
+    int? minute,
+  }) async {
+    final dayId = day['id'] as String;
+    final days = (_plan!['days'] as List).cast<Map<String, dynamic>>();
+    final index = days.indexWhere((d) => d['id'] == dayId);
+    if (index == -1) return;
+
+    final previous = Map<String, dynamic>.from(days[index]);
+    final resolvedHour = hour ?? (day['reminderHour'] as int? ?? 7);
+    final resolvedMinute = minute ?? (day['reminderMinute'] as int? ?? 0);
+    final dayNumber = day['dayNumber'] as int;
+    final workoutName = day['workoutName'] as String? ?? 'Workout';
+
+    setState(() {
+      days[index] = {
+        ...days[index],
+        'reminderEnabled': enabled,
+        'reminderHour': resolvedHour,
+        'reminderMinute': resolvedMinute,
+      };
+    });
+
+    try {
+      if (enabled) {
+        await NotificationService().init();
+        final hasPermission = await NotificationService().hasPermission();
+        if (!hasPermission) {
+          if (mounted) {
+            setState(() => days[index] = previous);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Enable notifications for Rakan in system settings',
+                  style: GoogleFonts.manrope(color: AppColors.onSurface),
+                ),
+                backgroundColor: AppColors.surfaceContainerHigh,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      await WorkoutPlanService().updateDayReminder(
+        uid: uid,
+        planId: _plan!['id'] as String,
+        dayId: dayId,
+        enabled: enabled,
+        hour: resolvedHour,
+        minute: resolvedMinute,
+      );
+
+      if (enabled) {
+        await NotificationService().scheduleDayReminder(
+          dayNumber: dayNumber,
+          workoutName: workoutName,
+          hour: resolvedHour,
+          minute: resolvedMinute,
+        );
+      } else {
+        await NotificationService().cancelDayReminder(dayNumber);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => days[index] = previous);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Could not update reminder',
+              style: GoogleFonts.manrope(color: AppColors.onSurface),
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildExerciseChip(String label, {bool isMore = false}) {
@@ -625,10 +905,11 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       child: Text(
         label,
         style: GoogleFonts.manrope(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-            color: AppColors.onSurfaceVariant),
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+          color: AppColors.onSurfaceVariant,
+        ),
       ),
     );
   }
@@ -651,16 +932,24 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(dayName.toUpperCase(),
-                style: GoogleFonts.manrope(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.5,
-                    color: AppColors.onSurfaceVariant)),
+            Text(
+              dayName.toUpperCase(),
+              style: GoogleFonts.manrope(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.5,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text(workoutName,
-                style: GoogleFonts.spaceGrotesk(
-                    fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+            Text(
+              workoutName,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            ),
             const SizedBox(height: 24),
 
             _manageOptionTile(
@@ -720,16 +1009,29 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: GoogleFonts.spaceGrotesk(
-                          fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                  Text(
+                    title,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: GoogleFonts.manrope(fontSize: 12, color: AppColors.onSurfaceVariant)),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.manrope(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.onSurfaceVariant),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.onSurfaceVariant,
+            ),
           ],
         ),
       ),
@@ -738,14 +1040,15 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   void _showReplaceDayPicker(Map<String, dynamic> day) {
     final days = (_plan!['days'] as List).cast<Map<String, dynamic>>();
-    final replacementDays = days
-        .where((d) => d['id'] != day['id'])
-        .toList();
+    final replacementDays = days.where((d) => d['id'] != day['id']).toList();
 
     if (replacementDays.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('No other days to swap with.', style: GoogleFonts.manrope()),
+          content: Text(
+            'No other days to swap with.',
+            style: GoogleFonts.manrope(),
+          ),
           backgroundColor: AppColors.surfaceContainerHigh,
         ),
       );
@@ -783,10 +1086,11 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 child: Text(
                   'SWAP "${(day['workoutName'] as String).toUpperCase()}" WITH',
                   style: GoogleFonts.manrope(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.5,
-                      color: AppColors.onSurfaceVariant),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.5,
+                    color: AppColors.onSurfaceVariant,
+                  ),
                 ),
               ),
             ),
@@ -799,7 +1103,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 itemBuilder: (_, index) {
                   final other = replacementDays[index];
                   final otherExercises =
-                      (other['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                      (other['exercises'] as List?)
+                          ?.cast<Map<String, dynamic>>() ??
+                      [];
                   final isRestDay = other['dayType'] == 'rest';
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
@@ -823,7 +1129,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                                   Text(
                                     '${(other['dayName'] as String).toUpperCase()} • ${isRestDay ? 'Rest Day' : other['workoutName']}',
                                     style: GoogleFonts.spaceGrotesk(
-                                        fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.onSurface,
+                                    ),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
@@ -831,12 +1140,18 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                                         ? 'REST DAY'
                                         : '${otherExercises.length} EXERCISES',
                                     style: GoogleFonts.manrope(
-                                        fontSize: 10, letterSpacing: 1, color: AppColors.onSurfaceVariant),
+                                      fontSize: 10,
+                                      letterSpacing: 1,
+                                      color: AppColors.onSurfaceVariant,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
-                            const Icon(Icons.swap_horiz_rounded, color: AppColors.primary),
+                            const Icon(
+                              Icons.swap_horiz_rounded,
+                              color: AppColors.primary,
+                            ),
                           ],
                         ),
                       ),
@@ -851,39 +1166,60 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
   }
 
-  Future<void> _confirmSwap(Map<String, dynamic> dayA, Map<String, dynamic> dayB) async {
+  Future<void> _confirmSwap(
+    Map<String, dynamic> dayA,
+    Map<String, dynamic> dayB,
+  ) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surfaceContainerLow,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Swap Days?',
-            style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+        title: Text(
+          'Swap Days?',
+          style: GoogleFonts.spaceGrotesk(
+            color: AppColors.onSurface,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         content: Text(
           '${dayA['dayName']} will become "${dayB['workoutName']}", and ${dayB['dayName']} will become "${dayA['workoutName']}".',
-          style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant, height: 1.5),
+          style: GoogleFonts.manrope(
+            color: AppColors.onSurfaceVariant,
+            height: 1.5,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Swap',
-                style: GoogleFonts.manrope(color: AppColors.primary, fontWeight: FontWeight.w700)),
+            child: Text(
+              'Swap',
+              style: GoogleFonts.manrope(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
     );
 
     if (confirm != true) return;
-    await _runMutation(() => WorkoutPlanService().swapDays(
-          uid: FirebaseAuth.instance.currentUser!.uid,
-          planId: _plan!['id'] as String,
-          dayIdA: dayA['id'] as String,
-          dayIdB: dayB['id'] as String,
-        ));
+    await _runMutation(
+      () => WorkoutPlanService().swapDays(
+        uid: FirebaseAuth.instance.currentUser!.uid,
+        planId: _plan!['id'] as String,
+        dayIdA: dayA['id'] as String,
+        dayIdB: dayB['id'] as String,
+      ),
+    );
   }
 
   Future<void> _confirmCancelDay(Map<String, dynamic> day) async {
@@ -892,32 +1228,50 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surfaceContainerLow,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Cancel This Workout?',
-            style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+        title: Text(
+          'Cancel This Workout?',
+          style: GoogleFonts.spaceGrotesk(
+            color: AppColors.onSurface,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         content: Text(
           '${day['dayName']} will be marked as a rest day. Its exercises will be removed from the schedule.',
-          style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant, height: 1.5),
+          style: GoogleFonts.manrope(
+            color: AppColors.onSurfaceVariant,
+            height: 1.5,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Keep It', style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
+            child: Text(
+              'Keep It',
+              style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Cancel Day',
-                style: GoogleFonts.manrope(color: AppColors.error, fontWeight: FontWeight.w700)),
+            child: Text(
+              'Cancel Day',
+              style: GoogleFonts.manrope(
+                color: AppColors.error,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
     );
 
     if (confirm != true) return;
-    await _runMutation(() => WorkoutPlanService().cancelDay(
-          uid: FirebaseAuth.instance.currentUser!.uid,
-          planId: _plan!['id'] as String,
-          dayId: day['id'] as String,
-        ));
+    await _runMutation(
+      () => WorkoutPlanService().cancelDay(
+        uid: FirebaseAuth.instance.currentUser!.uid,
+        planId: _plan!['id'] as String,
+        dayId: day['id'] as String,
+      ),
+    );
   }
 
   /// Edit mode: manage sheet for rest days — lets the user convert a rest
@@ -938,16 +1292,24 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(dayName.toUpperCase(),
-                style: GoogleFonts.manrope(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.5,
-                    color: AppColors.onSurfaceVariant)),
+            Text(
+              dayName.toUpperCase(),
+              style: GoogleFonts.manrope(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.5,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text('Rest Day',
-                style: GoogleFonts.spaceGrotesk(
-                    fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+            Text(
+              'Rest Day',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            ),
             const SizedBox(height: 24),
             _manageOptionTile(
               icon: Icons.fitness_center_rounded,
@@ -975,14 +1337,21 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surfaceContainerLow,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('New Workout Name',
-            style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+        title: Text(
+          'New Workout Name',
+          style: GoogleFonts.spaceGrotesk(
+            color: AppColors.onSurface,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
           decoration: InputDecoration(
             hintText: '$dayNumber Workout',
-            hintStyle: GoogleFonts.manrope(color: AppColors.onSurfaceVariant.withValues(alpha: 0.4)),
+            hintStyle: GoogleFonts.manrope(
+              color: AppColors.onSurfaceVariant.withValues(alpha: 0.4),
+            ),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
@@ -1000,12 +1369,20 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Convert',
-                style: GoogleFonts.manrope(color: AppColors.primary, fontWeight: FontWeight.w700)),
+            child: Text(
+              'Convert',
+              style: GoogleFonts.manrope(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -1028,8 +1405,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final profile = await UserProfileService().getUserProfile(uid);
-      final userEquipment = (profile?['equipment'] as List?)?.cast<String>() ?? [];
-      final userExperience = profile?['experienceLevel'] as String? ?? 'beginner';
+      final userEquipment =
+          (profile?['equipment'] as List?)?.cast<String>() ?? [];
+      final userExperience =
+          profile?['experienceLevel'] as String? ?? 'beginner';
 
       final exercises = buildTemplateExercises(
         muscleGroup: muscleGroup,
@@ -1060,10 +1439,12 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     if (!mounted || updatedDay == null) return;
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => WorkoutDayDetailScreen(
-        day: updatedDay!,
-        planId: _plan!['id'] as String,
-      )),
+      MaterialPageRoute(
+        builder: (_) => WorkoutDayDetailScreen(
+          day: updatedDay!,
+          planId: _plan!['id'] as String,
+        ),
+      ),
     );
   }
 
@@ -1075,21 +1456,37 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surfaceContainerLow,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Start with a template?',
-            style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+        title: Text(
+          'Start with a template?',
+          style: GoogleFonts.spaceGrotesk(
+            color: AppColors.onSurface,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         content: Text(
           'Pick a muscle group and we\'ll add 3–4 exercises matched to your equipment and experience level.',
-          style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant, height: 1.5),
+          style: GoogleFonts.manrope(
+            color: AppColors.onSurfaceVariant,
+            height: 1.5,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Empty Workout', style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
+            child: Text(
+              'Empty Workout',
+              style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Use Template',
-                style: GoogleFonts.manrope(color: AppColors.primary, fontWeight: FontWeight.w700)),
+            child: Text(
+              'Use Template',
+              style: GoogleFonts.manrope(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -1098,7 +1495,15 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   /// Shows the muscle-group picker sheet (Chest, Back, Shoulders, Arms, Legs, Glutes, Core).
   Future<String?> _pickMuscleGroupSheet() {
-    const groups = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Glutes', 'Core'];
+    const groups = [
+      'Chest',
+      'Back',
+      'Shoulders',
+      'Arms',
+      'Legs',
+      'Glutes',
+      'Core',
+    ];
     return showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppColors.surfaceContainerLow,
@@ -1111,16 +1516,24 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Choose a focus',
-                style: GoogleFonts.spaceGrotesk(
-                    fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+            Text(
+              'Choose a focus',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            ),
             const SizedBox(height: 20),
             Wrap(
               spacing: 10,
               runSpacing: 10,
               children: groups.map((g) {
                 return ActionChip(
-                  label: Text(g, style: GoogleFonts.manrope(color: AppColors.onSurface)),
+                  label: Text(
+                    g,
+                    style: GoogleFonts.manrope(color: AppColors.onSurface),
+                  ),
                   backgroundColor: AppColors.surfaceContainerHigh,
                   shape: const StadiumBorder(),
                   onPressed: () => Navigator.pop(ctx, g),
@@ -1190,7 +1603,8 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final exRank = _kDifficultyRank[exerciseDifficulty] ?? 1;
     final normalized = userExperience.isEmpty
         ? 'beginner'
-        : userExperience[0].toUpperCase() + userExperience.substring(1).toLowerCase();
+        : userExperience[0].toUpperCase() +
+              userExperience.substring(1).toLowerCase();
     final userRank = _kDifficultyRank[normalized] ?? 0;
     return (exRank - userRank).abs();
   }
@@ -1303,8 +1717,12 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         .where((ex) => _equipmentMatches(ex.equipment, userEquipment))
         .toList();
 
-    resolved.sort((a, b) => _difficultyDistance(a.difficulty, userExperience)
-        .compareTo(_difficultyDistance(b.difficulty, userExperience)));
+    resolved.sort(
+      (a, b) => _difficultyDistance(
+        a.difficulty,
+        userExperience,
+      ).compareTo(_difficultyDistance(b.difficulty, userExperience)),
+    );
 
     return resolved.take(maxExercises).toList();
   }
@@ -1322,7 +1740,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Something went wrong. Please try again.', style: GoogleFonts.manrope()),
+            content: Text(
+              'Something went wrong. Please try again.',
+              style: GoogleFonts.manrope(),
+            ),
             backgroundColor: AppColors.error,
           ),
         );
@@ -1339,10 +1760,8 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   Future<void> _openDayDetail(Map<String, dynamic> day) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => WorkoutDayDetailScreen(
-          day: day,
-          planId: _plan!['id'] as String,
-        ),
+        builder: (_) =>
+            WorkoutDayDetailScreen(day: day, planId: _plan!['id'] as String),
       ),
     );
     // Always refresh on return — cheap, and correctly reflects any

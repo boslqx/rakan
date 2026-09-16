@@ -24,7 +24,9 @@ class WorkoutPlanService {
 
       final planDoc = activePlansSnapshot.docs.first;
       final planData = planDoc.data();
-      print('WorkoutPlanService: loaded active plan ${planDoc.id} for uid=$uid');
+      print(
+        'WorkoutPlanService: loaded active plan ${planDoc.id} for uid=$uid',
+      );
 
       return {
         ...planData,
@@ -36,7 +38,9 @@ class WorkoutPlanService {
         'days': await _loadDays(uid, planDoc.id),
       };
     } on FirebaseException catch (e) {
-      print('WorkoutPlanService: Firestore error for uid=$uid code=${e.code} message=${e.message}');
+      print(
+        'WorkoutPlanService: Firestore error for uid=$uid code=${e.code} message=${e.message}',
+      );
       rethrow;
     }
   }
@@ -113,9 +117,7 @@ class WorkoutPlanService {
   }) async {
     // Calendar-position fields stay with their existing documents. The
     // day type (including the legacy isRestDay field) moves with its content.
-    const slotFields = {
-      'dayNumber', 'dayName', 'dayOfWeek',
-    };
+    const slotFields = {'dayNumber', 'dayName', 'dayOfWeek'};
 
     final daysRef = _db
         .collection('users')
@@ -340,6 +342,34 @@ class WorkoutPlanService {
     await batch.commit();
   }
 
+  /// Persists the "start workout at X" reminder for a single workout day
+  /// (Schedule tab card), independent of the blanket weekly reminder set
+  /// in Settings. [hour]/[minute] are only meaningful while [enabled] is
+  /// true, but are always written so the last-picked time is remembered
+  /// the next time the reminder is turned back on.
+  Future<void> updateDayReminder({
+    required String uid,
+    required String planId,
+    required String dayId,
+    required bool enabled,
+    required int hour,
+    required int minute,
+  }) async {
+    final dayRef = _db
+        .collection('users')
+        .doc(uid)
+        .collection('workoutPlans')
+        .doc(planId)
+        .collection('days')
+        .doc(dayId);
+
+    await dayRef.update({
+      'reminderEnabled': enabled,
+      'reminderHour': hour,
+      'reminderMinute': minute,
+    });
+  }
+
   /// One-time schedule overrides for this user's plan — see
   /// [ScheduleMatcher.resolvedDayForDate]. Each override is keyed by its
   /// own calendar date, independent of the recurring weekly template.
@@ -381,14 +411,14 @@ class WorkoutPlanService {
         .collection('scheduleOverrides')
         .doc('${dateStr}__$muscleGroup')
         .set({
-      'date': dateStr,
-      'dayType': 'workout',
-      'workoutName': workoutName,
-      'muscleGroup': muscleGroup,
-      'exercises': exercises,
-      'sourceMissedDate': sourceMissedDate,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+          'date': dateStr,
+          'dayType': 'workout',
+          'workoutName': workoutName,
+          'muscleGroup': muscleGroup,
+          'exercises': exercises,
+          'sourceMissedDate': sourceMissedDate,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
   }
 
   /// Persists a new exercise order for a day, after the user drags to

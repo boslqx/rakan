@@ -28,6 +28,12 @@ class NotificationService {
   // a specific day's reminder without touching others.
   static const int _baseNotificationId = 100;
 
+  // Notification IDs 201-207 reserved for per-day "start workout at X"
+  // reminders set directly on a workout day card (Schedule tab). Kept in
+  // a separate ID range from the 101-107 blanket weekly reminders so the
+  // two features can't cancel/overwrite each other.
+  static const int _dayReminderBaseId = 200;
+
   /// Must be called once before scheduling — sets up timezone data
   /// and platform-specific notification channels.
   Future<void> init() async {
@@ -35,8 +41,9 @@ class NotificationService {
 
     tzdata.initializeTimeZones();
 
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
 
     // v22 uses named parameter 'settings' instead of positional
     await _plugin.initialize(
@@ -46,13 +53,15 @@ class NotificationService {
     // Android 13+ requires runtime notification permission
     await _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.requestNotificationsPermission();
 
     // Android 12+ requires exact alarm permission for precise scheduling
     await _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.requestExactAlarmsPermission();
 
     _initialized = true;
@@ -134,7 +143,12 @@ class NotificationService {
   tz.TZDateTime _nextInstanceOfWeekdayTime(int weekday, int hour, int minute) {
     final now = tz.TZDateTime.now(tz.local);
     var scheduled = tz.TZDateTime(
-      tz.local, now.year, now.month, now.day, hour, minute,
+      tz.local,
+      now.year,
+      now.month,
+      now.day,
+      hour,
+      minute,
     );
     // Walk forward until we reach the target weekday in the future
     while (scheduled.weekday != weekday || scheduled.isBefore(now)) {
@@ -151,11 +165,37 @@ class NotificationService {
     }
   }
 
+  /// Schedules a "time to start" reminder for a single workout day
+  /// (Schedule tab), repeating weekly on [dayNumber] (1=Monday…7=Sunday)
+  /// at [hour]:[minute].
+  Future<void> scheduleDayReminder({
+    required int dayNumber,
+    required String workoutName,
+    required int hour,
+    required int minute,
+  }) async {
+    await init();
+    await _scheduleWeekly(
+      id: _dayReminderBaseId + dayNumber,
+      title: 'Time to train 💪',
+      body: "$workoutName starts now. Let's get it done.",
+      weekday: dayNumber,
+      hour: hour,
+      minute: minute,
+    );
+  }
+
+  /// Cancels a single day's "time to start" reminder.
+  Future<void> cancelDayReminder(int dayNumber) async {
+    await _plugin.cancel(id: _dayReminderBaseId + dayNumber);
+  }
+
   /// Returns true if notification permission has been granted.
   Future<bool> hasPermission() async {
     final granted = await _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.areNotificationsEnabled();
     return granted ?? false;
   }
