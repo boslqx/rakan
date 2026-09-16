@@ -454,117 +454,241 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                     ),
                   ),
                 ),
-                GestureDetector(
-                  onTap: () async {
-                    if (!canDetectPosture) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              "Form check isn't available for this exercise yet."),
-                        ),
-                      );
-                      return;
-                    }
-                    final repsCompleted = await Navigator.of(context).push<int>(
-                      MaterialPageRoute(
-                        builder: (_) => PoseDetectionScreen(
-                          exerciseName: ex.exerciseName,
-                          targetReps: ex.sets.isNotEmpty ? ex.sets[0].reps : 10,
-                        ),
-                      ),
-                    );
-                    if (repsCompleted != null && repsCompleted > 0) {
-                      setState(() {
-                        final firstIncomplete = ex.currentSetIndex;
-                        if (firstIncomplete < ex.sets.length) {
-                          ex.completedSets.add(firstIncomplete);
-                        }
-                      });
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: canDetectPosture
-                          ? AppColors.primary.withValues(alpha: 0.15)
-                          : AppColors.surfaceContainerHigh,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.camera_alt_rounded,
-                            color: canDetectPosture
-                                ? AppColors.primary
-                                : AppColors.onSurfaceVariant,
-                            size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          'FORM',
-                          style: GoogleFonts.manrope(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1,
-                            color: canDetectPosture
-                                ? AppColors.primary
-                                : AppColors.onSurfaceVariant,
+                if (canDetectPosture)
+                  GestureDetector(
+                    onTap: () async {
+                      final repsCompleted = await Navigator.of(context).push<int>(
+                        MaterialPageRoute(
+                          builder: (_) => PoseDetectionScreen(
+                            exerciseName: ex.exerciseName,
+                            targetReps: ex.sets.isNotEmpty ? ex.sets[0].reps : 10,
                           ),
                         ),
-                      ],
+                      );
+                      if (repsCompleted != null && repsCompleted > 0) {
+                        setState(() {
+                          final firstIncomplete = ex.currentSetIndex;
+                          if (firstIncomplete < ex.sets.length) {
+                            ex.completedSets.add(firstIncomplete);
+                          }
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.camera_alt_rounded,
+                              color: AppColors.primary, size: 14),
+                          const SizedBox(width: 4),
+                          Text(
+                            'FORM',
+                            style: GoogleFonts.manrope(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
+                if (ex.isFullyComplete) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => setState(() => ex.collapsed = !ex.collapsed),
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        ex.collapsed
+                            ? Icons.expand_more_rounded
+                            : Icons.expand_less_rounded,
+                        color: AppColors.onSurfaceVariant,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 40,
-                  child: Text('SET',
-                      style: GoogleFonts.manrope(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.5,
-                          color: AppColors.onSurfaceVariant)),
-                ),
-                Expanded(
-                  child: Text('REPS',
-                      style: GoogleFonts.manrope(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.5,
-                          color: AppColors.onSurfaceVariant)),
-                ),
-                Expanded(
-                  child: Text('KG',
-                      style: GoogleFonts.manrope(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.5,
-                          color: AppColors.onSurfaceVariant)),
-                ),
-                const SizedBox(width: 40),
-              ],
+          if (!ex.collapsed) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 40,
+                    child: Text('SET',
+                        style: GoogleFonts.manrope(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.5,
+                            color: AppColors.onSurfaceVariant)),
+                  ),
+                  Expanded(
+                    child: Text('REPS',
+                        style: GoogleFonts.manrope(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.5,
+                            color: AppColors.onSurfaceVariant)),
+                  ),
+                  if (ex.tracksWeight) const SizedBox(width: 8),
+                  if (ex.tracksWeight)
+                    Expanded(
+                      child: Text('KG',
+                          style: GoogleFonts.manrope(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.5,
+                              color: AppColors.onSurfaceVariant)),
+                    ),
+                  const SizedBox(width: 8),
+                  const SizedBox(width: 36),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          ...ex.sets.asMap().entries.map((entry) {
-            final setIndex = entry.key;
-            final setData = entry.value;
-            final isCompleted = ex.completedSets.contains(setIndex);
+            const SizedBox(height: 8),
+            ...ex.sets.asMap().entries.map((entry) {
+              final setIndex = entry.key;
+              final setData = entry.value;
+              final isCompleted = ex.completedSets.contains(setIndex);
 
-            return _buildSetRow(
-              ex: ex,
-              setIndex: setIndex,
-              setData: setData,
-              isCompleted: isCompleted,
-            );
-          }),
-          if (ex.isFullyComplete) _buildRpeSlider(ex),
+              return _buildSetRow(
+                ex: ex,
+                setIndex: setIndex,
+                setData: setData,
+                isCompleted: isCompleted,
+                isCurrent: !isCompleted && setIndex == ex.currentSetIndex,
+              );
+            }),
+            if (ex.isFullyComplete) _buildRpeSlider(ex),
+          ] else
+            _buildCollapsedSummary(ex),
           const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
+  /// Fixed step size for the inline weight +/- buttons.
+  static const double _weightIncrement = 2.5;
+
+  Widget _buildCollapsedSummary(ExerciseSessionState ex) {
+    final totalVolume = ex.sets
+        .asMap()
+        .entries
+        .where((e) => ex.completedSets.contains(e.key))
+        .fold<double>(0, (sum, e) => sum + e.value.reps * e.value.weightKg);
+
+    final summary = ex.tracksWeight
+        ? '${ex.sets.length} SETS · ${totalVolume.toStringAsFixed(0)} KG VOLUME · RPE ${ex.rpe}'
+        : '${ex.sets.length} SETS COMPLETE · RPE ${ex.rpe}';
+
+    return GestureDetector(
+      onTap: () => setState(() => ex.collapsed = false),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded,
+                size: 16, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                summary,
+                style: GoogleFonts.manrope(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Applies [weight] to this set, and forward-fills it to any later
+  /// not-yet-completed sets — mirrors how lifters actually work a set
+  void _applyWeight(ExerciseSessionState ex, int setIndex, double weight) {
+    ex.weightManuallySet = true;
+    ex.sets[setIndex].weightKg = weight;
+    for (int i = setIndex + 1; i < ex.sets.length; i++) {
+      if (!ex.completedSets.contains(i)) {
+        ex.sets[i].weightKg = weight;
+      }
+    }
+  }
+
+  void _bumpWeight(ExerciseSessionState ex, int setIndex, double delta) {
+    final newWeight =
+        (ex.sets[setIndex].weightKg + delta).clamp(0, 999).toDouble();
+    setState(() => _applyWeight(ex, setIndex, newWeight));
+    HapticFeedback.selectionClick();
+  }
+
+  Widget _weightStepButton({required IconData icon, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 26,
+        height: 36,
+        child: Icon(icon, size: 14, color: AppColors.onSurfaceVariant),
+      ),
+    );
+  }
+
+  Widget _buildWeightCell(ExerciseSessionState ex, int setIndex, SetSessionState setData) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          _weightStepButton(
+            icon: Icons.remove_rounded,
+            onTap: () => _bumpWeight(ex, setIndex, -_weightIncrement),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _editWeight(ex, setIndex),
+              child: Text(
+                setData.weightKg == 0
+                    ? '—'
+                    : setData.weightKg.toStringAsFixed(1),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: setData.weightKg == 0
+                      ? AppColors.onSurfaceVariant
+                      : AppColors.onSurface,
+                ),
+              ),
+            ),
+          ),
+          _weightStepButton(
+            icon: Icons.add_rounded,
+            onTap: () => _bumpWeight(ex, setIndex, _weightIncrement),
+          ),
         ],
       ),
     );
@@ -575,9 +699,17 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
     required int setIndex,
     required SetSessionState setData,
     required bool isCompleted,
+    required bool isCurrent,
   }) {
-    return Padding(
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 2),
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+      decoration: BoxDecoration(
+        color: isCurrent
+            ? AppColors.primary.withValues(alpha: 0.06)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         children: [
           SizedBox(
@@ -587,6 +719,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
                 color: isCompleted
                     ? AppColors.primary
                     : AppColors.onSurfaceVariant,
@@ -608,9 +741,11 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                 ),
                 child: Text(
                   '${setData.reps}',
+                  textAlign: TextAlign.center,
                   style: GoogleFonts.spaceGrotesk(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                     color: AppColors.onSurface,
                   ),
                 ),
@@ -620,42 +755,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
           // Weight field — only rendered for exercises that support added load.
           if (ex.tracksWeight) ...[
             const SizedBox(width: 8),
-            Expanded(
-              child: GestureDetector(
-                onTap: () => _editValue(
-                  label: 'Weight (kg)',
-                  current: setData.weightKg.toInt(),
-                  onSave: (val) => setState(() {
-                    setData.weightKg = val.toDouble();
-                    ex.weightManuallySet = true;
-                    for (int i = setIndex + 1; i < ex.sets.length; i++) {
-                      if (!ex.completedSets.contains(i)) {
-                        ex.sets[i].weightKg = val.toDouble();
-                      }
-                    }
-                  }),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    setData.weightKg == 0
-                        ? '—'
-                        : setData.weightKg.toStringAsFixed(1),
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: setData.weightKg == 0
-                          ? AppColors.onSurfaceVariant
-                          : AppColors.onSurface,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            Expanded(child: _buildWeightCell(ex, setIndex, setData)),
           ],
           const SizedBox(width: 8),
           GestureDetector(
@@ -663,9 +763,13 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
               setState(() {
                 if (isCompleted) {
                   ex.completedSets.remove(setIndex);
+                  ex.collapsed = false;
                 } else {
                   ex.completedSets.add(setIndex);
                   HapticFeedback.lightImpact();
+                  // Don't auto-collapse here — the RPE slider (below) needs
+                  // to stay visible so the user can actually set it; collapse
+                  // is triggered instead once they finish dragging the slider
                 }
               });
             },
@@ -718,6 +822,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                 style: GoogleFonts.spaceGrotesk(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                   color: AppColors.primary,
                 ),
               ),
@@ -741,6 +846,13 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
               divisions: 9,
               onChanged: (val) =>
                   setState(() => ex.rpe = val.round()),
+              onChangeEnd: (val) {
+                if (!ex.isFullyComplete) return;
+                Future.delayed(const Duration(milliseconds: 350), () {
+                  if (!mounted) return;
+                  setState(() => ex.collapsed = true);
+                });
+              },
             ),
           ),
           Row(
@@ -866,6 +978,125 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                       fontWeight: FontWeight.w700, letterSpacing: 1.5)),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Weight-specific editor: decimal keyboard, and an explicit "apply to all
+  /// sets" toggle for retroactively fixing already-completed sets — the
+  /// implicit forward-fill in [_applyWeight] only reaches later, incomplete sets
+  Future<void> _editWeight(ExerciseSessionState ex, int setIndex) async {
+    final current = ex.sets[setIndex].weightKg;
+    final controller = TextEditingController(
+      text: current == 0 ? '' : current.toStringAsFixed(1),
+    );
+    bool applyToAll = false;
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerLow,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 24,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 32,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'WEIGHT (KG)',
+                style: GoogleFonts.manrope(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.5,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  hintText: '0',
+                  hintStyle: GoogleFonts.spaceGrotesk(
+                    fontSize: 32,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              if (ex.sets.length > 1) ...[
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => setSheetState(() => applyToAll = !applyToAll),
+                  child: Row(
+                    children: [
+                      Icon(
+                        applyToAll
+                            ? Icons.check_box_rounded
+                            : Icons.check_box_outline_blank_rounded,
+                        size: 20,
+                        color: applyToAll
+                            ? AppColors.primary
+                            : AppColors.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Apply to all ${ex.sets.length} sets',
+                        style: GoogleFonts.manrope(
+                          fontSize: 13,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  final val = double.tryParse(controller.text) ?? current;
+                  setState(() {
+                    if (applyToAll) {
+                      ex.weightManuallySet = true;
+                      for (final s in ex.sets) {
+                        s.weightKg = val;
+                      }
+                    } else {
+                      _applyWeight(ex, setIndex, val);
+                    }
+                  });
+                  Navigator.pop(sheetContext);
+                  if (!applyToAll && setIndex + 1 < ex.sets.length) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Applied to remaining sets'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+                child: Text('SAVE',
+                    style: GoogleFonts.spaceGrotesk(
+                        fontWeight: FontWeight.w700, letterSpacing: 1.5)),
+              ),
+            ],
+          ),
         ),
       ),
     );
