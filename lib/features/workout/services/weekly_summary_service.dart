@@ -123,6 +123,7 @@ class WeeklySummaryService {
     final List<Map<String, dynamic>> proposalPayloads = [];
     final Map<String, DocumentReference> proposalRefsById = {};
     final Map<String, String> muscleGroupByProposalId = {};
+    final Map<String, double> recoveryScoreByProposalId = {};
 
     for (final propDoc in proposalsSnap.docs) {
       final data = propDoc.data();
@@ -167,6 +168,7 @@ class WeeklySummaryService {
       });
       proposalRefsById[propDoc.id] = propDoc.reference;
       muscleGroupByProposalId[propDoc.id] = muscleGroup;
+      recoveryScoreByProposalId[propDoc.id] = recoveryScore;
     }
 
     // call the combined backend endpoint 
@@ -214,6 +216,7 @@ class WeeklySummaryService {
         final tier = resolved['tier'] as String;
         final reason = resolved['reason'] as String;
         final muscleGroup = muscleGroupByProposalId[proposalId]!;
+        final recoveryScore = recoveryScoreByProposalId[proposalId];
 
         // Apply to every future exercise whose primary muscleGroup matches
         await _applyAdjustmentToMuscleGroup(
@@ -224,6 +227,7 @@ class WeeklySummaryService {
           adjustment: finalAdjustment,
           tier: tier,
           reason: reason,
+          recoveryScore: recoveryScore,
           todayWeekday: now.weekday,
           changesOut: weeklyChanges,
         );
@@ -273,6 +277,7 @@ class WeeklySummaryService {
     required double adjustment,
     required String tier,
     required String reason,
+    required double? recoveryScore,
     required int todayWeekday,
     required List<Map<String, dynamic>> changesOut,
   }) async {
@@ -333,6 +338,7 @@ class WeeklySummaryService {
         'reason': reason,
         'adjustment': adjustment,
         'exercisesAffected': exercisesAffected,
+        if (recoveryScore != null) 'recoveryScore': recoveryScore,
       });
     }
   }
@@ -364,7 +370,9 @@ class WeeklySummaryService {
     return summaries.take(limit).toList();
   }
 
-  /// Returns the newest summary with changes the user has not yet seen.
+  /// Returns the newest weekly summary the user has not yet seen — whether
+  /// or not it contains any plan changes (`changesAcknowledged` gates
+  /// showing the recap popup at all, not just the changes section within it).
   Future<Map<String, dynamic>?> getLatestUnacknowledgedChanges(
     String uid,
   ) async {
@@ -380,9 +388,6 @@ class WeeklySummaryService {
     if (snap.docs.isEmpty) return null;
 
     final doc = snap.docs.first;
-    final changes = doc.data()['changes'] as List<dynamic>? ?? [];
-    if (changes.isEmpty) return null;
-
     return {'id': doc.id, ...doc.data()};
   }
 

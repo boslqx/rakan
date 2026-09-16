@@ -111,13 +111,13 @@ class _HomeScreenState extends State<HomeScreen> {
         _weekNumber = plan?['weekNumber'] as int?;
         _isLoading = false;
       });
-      // Check for missed days, then plan changes, after the initial load
-      // and UI are ready. Missed days first — resolving one can change
-      // what's scheduled today/this week, so it takes priority.
+      // Check for missed days, then the weekly recap, after the initial
+      // load and UI are ready. Missed days first — resolving one can
+      // change what's scheduled today/this week, so it takes priority.
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         await _checkForMissedDays();
-        if (mounted) await _checkForPlanChanges();
+        if (mounted) await _checkForWeeklySummary();
       });
     }
   }
@@ -169,7 +169,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _checkForPlanChanges() async {
+  /// Shows the weekly recap popup once a new summary is due — it surfaces
+  /// progress (sessions/avg RPE/volume) even on weeks with no plan changes,
+  /// so `changes` may be empty; see `getLatestUnacknowledgedChanges`.
+  Future<void> _checkForWeeklySummary() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
@@ -182,6 +185,9 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (_) => PlanChangesDialog(
         changes: summary['changes'] as List<dynamic>,
         trend: summary['trend'] as String?,
+        sessionsCompleted: summary['sessionsCompleted'] as int?,
+        avgRpe: (summary['avgRpe'] as num?)?.toDouble(),
+        totalVolume: (summary['totalVolume'] as num?)?.toDouble(),
       ),
     );
 
@@ -797,6 +803,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final exercises =
         (_todayDay!['exercises'] as List?)?.cast<Map<String, dynamic>>() ??
             [];
+    final isCompleted = _logForDate(DateTime.now()) != null;
 
     return Container(
       width: double.infinity,
@@ -875,10 +882,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
           const SizedBox(height: 24),
 
-          // Start Workout CTA
+          // Start Workout CTA — unclickable once today's session is logged
           ElevatedButton(
-            onPressed: () => _startTodaysWorkout(),
-            child: Text('START WORKOUT →',
+            onPressed: isCompleted ? null : () => _startTodaysWorkout(),
+            style: isCompleted
+                ? ElevatedButton.styleFrom(
+                    disabledBackgroundColor: AppColors.surfaceContainerLowest,
+                    disabledForegroundColor: AppColors.onSurfaceVariant,
+                  )
+                : null,
+            child: Text(isCompleted ? 'COMPLETED ✓' : 'START WORKOUT →',
                 style: GoogleFonts.spaceGrotesk(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
