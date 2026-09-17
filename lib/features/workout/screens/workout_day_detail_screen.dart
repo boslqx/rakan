@@ -4,8 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../data/exercise_data.dart';
+import '../services/workout_log_service.dart';
 import '../services/workout_plan_service.dart';
 import 'workout_active_screen.dart';
+import 'workout_log_detail_screen.dart';
 
 /// Editable version of the "workout preview" layout, opened from the
 /// Schedule tab when a day is tapped (replacing the old bottom sheet).
@@ -38,7 +40,25 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
   late int _durationMinutes;
   bool _isMutating = false;
 
+  Map<String, dynamic>? _completedLog;
+  bool _loadingStatus = true;
+
   bool get _isToday => widget.day['dayNumber'] == DateTime.now().weekday;
+
+  /// This week's actual calendar date for widget.day's weekday (Mon=1..Sun=7,
+  /// same convention as DateTime.weekday) — needed to look up whether that
+  /// occurrence was logged or, if its day already passed, went unlogged.
+  DateTime get _scheduledDateThisWeek {
+    final today = DateTime.now();
+    final dayNumber = widget.day['dayNumber'] as int? ?? today.weekday;
+    return DateTime(today.year, today.month, today.day)
+        .add(Duration(days: dayNumber - today.weekday));
+  }
+
+  bool get _isPastThisWeek => _scheduledDateThisWeek
+      .isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day));
+
+  bool get _isCompleted => _completedLog != null;
 
   @override
   void initState() {
@@ -47,6 +67,28 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
       (widget.day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [],
     );
     _durationMinutes = widget.day['durationMinutes'] as int? ?? 0;
+    _loadCompletionStatus();
+  }
+
+  /// Checks whether this week's occurrence of this day was already logged —
+  /// gates re-initiating a workout that's done, and labels past, unlogged
+  /// days as skipped rather than silently offering "start" on a day that's
+  /// already gone
+  Future<void> _loadCompletionStatus() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      if (mounted) setState(() => _loadingStatus = false);
+      return;
+    }
+    final log = await WorkoutLogService().getLogForDate(
+      uid: uid,
+      date: _scheduledDateThisWeek,
+    );
+    if (!mounted) return;
+    setState(() {
+      _completedLog = log;
+      _loadingStatus = false;
+    });
   }
 
   // ── Duration estimate ──────────────────────────────────────────────
@@ -199,6 +241,67 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
       ),
     );
     if (confirm == true) _removeExercise(index);
+  }
+
+  /// The bottom CTA: "start" only when today's window is open and unused —
+  /// already-logged and already-passed days each get their own read-only
+  /// state instead of silently offering (or re-offering) INITIATE PROTOCOL
+  Widget _buildActionSection() {
+    final String label;
+    final String subtitle;
+    final VoidCallback? onPressed;
+    final bool isDone = _isCompleted;
+    final bool isSkipped = !isDone && _isPastThisWeek;
+
+    if (_loadingStatus) {
+      label = 'INITIATE PROTOCOL →';
+      subtitle = '';
+      onPressed = null;
+    } else if (isDone) {
+      label = 'WORKOUT COMPLETED · VIEW →';
+      subtitle = _isToday ? 'GREAT WORK — SEE YOU TOMORROW' : 'COMPLETED THIS WEEK';
+      onPressed = () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => WorkoutLogDetailScreen(log: _completedLog!)),
+          );
+    } else if (isSkipped) {
+      label = 'SESSION SKIPPED';
+      subtitle = "THIS DAY'S WINDOW HAS PASSED";
+      onPressed = null;
+    } else if (_isToday) {
+      label = 'INITIATE PROTOCOL →';
+      subtitle = 'READY FOR 100% OUTPUT?';
+      onPressed = (_exercises.isNotEmpty && !_isMutating) ? _startWorkout : null;
+    } else {
+      label = 'INITIATE PROTOCOL →';
+      subtitle = 'AVAILABLE ON ITS SCHEDULED DAY';
+      onPressed = null;
+    }
+
+    return Column(
+      children: [
+        ElevatedButton(
+          onPressed: onPressed,
+          style: ElevatedButton.styleFrom(
+            disabledBackgroundColor: AppColors.surfaceContainerHigh,
+            backgroundColor: isDone ? AppColors.primary.withValues(alpha: 0.15) : null,
+            foregroundColor: isDone ? AppColors.primary : null,
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.spaceGrotesk(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 1.5),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          subtitle,
+          style: GoogleFonts.manrope(
+            fontSize: 10,
+            letterSpacing: 2,
+            color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+          ),
+        ),
+      ],
+    );
   }
 
   void _startWorkout() {
@@ -617,29 +720,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
 
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-              child: Column(
-                children: [
-                  ElevatedButton(
-                    onPressed: (_isToday && _exercises.isNotEmpty && !_isMutating) ? _startWorkout : null,
-                    style: ElevatedButton.styleFrom(
-                      disabledBackgroundColor: AppColors.surfaceContainerHigh,
-                    ),
-                    child: Text(
-                      'INITIATE PROTOCOL →',
-                      style: GoogleFonts.spaceGrotesk(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 1.5),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _isToday ? 'READY FOR 100% OUTPUT?' : "AVAILABLE ON ITS SCHEDULED DAY",
-                    style: GoogleFonts.manrope(
-                      fontSize: 10,
-                      letterSpacing: 2,
-                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ],
-              ),
+              child: _buildActionSection(),
             ),
           ],
         ),

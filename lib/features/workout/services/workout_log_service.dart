@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/exercise_data.dart';
 import '../data/muscle_recovery_constants.dart';
+import 'schedule_matcher.dart';
 
 class WorkoutLogService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -381,6 +382,19 @@ class WorkoutLogService {
     final lastTrainedStr = doc.data()?['lastTrained'] as String?;
     if (lastTrainedStr == null) return null;
     return DateTime.tryParse(lastTrainedStr);
+  }
+
+  /// Finds a completed workout log whose completedAt falls on [date] — for
+  /// callers that don't already hold a full logs list in memory (unlike
+  /// HomeScreen, which keeps `_allLogs` and calls ScheduleMatcher directly)
+  Future<Map<String, dynamic>?> getLogForDate({
+    required String uid,
+    required DateTime date,
+  }) async {
+    final snapshot =
+        await _db.collection('users').doc(uid).collection('workoutLogs').get();
+    final logs = snapshot.docs.map((d) => d.data()).toList();
+    return ScheduleMatcher.logForDate(logs, date);
   }
 
   /// Fetches recent workout logs for the home screen activity feed.

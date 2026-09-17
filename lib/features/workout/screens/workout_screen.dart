@@ -879,7 +879,8 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       } else {
         await NotificationService().cancelDayReminder(dayNumber);
       }
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('_setDayReminder failed: $e\n$stack');
       if (mounted) {
         setState(() => days[index] = previous);
         ScaffoldMessenger.of(context).showSnackBar(

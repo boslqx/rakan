@@ -1,6 +1,7 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:timezone/data/latest_all.dart' as tzdata;
 
 /// Handles scheduling of local workout reminder notifications.
 ///
@@ -39,7 +40,14 @@ class NotificationService {
   Future<void> init() async {
     if (_initialized) return;
 
+    // latest_all (not latest) is required here: Android reports the device
+    // zone as "Asia/Kuala_Lumpur", which IANA tzdata defines as an alias of
+    // the canonical "Asia/Singapore" zone. package:timezone's "latest"
+    // dataset only ships canonical zone names and throws on alias lookups
+    // ("Location ... doesn't exist") — "latest_all" includes the aliases.
     tzdata.initializeTimeZones();
+    final currentTimeZone = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(currentTimeZone.identifier));
 
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
