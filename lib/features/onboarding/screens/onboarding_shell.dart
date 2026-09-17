@@ -15,16 +15,27 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/user_profile_service.dart';
 
 class OnboardingShell extends StatefulWidget {
-  const OnboardingShell({super.key});
+  // Pre-fills every step with an existing profile (e.g. Reset Plan's
+  // "update my goals" path) instead of starting blank. Null for
+  // first-time onboarding.
+  final OnboardingData? initialData;
+
+  const OnboardingShell({super.key, this.initialData});
 
   @override
   State<OnboardingShell> createState() => _OnboardingShellState();
 }
 
 class _OnboardingShellState extends State<OnboardingShell> {
-  final OnboardingData _data = OnboardingData();
+  late final OnboardingData _data;
   int _currentStep = 0;
   static const int _totalSteps = 8;
+
+  @override
+  void initState() {
+    super.initState();
+    _data = widget.initialData ?? OnboardingData();
+  }
 
   static const List<String> _stepTitles = [
     'Personal Profile',

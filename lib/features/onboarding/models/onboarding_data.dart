@@ -243,4 +243,71 @@ OnboardingData:
     }
     return result;
   }
+
+  /// Rebuilds an OnboardingData from the profile map toMap() produces (as
+  /// stored at users/{uid}/profile/data) — the inverse of toMap(). Used to
+  /// pre-fill a regeneration flow (e.g. Reset Plan) with what the user
+  /// already answered, instead of starting from a blank OnboardingData.
+  factory OnboardingData.fromMap(Map<String, dynamic> map) {
+    return OnboardingData(
+      name: map['name'] as String?,
+      gender: _enumFromName(Gender.values, map['gender']),
+      age: (map['age'] as num?)?.toInt(),
+      heightCm: (map['heightCm'] as num?)?.toDouble(),
+      weightKg: (map['weightKg'] as num?)?.toDouble(),
+      isMetric: map['isMetric'] as bool? ?? true,
+      activityLevel: _enumFromName(ActivityLevel.values, map['activityLevel']),
+      fitnessGoal: _enumFromName(FitnessGoal.values, map['fitnessGoal']),
+      experienceLevel:
+          _enumFromName(ExperienceLevel.values, map['experienceLevel']),
+      sessionDuration:
+          _enumFromName(SessionDuration.values, map['sessionDuration']),
+      motivation: _enumFromName(Motivation.values, map['motivation']),
+      workoutDays: (map['workoutDays'] as List<dynamic>?)
+              ?.map((d) => (d as num).toInt())
+              .toSet() ??
+          {},
+      equipment: equipmentFromNames(map['equipment'] as List<dynamic>?),
+      focusAreas: _focusAreasFromNames(map['focusAreas'] as List<dynamic>?),
+      injuries: _injuriesFromList(map['injuries'] as List<dynamic>?),
+    );
+  }
+
+  /// Generic "find the enum value whose .name matches this stored string"
+  /// lookup — every enum field here is persisted the same way (toMap()
+  /// writes `field?.name`), so one helper covers all of them.
+  static T? _enumFromName<T extends Enum>(List<T> values, dynamic name) {
+    if (name == null) return null;
+    for (final value in values) {
+      if (value.name == name) return value;
+    }
+    return null;
+  }
+
+  static Set<FocusArea> _focusAreasFromNames(List<dynamic>? raw) {
+    if (raw == null) return {};
+    final result = <FocusArea>{};
+    for (final name in raw) {
+      final match = _enumFromName(FocusArea.values, name);
+      if (match != null) result.add(match);
+    }
+    return result;
+  }
+
+  static List<InjuryEntry> _injuriesFromList(List<dynamic>? raw) {
+    if (raw == null) return [];
+    final result = <InjuryEntry>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final region = _enumFromName(BodyRegion.values, item['region']);
+      final label = item['label'] as String?;
+      if (region == null || label == null) continue;
+      result.add(InjuryEntry(
+        region: region,
+        label: label,
+        isCustom: item['isCustom'] as bool? ?? false,
+      ));
+    }
+    return result;
+  }
 }

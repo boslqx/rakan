@@ -18,6 +18,7 @@ import '../services/weight_record_service.dart';
 import 'log_weight_screen.dart';
 import 'all_records_screen.dart';
 import '../../onboarding/models/onboarding_data.dart';
+import '../../onboarding/screens/onboarding_shell.dart';
 import '../../onboarding/screens/plan_generation_screen.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../widgets/plan_changes_section.dart';
@@ -86,6 +87,7 @@ class _MuscleFocusStat {
   final double volume;
   final int sets;
   final int exerciseCount;
+  final int timesTrained; // distinct sessions with a completed set for this group
   final double percentOfTotal; // 0..1, share of this period's total volume
   final double normalized; // 0..1, this group's volume / the max group's
 
@@ -94,6 +96,7 @@ class _MuscleFocusStat {
     required this.volume,
     required this.sets,
     required this.exerciseCount,
+    required this.timesTrained,
     required this.percentOfTotal,
     required this.normalized,
   });
@@ -128,11 +131,14 @@ class _CoachScreenState extends State<CoachScreen> {
   // Stats data
   bool _statsLoading = true;
   List<Map<String, dynamic>> _recentLogs = [];
-  Map<String, int> _muscleFrequency = {}; // muscleGroup → times trained
   int _workoutsThisWeek = 0;
   int _plannedThisWeek = 0;
 
-  // Adherence (4-week)
+  // Adherence — shared card, toggled between "this week" (built from
+  // _workoutsThisWeek/_plannedThisWeek, loaded by _loadStats) and "last 4
+  // weeks" (below, its own fetch since it needs a 28-day window _loadStats
+  // doesn't compute).
+  int _adherenceViewIndex = 0; // 0 = This Week, 1 = Last 4 Weeks
   bool _adherenceLoading = true;
   int _completedLast4Weeks = 0;
   int _targetLast4Weeks = 0;
@@ -445,6 +451,11 @@ class _CoachScreenState extends State<CoachScreen> {
       final Map<String, double> volumeByGroup = {};
       final Map<String, int> setsByGroup = {};
       final Map<String, Set<String>> exercisesByGroup = {};
+      // Distinct log IDs per group — "how many sessions trained this group",
+      // folded in here from the old separate "Muscle Breakdown" card so
+      // that number respects the same range filter as everything else in
+      // this card instead of being hardcoded to "this week".
+      final Map<String, Set<String>> sessionsByGroup = {};
 
       for (final log in logsInWindow) {
         final logId = log['logId'] as String?;
@@ -480,6 +491,7 @@ class _CoachScreenState extends State<CoachScreen> {
           volumeByGroup[group] = (volumeByGroup[group] ?? 0) + volume;
           setsByGroup[group] = (setsByGroup[group] ?? 0) + completedSets.length;
           exercisesByGroup.putIfAbsent(group, () => {}).add(exerciseName);
+          sessionsByGroup.putIfAbsent(group, () => {}).add(logId);
         }
       }
 
@@ -495,6 +507,7 @@ class _CoachScreenState extends State<CoachScreen> {
           volume: volume,
           sets: setsByGroup[group] ?? 0,
           exerciseCount: exercisesByGroup[group]?.length ?? 0,
+          timesTrained: sessionsByGroup[group]?.length ?? 0,
           percentOfTotal: totalVolume > 0 ? volume / totalVolume : 0.0,
           normalized: maxVolume > 0 ? volume / maxVolume : 0.0,
         );
@@ -953,33 +966,10 @@ class _CoachScreenState extends State<CoachScreen> {
         }
       }
 
-      // Compute muscle frequency from exerciseLogs subcollections
-      final Map<String, int> muscleFreq = {};
-      final logDocs = await _db
-          .collection('users')
-          .doc(_uid)
-          .collection('workoutLogs')
-          .get();
-
-      for (final logDoc in logDocs.docs) {
-        final completedStr = logDoc.data()['completedAt'] as String? ?? '';
-        final completedAt = DateTime.tryParse(completedStr);
-        if (completedAt == null) continue;
-        final logDate = DateTime(completedAt.year, completedAt.month, completedAt.day);
-        if (!logDate.isAfter(weekStartDate.subtract(const Duration(days: 1)))) continue;
-
-        final exLogs = await logDoc.reference.collection('exerciseLogs').get();
-        for (final ex in exLogs.docs) {
-          final muscle = ex.data()['muscleGroup'] as String? ?? 'other';
-          muscleFreq[muscle] = (muscleFreq[muscle] ?? 0) + 1;
-        }
-      }
-
       setState(() {
         _recentLogs = logs;
         _workoutsThisWeek = workoutsThisWeek;
         _plannedThisWeek = plannedThisWeek;
-        _muscleFrequency = muscleFreq;
         _statsLoading = false;
       });
     } catch (e, stack) {
@@ -1199,10 +1189,6 @@ class _CoachScreenState extends State<CoachScreen> {
         _buildMonthlyOverviewCard(),
         const SizedBox(height: 16),
         _buildAdherenceCard(),
-        const SizedBox(height: 16),
-        _buildConsistencyCard(),
-        const SizedBox(height: 16),
-        _buildMuscleBreakdownCard(),
         const SizedBox(height: 16),
         _buildProgressionCard(),
         const SizedBox(height: 24),
@@ -2086,7 +2072,8 @@ class _CoachScreenState extends State<CoachScreen> {
           const SizedBox(height: 2),
           Text(
             '${stat.sets} sets · ${stat.exerciseCount} '
-            '${stat.exerciseCount == 1 ? 'exercise' : 'exercises'}',
+            '${stat.exerciseCount == 1 ? 'exercise' : 'exercises'} · '
+            'trained ${stat.timesTrained}×',
             style: GoogleFonts.manrope(
               fontSize: 12,
               color: AppColors.onSurfaceVariant,
@@ -2132,115 +2119,39 @@ class _CoachScreenState extends State<CoachScreen> {
     );
   }
 
-  Widget _buildConsistencyCard() {
-    final rate = _plannedThisWeek > 0
-        ? (_workoutsThisWeek / _plannedThisWeek).clamp(0.0, 1.0)
-        : 0.0;
+  // Adherence — merges what used to be two separate cards ("Consistency"
+  // and "4-Week Adherence") into one, toggled between windows. Both were
+  // the same ring+message shape measuring the same thing (completed vs
+  // planned sessions) at two different windows, stacked back to back.
+  Widget _buildAdherenceCard() {
+    final bool isWeekView = _adherenceViewIndex == 0;
+    final bool isLoading = isWeekView ? _statsLoading : _adherenceLoading;
+    final int completed = isWeekView ? _workoutsThisWeek : _completedLast4Weeks;
+    final int target = isWeekView ? _plannedThisWeek : _targetLast4Weeks;
+
+    final rate = target > 0 ? (completed / target).clamp(0.0, 1.0) : 0.0;
     final pct = (rate * 100).round();
 
     String message;
-    if (pct >= 90) message = 'Elite level precision.';
-    else if (pct >= 70) message = 'Solid consistency. Keep pushing.';
-    else if (pct >= 50) message = 'Good start. Build the habit.';
-    else if (_plannedThisWeek == 0) message = 'No plan active this week.';
-    else message = 'Let\'s get moving. You\'ve got this.';
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        children: [
-          Text(
-            'Consistency',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.onSurface,
-            ),
-          ),
-          const SizedBox(height: 24),
-          // Ring
-          SizedBox(
-            width: 120,
-            height: 120,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 120,
-                  height: 120,
-                  child: CircularProgressIndicator(
-                    value: rate,
-                    strokeWidth: 10,
-                    backgroundColor: AppColors.surfaceContainerHigh,
-                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                    strokeCap: StrokeCap.round,
-                  ),
-                ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '$pct%',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface,
-                      ),
-                    ),
-                    Text(
-                      'GOAL HIT',
-                      style: GoogleFonts.manrope(
-                        fontSize: 9,
-                        letterSpacing: 2,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            "You've completed $_workoutsThisWeek of your $_plannedThisWeek scheduled sessions. $message",
-            textAlign: TextAlign.center,
-            style: GoogleFonts.manrope(
-              fontSize: 13,
-              color: AppColors.onSurfaceVariant,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Muscle Breakdown
-  Widget _buildMuscleBreakdownCard() {
-    if (_muscleFrequency.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Text(
-          'Complete workouts to see muscle breakdown.',
-          style: GoogleFonts.manrope(
-            fontSize: 13,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-      );
+    if (target == 0) {
+      message = isWeekView
+          ? 'No plan active this week.'
+          : 'No active plan to compare against.';
+    } else if (pct >= 90) {
+      message = 'Elite level precision.';
+    } else if (pct >= 70) {
+      message = 'Solid consistency. Keep pushing.';
+    } else if (pct >= 50) {
+      message = 'Good start. Build the habit.';
+    } else {
+      message = "Let's get moving. You've got this.";
     }
 
-    final sorted = _muscleFrequency.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final maxFreq = sorted.first.value;
+    final subtitle = target == 0
+        ? message
+        : isWeekView
+            ? "You've completed $completed of $target scheduled sessions this week. $message"
+            : '$completed of $target planned sessions completed over the last 28 days. $message';
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -2252,100 +2163,13 @@ class _CoachScreenState extends State<CoachScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Muscle Focus This Week',
+            'Adherence',
             style: GoogleFonts.spaceGrotesk(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: AppColors.onSurface,
             ),
           ),
-          const SizedBox(height: 20),
-          ...sorted.take(5).map((entry) {
-            final ratio = entry.value / maxFreq;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        entry.key.toUpperCase(),
-                        style: GoogleFonts.manrope(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.5,
-                          color: AppColors.onSurface,
-                        ),
-                      ),
-                      Text(
-                        '${entry.value}x',
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: ratio,
-                      backgroundColor: AppColors.surfaceContainerHigh,
-                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                      minHeight: 4,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  // 4-Week Adherence Card
-  Widget _buildAdherenceCard() {
-    if (_adherenceLoading) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: const Center(
-          child: CircularProgressIndicator(color: AppColors.primary),
-        ),
-      );
-    }
-
-    final rate = _targetLast4Weeks > 0
-        ? (_completedLast4Weeks / _targetLast4Weeks).clamp(0.0, 1.0)
-        : 0.0;
-    final pct = (rate * 100).round();
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '4-Week Adherence',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.onSurface,
-            ),
-          ),
-          const SizedBox(height: 4),
           Text(
             'Consistency against your active plan',
             style: GoogleFonts.manrope(
@@ -2353,56 +2177,214 @@ class _CoachScreenState extends State<CoachScreen> {
               color: AppColors.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              SizedBox(
-                width: 72,
-                height: 72,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    SizedBox(
-                      width: 72,
-                      height: 72,
-                      child: CircularProgressIndicator(
-                        value: rate,
-                        strokeWidth: 7,
-                        backgroundColor: AppColors.surfaceContainerHigh,
-                        valueColor:
-                            const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                        strokeCap: StrokeCap.round,
-                      ),
-                    ),
-                    Text(
-                      '$pct%',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface,
-                      ),
-                    ),
-                  ],
-                ),
+          const SizedBox(height: 16),
+          _buildAdherenceViewToggle(),
+          const SizedBox(height: 24),
+          if (isLoading)
+            const SizedBox(
+              height: 120,
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
               ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: Text(
-                  _targetLast4Weeks > 0
-                      ? '$_completedLast4Weeks of $_targetLast4Weeks planned sessions completed over the last 28 days.'
-                      : 'No active plan to compare against.',
+            )
+          else
+            Column(
+              children: [
+                SizedBox(
+                  width: 120,
+                  height: 120,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 120,
+                        height: 120,
+                        child: CircularProgressIndicator(
+                          value: rate,
+                          strokeWidth: 10,
+                          backgroundColor: AppColors.surfaceContainerHigh,
+                          valueColor:
+                              const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                          strokeCap: StrokeCap.round,
+                        ),
+                      ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '$pct%',
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                          Text(
+                            'GOAL HIT',
+                            style: GoogleFonts.manrope(
+                              fontSize: 9,
+                              letterSpacing: 2,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
                   style: GoogleFonts.manrope(
                     fontSize: 13,
                     color: AppColors.onSurfaceVariant,
                     height: 1.5,
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );
+  }
+
+  Widget _buildAdherenceViewToggle() {
+    const labels = ['THIS WEEK', '4 WEEKS'];
+    return Row(
+      children: List.generate(labels.length, (i) {
+        final isSelected = _adherenceViewIndex == i;
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: GestureDetector(
+            onTap: () => setState(() => _adherenceViewIndex = i),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                labels[i],
+                style: GoogleFonts.manrope(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: isSelected
+                      ? AppColors.onPrimary
+                      : AppColors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  /// Tap target for exercise selection, styled like the rest of this
+  /// screen's pill/chip controls instead of a native DropdownButton (which
+  /// pops a system menu that breaks the app's own visual language).
+  Widget _buildExercisePickerField() {
+    return GestureDetector(
+      onTap: _showExercisePickerSheet,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _selectedExercise ?? '',
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.manrope(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ),
+            const Icon(Icons.keyboard_arrow_down_rounded,
+                color: AppColors.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showExercisePickerSheet() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerHigh,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.6,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                child: Text(
+                  'SELECT EXERCISE',
+                  style: GoogleFonts.manrope(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.5,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.only(bottom: 8),
+                  itemCount: _loggedExerciseNames.length,
+                  itemBuilder: (context, i) {
+                    final name = _loggedExerciseNames[i];
+                    final isSelected = name == _selectedExercise;
+                    return ListTile(
+                      onTap: () => Navigator.of(ctx).pop(name),
+                      title: Text(
+                        name,
+                        style: GoogleFonts.manrope(
+                          fontSize: 14,
+                          fontWeight:
+                              isSelected ? FontWeight.w700 : FontWeight.w500,
+                          color: isSelected
+                              ? AppColors.primary
+                              : AppColors.onSurface,
+                        ),
+                      ),
+                      trailing: isSelected
+                          ? const Icon(Icons.check_rounded,
+                              color: AppColors.primary)
+                          : null,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (selected != null && selected != _selectedExercise) {
+      setState(() => _selectedExercise = selected);
+      _loadExerciseProgression(selected);
+    }
   }
 
   // Exercise Progression Card
@@ -2444,38 +2426,7 @@ class _CoachScreenState extends State<CoachScreen> {
           const SizedBox(height: 16),
 
           // Exercise picker
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedExercise,
-                isExpanded: true,
-                dropdownColor: AppColors.surfaceContainerHigh,
-                icon: const Icon(Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.onSurfaceVariant),
-                style: GoogleFonts.manrope(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.onSurface,
-                ),
-                items: _loggedExerciseNames
-                    .map((name) => DropdownMenuItem(
-                          value: name,
-                          child: Text(name),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _selectedExercise = value);
-                  _loadExerciseProgression(value);
-                },
-              ),
-            ),
-          ),
+          _buildExercisePickerField(),
           const SizedBox(height: 14),
 
           // Range chips
@@ -2558,7 +2509,7 @@ class _CoachScreenState extends State<CoachScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.onSurfaceVariant.withOpacity(0.08),
+        color: AppColors.onSurfaceVariant.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -2722,7 +2673,7 @@ class _CoachScreenState extends State<CoachScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'This will erase your current AI-adapted plan. Only use this if your training goals have fundamentally shifted.',
+          'This will erase your current AI-adapted plan and its accumulated adjustments. Use this for a fresh start, or if your training goals have changed.',
           style: GoogleFonts.manrope(
             fontSize: 13,
             color: AppColors.onSurfaceVariant,
@@ -2735,7 +2686,7 @@ class _CoachScreenState extends State<CoachScreen> {
           child: ElevatedButton(
             onPressed: _showResetConfirmation,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error.withOpacity(0.15),
+              backgroundColor: AppColors.error.withValues(alpha: 0.15),
               foregroundColor: AppColors.error,
               elevation: 0,
               shape: RoundedRectangleBorder(
@@ -2786,10 +2737,123 @@ class _CoachScreenState extends State<CoachScreen> {
     );
 
     if (confirm != true || !mounted) return;
-    await _resetPlan();
+
+    final keepGoals = await _showRegenerateChoiceSheet();
+    if (keepGoals == null || !mounted) return;
+    await _resetPlan(keepGoals: keepGoals);
   }
 
-  Future<void> _resetPlan() async {
+  /// true = regenerate with the existing profile as-is (same goal,
+  /// equipment, schedule — just a fresh exercise selection, since the
+  /// backend shuffles its exercise pool on every call). false = walk the
+  /// onboarding wizard again, pre-filled, so the user can actually change
+  /// something. null = dismissed without choosing.
+  Future<bool?> _showRegenerateChoiceSheet() {
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'NEW PLAN',
+                style: GoogleFonts.manrope(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'How should Rakan build it?',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              const SizedBox(height: 20),
+              _buildRegenerateOption(
+                icon: Icons.refresh_rounded,
+                title: 'Keep My Goals',
+                subtitle:
+                    'Same goal, equipment, and schedule — just a fresh set of exercises.',
+                onTap: () => Navigator.of(ctx).pop(true),
+              ),
+              const SizedBox(height: 12),
+              _buildRegenerateOption(
+                icon: Icons.edit_note_rounded,
+                title: 'Update My Goals',
+                subtitle:
+                    'Walk through your training profile again to change anything.',
+                onTap: () => Navigator.of(ctx).pop(false),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRegenerateOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: AppColors.primary, size: 22),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.manrope(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                color: AppColors.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _resetPlan({required bool keepGoals}) async {
     if (_uid == null) return;
     try {
       // Mark all active plans as inactive
@@ -2805,17 +2869,29 @@ class _CoachScreenState extends State<CoachScreen> {
         }
       }
 
+      // Rebuild from the already-saved profile instead of starting blank
+      // — previously this passed a bare OnboardingData() here, which sent
+      // empty equipment/workout_days/focus_areas to the backend and
+      // silently produced a plan with zero workout days (every day
+      // defaulted to rest).
+      final profileSnap = await _db
+          .collection('users')
+          .doc(_uid)
+          .collection('profile')
+          .doc('data')
+          .get();
+      final data = OnboardingData.fromMap(profileSnap.data() ?? {});
+
       if (!mounted) return;
-      // Navigate to plan generation screen
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => PlanGenerationScreen(
-            data: OnboardingData(),
-          ),
+          builder: (_) => keepGoals
+              ? PlanGenerationScreen(data: data)
+              : OnboardingShell(initialData: data),
         ),
       );
     } catch (e) {
-      print('Reset plan error: $e');
+      debugPrint('Reset plan error: $e');
     }
   }
 
@@ -3288,7 +3364,6 @@ class _CoachScreenState extends State<CoachScreen> {
 
   // Heatmap
   Widget _buildHeatmapCard() {
-    debugPrint('muscleRecoveryData: ${_muscleRecoveryData.keys.toList()}, glutes doc: ${_muscleRecoveryData['Glutes']}');
     final heatmapData = _buildMergedHeatmapData();
 
     return Container(
@@ -3703,7 +3778,7 @@ class _CoachScreenState extends State<CoachScreen> {
                           horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? AppColors.primary.withOpacity(0.2)
+                            ? AppColors.primary.withValues(alpha: 0.2)
                             : AppColors.surfaceContainerHigh,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
@@ -3864,7 +3939,7 @@ class _CoachScreenState extends State<CoachScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.15),
+                            color: AppColors.primary.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
@@ -4018,5 +4093,5 @@ class _CoachScreenState extends State<CoachScreen> {
     return result;
   }
 
-  Color get _noDataColor => AppColors.onSurfaceVariant.withOpacity(0.25);
+  Color get _noDataColor => AppColors.onSurfaceVariant.withValues(alpha: 0.25);
 }
