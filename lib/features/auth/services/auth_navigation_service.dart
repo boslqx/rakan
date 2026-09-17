@@ -5,12 +5,15 @@ import '../screens/email_verification_screen.dart';
 import '../screens/login_screen.dart';
 import '../../onboarding/screens/onboarding_shell.dart';
 import '../../onboarding/services/user_profile_service.dart';
+import '../../social/screens/choose_username_screen.dart';
+import '../../social/services/public_profile_service.dart';
 import '../../../shared/widgets/main_shell.dart';
 
 
 class AuthNavigationService {
   final AuthService _authService = AuthService();
   final UserProfileService _profileService = UserProfileService();
+  final PublicProfileService _publicProfileService = PublicProfileService();
 
   Future<Widget> resolveNextScreen() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -24,6 +27,15 @@ class AuthNavigationService {
     }
 
     final hasProfile = await _profileService.hasCompletedOnboarding(user.uid);
-    return hasProfile ? const MainShell() : const OnboardingShell();
+    if (!hasProfile) return const OnboardingShell();
+
+    // Accounts that completed onboarding before the social feature shipped
+    // won't have a username yet — gate them into claiming one once.
+    final username = await _publicProfileService.getUsername(user.uid);
+    if (username == null || username.isEmpty) {
+      return const ChooseUsernameScreen();
+    }
+
+    return const MainShell();
   }
 }

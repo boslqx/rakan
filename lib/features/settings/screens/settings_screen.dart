@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../../../core/theme/app_colors.dart';
@@ -8,6 +9,9 @@ import '../../../shared/widgets/user_avatar.dart';
 import '../../auth/services/auth_service.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../onboarding/services/user_profile_service.dart';
+import '../../social/screens/followers_following_screen.dart';
+import '../../social/services/follow_service.dart';
+import '../../social/services/public_profile_service.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../../workout/services/notification_service.dart';
 import '../../coach/services/plan_reset_flow.dart';
@@ -25,6 +29,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _profileService = UserProfileService();
+  final _publicProfileService = PublicProfileService();
+  final _followService = FollowService();
 
   // Profile picture — loaded from Firestore, not Firebase Auth's
   // photoURL, since the photo is stored as base64 (see
@@ -38,6 +44,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String _appVersion = '';
 
+  // Social stats
+  int _followerCount = 0;
+  int _followingCount = 0;
+  int _totalExercises = 0;
+  bool _isPrivate = false;
+  bool _isUpdatingPrivacy = false;
+
   // SharedPreferences keys
   static const _kRemindersEnabled = 'reminders_enabled';
   static const _kReminderHour = 'reminder_hour';
@@ -49,6 +62,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadReminderPrefs();
     _loadProfilePicture();
     _loadAppVersion();
+    _loadSocialStats();
+  }
+
+  Future<void> _loadSocialStats() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final results = await Future.wait([
+      _followService.getFollowerCount(uid),
+      _followService.getFollowingCount(uid),
+      FirebaseFirestore.instance.collection('users').doc(uid).get(),
+    ]);
+
+    if (!mounted) return;
+    final publicDoc = (results[2] as DocumentSnapshot<Map<String, dynamic>>).data();
+    setState(() {
+      _followerCount = results[0] as int;
+      _followingCount = results[1] as int;
+      _totalExercises = publicDoc?['totalExercisesLogged'] as int? ?? 0;
+      _isPrivate = publicDoc?['isPrivate'] as bool? ?? false;
+    });
+  }
+
+  Future<void> _togglePrivate(bool value) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    setState(() => _isUpdatingPrivacy = true);
+    try {
+      await _publicProfileService.setPrivate(uid, value);
+      if (!mounted) return;
+      setState(() {
+        _isPrivate = value;
+        _isUpdatingPrivacy = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isUpdatingPrivacy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not update privacy setting',
+              style: GoogleFonts.manrope(color: AppColors.onSurface)),
+          backgroundColor: AppColors.surfaceContainerHigh,
+        ),
+      );
+    }
   }
 
   Future<void> _loadAppVersion() async {
@@ -352,6 +411,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   // Refresh in case displayName or photo changed
                   setState(() {});
                   _loadProfilePicture();
+                  _loadSocialStats();
                 });
               },
               child: Container(
@@ -405,6 +465,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
 
+            const SizedBox(height: 12),
+
+            // Social stats row
+            _buildSocialStatsRow(),
+
             const SizedBox(height: 24),
 
             // Settings items
@@ -442,6 +507,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             // Reminders card (custom — has toggle + time) ────────
             _buildRemindersCard(),
+
+            // Privacy card (custom — has toggle) ────────
+            _buildPrivacyCard(),
 
             _SettingsTile(
               icon: Icons.info_outline_rounded,
@@ -574,6 +642,145 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPrivacyCard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.lock_outline_rounded,
+                color: AppColors.onSurfaceVariant, size: 20),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Private Account',
+                    style: GoogleFonts.manrope(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                  Text(
+                    'Approve new followers before they can see your activity.',
+                    style: GoogleFonts.manrope(
+                      fontSize: 11,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _isUpdatingPrivacy
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                  )
+                : Switch(
+                    value: _isPrivate,
+                    onChanged: _togglePrivate,
+                    activeColor: AppColors.primary,
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSocialStatsRow() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _SocialStat(
+              label: 'FOLLOWERS',
+              value: '$_followerCount',
+              onTap: uid == null
+                  ? null
+                  : () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              FollowersFollowingScreen(uid: uid, initialTab: 0),
+                        ),
+                      ).then((_) => _loadSocialStats()),
+            ),
+          ),
+          Container(width: 1, height: 32, color: AppColors.outlineVariant.withValues(alpha: 0.3)),
+          Expanded(
+            child: _SocialStat(
+              label: 'FOLLOWING',
+              value: '$_followingCount',
+              onTap: uid == null
+                  ? null
+                  : () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              FollowersFollowingScreen(uid: uid, initialTab: 1),
+                        ),
+                      ).then((_) => _loadSocialStats()),
+            ),
+          ),
+          Container(width: 1, height: 32, color: AppColors.outlineVariant.withValues(alpha: 0.3)),
+          Expanded(
+            child: _SocialStat(label: 'EXERCISES', value: '$_totalExercises'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SocialStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback? onTap;
+
+  const _SocialStat({required this.label, required this.value, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: GoogleFonts.manrope(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }

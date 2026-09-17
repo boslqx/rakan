@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/onboarding_data.dart';
+import '../../social/services/public_profile_service.dart';
 
 class UserProfileService {
   // Get a reference to Firestore
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final _publicProfileService = PublicProfileService();
 
   /// Saves the completed onboarding data to Firestore
   Future<void> saveOnboardingProfile({
@@ -16,6 +18,13 @@ class UserProfileService {
         .collection('profile')
         .doc('data')
         .set(data.toMap(), SetOptions(merge: true));
+
+    // Public index doc for search/follow — username is already claimed by
+    // Step1Profile at this point, this just syncs name/photo alongside it.
+    await _publicProfileService.syncPublicProfile(
+      uid: uid,
+      displayName: data.name,
+    );
   }
 
   /// Checks if a user has completed onboarding.

@@ -42,6 +42,29 @@ class WorkoutLogService {
           .set(ex);
     }
 
+    // Thin denormalized copy for followers — deliberately excludes
+    // per-set weights/reps (totalVolume, exerciseLogs), only the same
+    // summary fields the Home feed card shows. See PublicProfileService /
+    // firestore.rules for why this lives in a separate subcollection
+    // instead of exposing workoutLogs itself to non-owners.
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('activityFeed')
+        .doc(log['logId'] as String)
+        .set({
+      'workoutName': log['workoutName'],
+      'completedAt': log['completedAt'],
+      'totalDurationMins': log['totalDurationMins'],
+      'totalSetsCompleted': log['totalSetsCompleted'],
+      'prReached': log['prReached'] ?? false,
+    });
+
+    await _db.collection('users').doc(uid).set(
+      {'totalExercisesLogged': FieldValue.increment(exercises.length)},
+      SetOptions(merge: true),
+    );
+
     // P1: refresh per-muscle recovery tracking after every save.
     try {
       await updateMuscleRecovery(uid);
@@ -410,6 +433,23 @@ class WorkoutLogService {
     final logs = snapshot.docs.map((d) => d.data()).toList();
 
     // Sort by completedAt descending in Dart
+    logs.sort((a, b) {
+      final aDate = a['completedAt'] as String? ?? '';
+      final bDate = b['completedAt'] as String? ?? '';
+      return bDate.compareTo(aDate);
+    });
+
+    return logs.take(limit).toList();
+  }
+
+  /// Fetches the thin, follower-visible activity feed for [uid] — see the
+  /// `activityFeed` write in [saveWorkoutLog] for what it contains and why
+  /// it's separate from [getRecentLogs]'s full `workoutLogs` data.
+  Future<List<Map<String, dynamic>>> getActivityFeed(String uid, {int limit = 20}) async {
+    final snapshot =
+        await _db.collection('users').doc(uid).collection('activityFeed').get();
+
+    final logs = snapshot.docs.map((d) => d.data()).toList();
     logs.sort((a, b) {
       final aDate = a['completedAt'] as String? ?? '';
       final bDate = b['completedAt'] as String? ?? '';

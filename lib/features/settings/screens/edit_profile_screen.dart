@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,6 +8,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/user_avatar.dart';
 import '../services/profile_picture_service.dart';
 import '../../onboarding/services/user_profile_service.dart';
+import '../../social/services/public_profile_service.dart';
+
+enum _UsernameStatus { idle, checking, available, taken, invalid, unchanged }
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -16,11 +21,16 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _nameController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _pictureService = ProfilePictureService();
   final _profileService = UserProfileService();
+  final _publicProfileService = PublicProfileService();
 
   Map<String, dynamic>? _profileData;
   String? _photoBase64;
+  String? _existingUsername;
+  _UsernameStatus _usernameStatus = _UsernameStatus.idle;
+  Timer? _usernameDebounce;
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isUpdatingPhoto = false;
@@ -34,6 +44,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _usernameController.dispose();
+    _usernameDebounce?.cancel();
     super.dispose();
   }
 
@@ -51,10 +63,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           .doc('data')
           .get();
 
+      final username = await _publicProfileService.getUsername(user.uid);
+
       if (mounted) {
         setState(() {
           _profileData = doc.data();
           _photoBase64 = doc.data()?['profilePictureBase64'] as String?;
+          _existingUsername = username;
+          _usernameController.text = username ?? '';
+          _usernameStatus =
+              username != null ? _UsernameStatus.unchanged : _UsernameStatus.idle;
           _isLoading = false;
         });
       }
@@ -63,8 +81,45 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  void _onUsernameChanged(String value) {
+    _usernameDebounce?.cancel();
+
+    if (_existingUsername != null && value == _existingUsername) {
+      setState(() => _usernameStatus = _UsernameStatus.unchanged);
+      return;
+    }
+
+    final formatError = PublicProfileService.validateUsernameFormat(value);
+    if (formatError != null) {
+      setState(() => _usernameStatus = _UsernameStatus.invalid);
+      return;
+    }
+
+    setState(() => _usernameStatus = _UsernameStatus.checking);
+    _usernameDebounce = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final available = await _publicProfileService.isUsernameAvailable(value);
+        if (!mounted || _usernameController.text != value) return;
+        setState(() =>
+            _usernameStatus = available ? _UsernameStatus.available : _UsernameStatus.taken);
+      } catch (e) {
+        debugPrint('EditProfileScreen: availability check failed: $e');
+        if (!mounted || _usernameController.text != value) return;
+        setState(() => _usernameStatus = _UsernameStatus.idle);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not check availability: $e', style: GoogleFonts.manrope()),
+            backgroundColor: AppColors.surfaceContainerHigh,
+          ),
+        );
+      }
+    });
+  }
+
   Future<void> _saveName() async {
     final newName = _nameController.text.trim();
+    final newUsername = _usernameController.text.trim();
+
     if (newName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -74,6 +129,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
       );
       return;
+    }
+
+    final usernameUnchanged =
+        _existingUsername != null && newUsername == _existingUsername;
+    if (!usernameUnchanged) {
+      final formatError = PublicProfileService.validateUsernameFormat(newUsername);
+      if (formatError != null || _usernameStatus == _UsernameStatus.taken) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(formatError ?? 'That username is taken',
+                style: GoogleFonts.manrope(color: AppColors.onSurface)),
+            backgroundColor: AppColors.surfaceContainerHigh,
+          ),
+        );
+        return;
+      }
     }
 
     setState(() => _isSaving = true);
@@ -90,8 +161,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           .doc('data')
           .set({'name': newName}, SetOptions(merge: true));
 
+      if (!usernameUnchanged) {
+        await _publicProfileService.claimUsername(uid: user.uid, username: newUsername);
+        _existingUsername = newUsername;
+      }
+      await _publicProfileService.syncPublicProfile(uid: user.uid, displayName: newName);
+
       if (mounted) {
-        setState(() => _isSaving = false);
+        setState(() {
+          _isSaving = false;
+          _usernameStatus = _UsernameStatus.unchanged;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Profile updated',
@@ -101,11 +181,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         );
       }
     } catch (e) {
+      debugPrint('EditProfileScreen: save failed: $e');
       if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update profile',
+            content: Text(
+                e is StateError
+                    ? 'That username is taken'
+                    : 'Failed to update profile: $e',
                 style: GoogleFonts.manrope(color: AppColors.onSurface)),
             backgroundColor: AppColors.surfaceContainerHigh,
           ),
@@ -128,6 +212,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         uid: user.uid,
         base64Image: base64Image,
       );
+      await _publicProfileService.syncPublicProfile(uid: user.uid, photoBase64: base64Image);
 
       if (!mounted) return;
       setState(() {
@@ -161,6 +246,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() => _isUpdatingPhoto = true);
     try {
       await _profileService.removeProfilePicture(user.uid);
+      await _publicProfileService.clearPhoto(user.uid);
 
       if (!mounted) return;
       setState(() {
@@ -367,6 +453,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                   ),
 
+                  const SizedBox(height: 20),
+
+                  // Editable: Username
+                  _buildSectionTitle('USERNAME'),
+                  const SizedBox(height: 10),
+                  _buildUsernameField(),
+                  const SizedBox(height: 6),
+                  _buildUsernameHint(),
+
                   const SizedBox(height: 12),
 
                   // Read-only: Email
@@ -446,6 +541,65 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         color: AppColors.onSurfaceVariant,
       ),
     );
+  }
+
+  Widget _buildUsernameField() {
+    Widget? suffixIcon;
+    switch (_usernameStatus) {
+      case _UsernameStatus.checking:
+        suffixIcon = const Padding(
+          padding: EdgeInsets.all(14),
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        );
+      case _UsernameStatus.available:
+      case _UsernameStatus.unchanged:
+        suffixIcon = const Icon(Icons.check_circle_rounded, color: AppColors.primary);
+      case _UsernameStatus.taken:
+      case _UsernameStatus.invalid:
+        suffixIcon = const Icon(Icons.error_rounded, color: AppColors.error);
+      case _UsernameStatus.idle:
+        suffixIcon = null;
+    }
+
+    return TextField(
+      controller: _usernameController,
+      onChanged: _onUsernameChanged,
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9_]')),
+        LengthLimitingTextInputFormatter(20),
+      ],
+      style: GoogleFonts.manrope(fontSize: 15, color: AppColors.onSurface),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: AppColors.surfaceContainerLow,
+        prefixText: '@',
+        prefixStyle: GoogleFonts.manrope(fontSize: 15, color: AppColors.onSurfaceVariant),
+        suffixIcon: suffixIcon,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+    );
+  }
+
+  Widget _buildUsernameHint() {
+    final (text, color) = switch (_usernameStatus) {
+      _UsernameStatus.taken => ('That username is already taken', AppColors.error),
+      _UsernameStatus.invalid => (
+          '3-20 characters: letters, numbers, underscore only',
+          AppColors.error
+        ),
+      _UsernameStatus.available => ('Available', AppColors.primary),
+      _ => ('Used for other people to find and follow you.', AppColors.onSurfaceVariant),
+    };
+
+    return Text(text, style: GoogleFonts.manrope(fontSize: 12, color: color));
   }
 
   Widget _buildProfileInfoCard() {

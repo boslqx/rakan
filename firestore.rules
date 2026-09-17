@@ -1,0 +1,76 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Original rule — a user can only read/write their own document and
+    // everything nested under it (profile, workoutLogs, muscleRecovery,
+    // etc). Left untouched. Note: the {document=**} recursive wildcard
+    // also matches the users/{userId} document itself (zero remaining
+    // path segments), not just its subcollections — that's why the public
+    // index doc below needs its own separate rule rather than relying on
+    // this one to somehow be "more specific". Firestore grants access if
+    // ANY matching rule allows it, so the two rules simply stack.
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+
+    // Public index doc — same path as the private doc above (users/{uid}),
+    // but this rule only concerns the top-level document itself (no
+    // recursive wildcard), so it doesn't reopen anything nested underneath.
+    // Holds only display/social fields (displayName, username, photoBase64,
+    // isPrivate, follower/following counts, totalExercisesLogged).
+    // Readable by anyone signed in so search/profile views work; only the
+    // owner can write it.
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Username uniqueness index: usernames/{usernameLower} -> {uid}.
+    // Claimed via a transaction in PublicProfileService.claimUsername.
+    match /usernames/{usernameLower} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null
+        && resource.data.uid == request.auth.uid;
+      allow update: if false; // release + reclaim instead of mutating
+    }
+
+    // Thin, follower-visible activity feed — written alongside the full
+    // (owner-only) workoutLogs entry in WorkoutLogService.saveWorkoutLog.
+    // Readable by: the owner, anyone if the account is public, or an
+    // accepted follower if it's private.
+    match /users/{uid}/activityFeed/{logId} {
+      allow read: if request.auth != null && (
+        request.auth.uid == uid
+        || get(/databases/$(database)/documents/users/$(uid)).data.isPrivate != true
+        || (
+          exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + uid))
+          && get(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + uid)).data.status == 'accepted'
+        )
+      );
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Follow graph. Doc id is "{followerUid}_{followingUid}". Only the
+    // follower can create/delete their own follow (unfollow, or cancel a
+    // pending request); only the target can delete it too (remove a
+    // follower) or update it (accept a pending request — the only update
+    // allowed is flipping status to 'accepted', nothing else).
+    match /follows/{followId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.followerUid;
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.followingUid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'accepted';
+      allow delete: if request.auth != null
+        && (request.auth.uid == resource.data.followerUid
+            || request.auth.uid == resource.data.followingUid);
+    }
+  }
+}

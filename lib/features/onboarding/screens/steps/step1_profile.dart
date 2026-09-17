@@ -1,8 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../social/services/public_profile_service.dart';
 import '../../models/onboarding_data.dart';
+
+enum _UsernameStatus { idle, checking, available, taken, invalid, unchanged }
 
 class Step1Profile extends StatefulWidget {
   final OnboardingData data;
@@ -16,6 +21,16 @@ class Step1Profile extends StatefulWidget {
 
 class _Step1ProfileState extends State<Step1Profile> {
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
+  final _publicProfileService = PublicProfileService();
+
+  // Username already claimed by this uid before this screen loaded (null for
+  // a brand-new account). Used to skip re-claiming when it hasn't changed —
+  // matters for Plan Reset, which re-runs onboarding for existing users.
+  String? _existingUsername;
+  _UsernameStatus _usernameStatus = _UsernameStatus.idle;
+  Timer? _usernameDebounce;
+  bool _isSavingStep1 = false;
 
   // Local state for unit toggle (will sync to data on continue)
   bool _isMetric = true;
@@ -35,6 +50,7 @@ class _Step1ProfileState extends State<Step1Profile> {
     // Restore any previously entered data if user navigated back
     _nameController.text = widget.data.name ?? '';
     _isMetric = widget.data.isMetric;
+    _loadUsername();
 
     if (widget.data.heightCm != null) {
       if (_isMetric) {
@@ -59,18 +75,82 @@ class _Step1ProfileState extends State<Step1Profile> {
   @override
   void dispose() {
     _nameController.dispose();
+    _usernameController.dispose();
     _feetController.dispose();
     _inchesController.dispose();
     _lbsController.dispose();
     _cmController.dispose();
     _kgController.dispose();
+    _usernameDebounce?.cancel();
     super.dispose();
   }
 
-  void _saveAndContinue() {
+  // If navigating back within this onboarding session, restore what was
+  // typed locally. Otherwise, prefill from whatever this uid already has
+  // claimed (non-null only for Plan Reset re-running onboarding for an
+  // existing user) so re-visiting this step doesn't look like a fresh claim.
+  Future<void> _loadUsername() async {
+    if (widget.data.username != null && widget.data.username!.isNotEmpty) {
+      _usernameController.text = widget.data.username!;
+      _existingUsername = widget.data.username;
+      setState(() => _usernameStatus = _UsernameStatus.unchanged);
+      return;
+    }
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final existing = await _publicProfileService.getUsername(uid);
+    if (!mounted || existing == null) return;
+
+    _existingUsername = existing;
+    _usernameController.text = existing;
+    widget.data.username = existing;
+    setState(() => _usernameStatus = _UsernameStatus.unchanged);
+  }
+
+  void _onUsernameChanged(String value) {
+    _usernameDebounce?.cancel();
+
+    if (_existingUsername != null && value == _existingUsername) {
+      setState(() => _usernameStatus = _UsernameStatus.unchanged);
+      return;
+    }
+
+    final formatError = PublicProfileService.validateUsernameFormat(value);
+    if (formatError != null) {
+      setState(() => _usernameStatus = _UsernameStatus.invalid);
+      return;
+    }
+
+    setState(() => _usernameStatus = _UsernameStatus.checking);
+    _usernameDebounce = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final available = await _publicProfileService.isUsernameAvailable(value);
+        if (!mounted || _usernameController.text != value) return;
+        setState(() =>
+            _usernameStatus = available ? _UsernameStatus.available : _UsernameStatus.taken);
+      } catch (e) {
+        debugPrint('Step1Profile: availability check failed: $e');
+        if (!mounted || _usernameController.text != value) return;
+        setState(() => _usernameStatus = _UsernameStatus.idle);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not check availability: $e', style: GoogleFonts.manrope()),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    });
+  }
+
+  Future<void> _saveAndContinue() async {
     // Save name
     widget.data.name = _nameController.text.trim();
     widget.data.isMetric = _isMetric;
+
+    final username = _usernameController.text.trim();
+    widget.data.username = username;
 
     // Save height
     if (_isMetric) {
@@ -102,6 +182,46 @@ class _Step1ProfileState extends State<Step1Profile> {
         ),
       );
       return;
+    }
+
+    final usernameUnchanged = _existingUsername != null && username == _existingUsername;
+    if (!usernameUnchanged) {
+      final formatError = PublicProfileService.validateUsernameFormat(username);
+      if (formatError != null || _usernameStatus == _UsernameStatus.taken) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(formatError ?? 'That username is taken',
+                style: GoogleFonts.manrope()),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      setState(() => _isSavingStep1 = true);
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      try {
+        await _publicProfileService.claimUsername(uid: uid, username: username);
+      } catch (e) {
+        debugPrint('Step1Profile: claim failed: $e');
+        if (!mounted) return;
+        final isTaken = e is StateError;
+        setState(() {
+          _isSavingStep1 = false;
+          _usernameStatus = isTaken ? _UsernameStatus.taken : _UsernameStatus.idle;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                isTaken ? 'That username is taken' : 'Could not save username: $e',
+                style: GoogleFonts.manrope()),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _isSavingStep1 = false);
     }
 
     widget.onNext();
@@ -143,6 +263,15 @@ class _Step1ProfileState extends State<Step1Profile> {
             controller: _nameController,
             hint: 'Enter your name',
           ),
+
+          const SizedBox(height: 28),
+
+          // Username
+          _SectionLabel('USERNAME'),
+          const SizedBox(height: 8),
+          _buildUsernameInput(),
+          const SizedBox(height: 6),
+          _buildUsernameHint(),
 
           const SizedBox(height: 28),
 
@@ -277,14 +406,23 @@ class _Step1ProfileState extends State<Step1Profile> {
 
           // Continue button
           ElevatedButton(
-            onPressed: _saveAndContinue,
-            child: Text(
-              'CONTINUE >',
-              style: GoogleFonts.spaceGrotesk(
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1,
-              ),
-            ),
+            onPressed: _isSavingStep1 ? null : _saveAndContinue,
+            child: _isSavingStep1
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.onPrimary,
+                    ),
+                  )
+                : Text(
+                    'CONTINUE >',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1,
+                    ),
+                  ),
           ),
 
           const SizedBox(height: 16),
@@ -340,6 +478,89 @@ class _Step1ProfileState extends State<Step1Profile> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildUsernameInput() {
+    final borderColor = switch (_usernameStatus) {
+      _UsernameStatus.taken || _UsernameStatus.invalid => AppColors.error,
+      _UsernameStatus.available || _UsernameStatus.unchanged => AppColors.primary,
+      _ => AppColors.outlineVariant,
+    };
+
+    Widget? suffixIcon;
+    switch (_usernameStatus) {
+      case _UsernameStatus.checking:
+        suffixIcon = const Padding(
+          padding: EdgeInsets.all(14),
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        );
+      case _UsernameStatus.available:
+      case _UsernameStatus.unchanged:
+        suffixIcon = const Icon(Icons.check_circle_rounded, color: AppColors.primary);
+      case _UsernameStatus.taken:
+      case _UsernameStatus.invalid:
+        suffixIcon = const Icon(Icons.error_rounded, color: AppColors.error);
+      case _UsernameStatus.idle:
+        suffixIcon = null;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      child: TextField(
+        controller: _usernameController,
+        onChanged: _onUsernameChanged,
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9_]')),
+          LengthLimitingTextInputFormatter(20),
+        ],
+        style: GoogleFonts.spaceGrotesk(
+          fontSize: 18,
+          color: AppColors.onSurface,
+          fontWeight: FontWeight.w500,
+        ),
+        decoration: InputDecoration(
+          hintText: 'yourname',
+          prefixText: '@',
+          prefixStyle: GoogleFonts.spaceGrotesk(
+            fontSize: 18,
+            color: AppColors.onSurfaceVariant,
+            fontWeight: FontWeight.w500,
+          ),
+          hintStyle: GoogleFonts.spaceGrotesk(
+            fontSize: 18,
+            color: AppColors.onSurfaceVariant.withOpacity(0.5),
+          ),
+          suffixIcon: suffixIcon,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUsernameHint() {
+    final (text, color) = switch (_usernameStatus) {
+      _UsernameStatus.taken => ('That username is already taken', AppColors.error),
+      _UsernameStatus.invalid => (
+          '3-20 characters: letters, numbers, underscore only',
+          AppColors.error
+        ),
+      _UsernameStatus.available => ('Available', AppColors.primary),
+      _ => ('Used for other people to find and follow you.', AppColors.onSurfaceVariant),
+    };
+
+    return Text(
+      text,
+      style: GoogleFonts.manrope(fontSize: 12, color: color),
     );
   }
 }

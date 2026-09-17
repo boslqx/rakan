@@ -84,6 +84,7 @@ class InjuryEntry {
 class OnboardingData {
   // Step 1: Personal Bio
   String? name;
+  String? username; // unique @handle, claimed separately (see PublicProfileService)
   Gender? gender;
   int? age;
   double? heightCm;
@@ -115,6 +116,7 @@ class OnboardingData {
 
   OnboardingData({
     this.name,
+    this.username,
     this.gender,
     this.age,
     this.heightCm,
@@ -158,6 +160,8 @@ class OnboardingData {
   bool get isStep1Valid =>
       name != null &&
       name!.trim().isNotEmpty &&
+      username != null &&
+      username!.trim().isNotEmpty &&
       gender != null &&
       age != null &&
       heightCm != null &&
