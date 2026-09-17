@@ -17,9 +17,7 @@ import '../models/workout_pr_record.dart';
 import '../services/weight_record_service.dart';
 import 'log_weight_screen.dart';
 import 'all_records_screen.dart';
-import '../../onboarding/models/onboarding_data.dart';
-import '../../onboarding/screens/onboarding_shell.dart';
-import '../../onboarding/screens/plan_generation_screen.dart';
+import '../services/plan_reset_flow.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../widgets/plan_changes_section.dart';
 
@@ -2684,7 +2682,7 @@ class _CoachScreenState extends State<CoachScreen> {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: _showResetConfirmation,
+            onPressed: () => PlanResetFlow.start(context),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error.withValues(alpha: 0.15),
               foregroundColor: AppColors.error,
@@ -2706,193 +2704,6 @@ class _CoachScreenState extends State<CoachScreen> {
         ),
       ],
     );
-  }
-
-  Future<void> _showResetConfirmation() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainerLow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Reset Workout Plan?',
-            style: GoogleFonts.spaceGrotesk(
-                color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-        content: Text(
-            'Your current plan and all adaptations will be removed. A new plan will be generated.',
-            style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel',
-                style: GoogleFonts.manrope(color: AppColors.primary)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Reset',
-                style: GoogleFonts.manrope(
-                    color: AppColors.error, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true || !mounted) return;
-
-    final keepGoals = await _showRegenerateChoiceSheet();
-    if (keepGoals == null || !mounted) return;
-    await _resetPlan(keepGoals: keepGoals);
-  }
-
-  /// true = regenerate with the existing profile as-is (same goal,
-  /// equipment, schedule — just a fresh exercise selection, since the
-  /// backend shuffles its exercise pool on every call). false = walk the
-  /// onboarding wizard again, pre-filled, so the user can actually change
-  /// something. null = dismissed without choosing.
-  Future<bool?> _showRegenerateChoiceSheet() {
-    return showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: AppColors.surfaceContainerLow,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'NEW PLAN',
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.5,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'How should Rakan build it?',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
-                ),
-              ),
-              const SizedBox(height: 20),
-              _buildRegenerateOption(
-                icon: Icons.refresh_rounded,
-                title: 'Keep My Goals',
-                subtitle:
-                    'Same goal, equipment, and schedule — just a fresh set of exercises.',
-                onTap: () => Navigator.of(ctx).pop(true),
-              ),
-              const SizedBox(height: 12),
-              _buildRegenerateOption(
-                icon: Icons.edit_note_rounded,
-                title: 'Update My Goals',
-                subtitle:
-                    'Walk through your training profile again to change anything.',
-                onTap: () => Navigator.of(ctx).pop(false),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRegenerateOption({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.primary, size: 22),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.manrope(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded,
-                color: AppColors.onSurfaceVariant),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _resetPlan({required bool keepGoals}) async {
-    if (_uid == null) return;
-    try {
-      // Mark all active plans as inactive
-      final plansSnap = await _db
-          .collection('users')
-          .doc(_uid)
-          .collection('workoutPlans')
-          .get();
-
-      for (final doc in plansSnap.docs) {
-        if (doc.data()['status'] == 'active') {
-          await doc.reference.update({'status': 'inactive'});
-        }
-      }
-
-      // Rebuild from the already-saved profile instead of starting blank
-      // — previously this passed a bare OnboardingData() here, which sent
-      // empty equipment/workout_days/focus_areas to the backend and
-      // silently produced a plan with zero workout days (every day
-      // defaulted to rest).
-      final profileSnap = await _db
-          .collection('users')
-          .doc(_uid)
-          .collection('profile')
-          .doc('data')
-          .get();
-      final data = OnboardingData.fromMap(profileSnap.data() ?? {});
-
-      if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => keepGoals
-              ? PlanGenerationScreen(data: data)
-              : OnboardingShell(initialData: data),
-        ),
-      );
-    } catch (e) {
-      debugPrint('Reset plan error: $e');
-    }
   }
 
   // RECOVERY TAB

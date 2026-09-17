@@ -59,6 +59,36 @@ class UserProfileService {
     );
   }
 
+  /// Updates the personal-stats fields (age, height, weight, activity
+  /// level) plus the unit preference used to display them, without
+  /// touching the rest of the profile doc — same single-field merge-write
+  /// pattern as updateEquipment. Editing these does not regenerate the
+  /// active plan; use PlanResetFlow for that.
+  Future<void> updateStats({
+    required String uid,
+    required int age,
+    required double heightCm,
+    required double weightKg,
+    required ActivityLevel activityLevel,
+    required bool isMetric,
+  }) async {
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('profile')
+        .doc('data')
+        .set(
+      {
+        'age': age,
+        'heightCm': heightCm,
+        'weightKg': weightKg,
+        'activityLevel': activityLevel.name,
+        'isMetric': isMetric,
+      },
+      SetOptions(merge: true),
+    );
+  }
+
   /// Writes/overwrites the user's profile picture as a base64-encoded
   /// JPEG string, using the same single-field merge-write pattern as
   /// updateEquipment. See ProfilePictureService for why base64 (not

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../../auth/services/auth_service.dart';
@@ -9,9 +10,11 @@ import '../../auth/screens/login_screen.dart';
 import '../../onboarding/services/user_profile_service.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../../workout/services/notification_service.dart';
+import '../../coach/services/plan_reset_flow.dart';
 import 'change_password_dialog.dart';
 import 'edit_profile_screen.dart';
 import 'edit_equipment_screen.dart';
+import 'edit_stats_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -28,10 +31,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ProfilePictureService for why Storage isn't used).
   String? _photoBase64;
 
-  // Reminder state 
+  // Reminder state
   bool _remindersEnabled = false;
   TimeOfDay _reminderTime = const TimeOfDay(hour: 8, minute: 0);
   bool _isUpdatingReminders = false;
+
+  String _appVersion = '';
 
   // SharedPreferences keys
   static const _kRemindersEnabled = 'reminders_enabled';
@@ -43,6 +48,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _loadReminderPrefs();
     _loadProfilePicture();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    setState(() => _appVersion = '${info.version}+${info.buildNumber}');
   }
 
   Future<void> _loadProfilePicture() async {
@@ -275,7 +287,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Version 1.0.0',
+              _appVersion.isNotEmpty ? 'Version $_appVersion' : 'Version —',
               style: GoogleFonts.manrope(
                 fontSize: 13,
                 color: AppColors.onSurfaceVariant,
@@ -403,6 +415,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
 
             _SettingsTile(
+              icon: Icons.monitor_weight_outlined,
+              label: 'Personal Stats',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const EditStatsScreen()),
+                );
+              },
+            ),
+
+            _SettingsTile(
               icon: Icons.fitness_center_rounded,
               label: 'Edit Equipment',
               onTap: () {
@@ -410,6 +432,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   MaterialPageRoute(builder: (_) => const EditEquipmentScreen()),
                 );
               },
+            ),
+
+            _SettingsTile(
+              icon: Icons.track_changes_rounded,
+              label: 'Update Fitness Goals',
+              onTap: () => PlanResetFlow.start(context),
             ),
 
             // Reminders card (custom — has toggle + time) ────────
