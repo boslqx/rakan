@@ -166,7 +166,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   Widget _buildStatsRow() {
-    final totalExercises = _profile?['totalExercisesLogged'] as int? ?? 0;
+    final totalSessions = _profile?['totalSessionsLogged'] as int? ?? 0;
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -201,7 +201,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ),
           _StatDivider(),
           Expanded(
-            child: _StatColumn(label: 'EXERCISES', value: '$totalExercises'),
+            child: _StatColumn(label: 'SESSIONS', value: '$totalSessions'),
           ),
         ],
       ),
@@ -225,10 +225,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       );
     }
 
+    final displayName = _profile?['displayName'] as String?;
+    final photoBase64 = _profile?['photoBase64'] as String?;
+
     return Column(
       children: [
         for (final log in _feed) ...[
-          ActivityLogCard(log: log),
+          ActivityLogCard(
+            log: log,
+            authorName: displayName,
+            authorPhotoBase64: photoBase64,
+            ownerUid: widget.uid,
+          ),
           const SizedBox(height: 12),
         ],
       ],

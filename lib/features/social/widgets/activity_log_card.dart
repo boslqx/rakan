@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/widgets/user_avatar.dart';
+import 'activity_actions_row.dart';
 
 /// Renders a single completed-workout card — shared by Home's own activity
 /// feed (full `workoutLogs` data, tappable into WorkoutLogDetailScreen) and
@@ -12,7 +14,26 @@ class ActivityLogCard extends StatelessWidget {
   final Map<String, dynamic> log;
   final VoidCallback? onTap;
 
-  const ActivityLogCard({super.key, required this.log, this.onTap});
+  /// The workout's author — shown as the card's avatar instead of the
+  /// generic dumbbell icon when provided (e.g. on a profile screen, or
+  /// Home's own feed once the viewer's own photo is known).
+  final String? authorName;
+  final String? authorPhotoBase64;
+
+  /// Whoever's `activityFeed` this session belongs to — required for the
+  /// like/comment/share row, which targets
+  /// `users/{ownerUid}/activityFeed/{log['logId']}`. Omit only in contexts
+  /// that genuinely have no owner uid; the actions row is skipped then.
+  final String? ownerUid;
+
+  const ActivityLogCard({
+    super.key,
+    required this.log,
+    this.onTap,
+    this.authorName,
+    this.authorPhotoBase64,
+    this.ownerUid,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +44,7 @@ class ActivityLogCard extends StatelessWidget {
     final totalSets = log['totalSetsCompleted'] as int?;
     final prReached = log['prReached'] as bool? ?? false;
     final photoBase64 = log['progressPhotoBase64'] as String?;
+    final logId = log['logId'] as String?;
 
     return GestureDetector(
       onTap: onTap,
@@ -35,20 +57,26 @@ class ActivityLogCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header: icon + title + date/time
+            // Header: avatar (or fallback icon) + title + date/time
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.fitness_center_rounded,
-                      color: AppColors.primary, size: 18),
-                ),
+                authorName != null
+                    ? UserAvatar(
+                        photoBase64: authorPhotoBase64,
+                        initialsSource: authorName!,
+                        size: 40,
+                      )
+                    : Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.fitness_center_rounded,
+                            color: AppColors.primary, size: 18),
+                      ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -133,6 +161,9 @@ class ActivityLogCard extends StatelessWidget {
                 ),
               ),
             ],
+
+            if (ownerUid != null && logId != null)
+              ActivityActionsRow(ownerUid: ownerUid!, logId: logId, log: log),
           ],
         ),
       ),

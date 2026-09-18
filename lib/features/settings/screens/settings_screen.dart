@@ -47,7 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Social stats
   int _followerCount = 0;
   int _followingCount = 0;
-  int _totalExercises = 0;
+  int _totalSessions = 0;
   bool _isPrivate = false;
   bool _isUpdatingPrivacy = false;
 
@@ -80,7 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _followerCount = results[0] as int;
       _followingCount = results[1] as int;
-      _totalExercises = publicDoc?['totalExercisesLogged'] as int? ?? 0;
+      _totalSessions = publicDoc?['totalSessionsLogged'] as int? ?? 0;
       _isPrivate = publicDoc?['isPrivate'] as bool? ?? false;
     });
   }
@@ -741,7 +741,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           Container(width: 1, height: 32, color: AppColors.outlineVariant.withValues(alpha: 0.3)),
           Expanded(
-            child: _SocialStat(label: 'EXERCISES', value: '$_totalExercises'),
+            child: _SocialStat(label: 'SESSIONS', value: '$_totalSessions'),
           ),
         ],
       ),

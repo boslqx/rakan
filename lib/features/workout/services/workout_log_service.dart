@@ -61,7 +61,7 @@ class WorkoutLogService {
     });
 
     await _db.collection('users').doc(uid).set(
-      {'totalExercisesLogged': FieldValue.increment(exercises.length)},
+      {'totalSessionsLogged': FieldValue.increment(1)},
       SetOptions(merge: true),
     );
 
@@ -449,7 +449,7 @@ class WorkoutLogService {
     final snapshot =
         await _db.collection('users').doc(uid).collection('activityFeed').get();
 
-    final logs = snapshot.docs.map((d) => d.data()).toList();
+    final logs = snapshot.docs.map((d) => {'logId': d.id, ...d.data()}).toList();
     logs.sort((a, b) {
       final aDate = a['completedAt'] as String? ?? '';
       final bDate = b['completedAt'] as String? ?? '';

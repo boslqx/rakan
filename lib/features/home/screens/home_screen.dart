@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../onboarding/services/user_profile_service.dart';
 import '../../social/screens/find_users_screen.dart';
+import '../../social/services/public_profile_service.dart';
 import '../../social/widgets/activity_log_card.dart';
 import '../../workout/screens/workout_active_screen.dart';
 import '../../workout/services/workout_plan_service.dart';
@@ -60,6 +61,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       profile = await UserProfileService().getUserProfile(uid);
+      // Backfills the public users/{uid} doc's displayName/photo from the
+      // private profile — fire-and-forget, cheap merge-write. Covers
+      // accounts that uploaded a photo before the social feature existed
+      // (and so never had it synced), without needing a one-time migration.
+      if (profile != null) {
+        PublicProfileService().syncPublicProfile(
+          uid: uid,
+          displayName: profile['name'] as String?,
+          photoBase64: profile['profilePictureBase64'] as String?,
+        );
+      }
     } catch (e, st) {
       debugPrint('HomeScreen: profile load failed for uid=$uid: $e');
       debugPrint(st.toString());
@@ -565,6 +577,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
                               child: ActivityLogCard(
                                 log: feedLogs[index],
+                                authorName: _profile?['name'] as String?,
+                                authorPhotoBase64:
+                                    _profile?['profilePictureBase64'] as String?,
+                                ownerUid: FirebaseAuth.instance.currentUser?.uid,
                                 onTap: () => Navigator.of(context).push(
                                   MaterialPageRoute(
                                     builder: (_) =>
