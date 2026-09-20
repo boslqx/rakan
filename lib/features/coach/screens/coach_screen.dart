@@ -20,6 +20,7 @@ import 'all_records_screen.dart';
 import '../services/plan_reset_flow.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../widgets/plan_changes_section.dart';
+import 'log_injury_screen.dart';
 
 /// Maps each broad muscle group used by `muscleRecovery` docs onto the
 const Map<String, List<Muscle>> kBroadMuscleGroupToHeatmapMuscles = {
@@ -3347,6 +3348,9 @@ class _CoachScreenState extends State<CoachScreen> {
   Widget _buildInjuryRow(Map<String, dynamic> injury) {
     final label = injury['label'] as String? ?? 'Unknown';
     final status = injury['status'] as String? ?? 'active';
+    final estimatedDays = injury['estimatedRecoveryDays'] as int?;
+    final estimatedLabel = injury['estimatedRecoveryLabel'] as String?;
+    final loggedAt = (injury['loggedAt'] as Timestamp?)?.toDate();
 
     Color statusColor;
     String statusText;
@@ -3374,6 +3378,20 @@ class _CoachScreenState extends State<CoachScreen> {
         progressValue = 0.2;
     }
 
+    // When we have an estimate, prefer elapsed-time progress over the
+    // fixed per-status thirds above — capped short of 1.0 since only an
+    // explicit "Mark Recovered" tap should ever show it as fully done.
+    String? recoverySubtitle;
+    if (status != 'recovered' && estimatedDays != null && loggedAt != null) {
+      final elapsedDays = DateTime.now().difference(loggedAt).inDays;
+      progressValue = (elapsedDays / estimatedDays).clamp(0.05, 0.95);
+      final expected = loggedAt.add(Duration(days: estimatedDays));
+      recoverySubtitle =
+          'Est. recovery: $estimatedLabel · back around ${_kMonthAbbrev[expected.month - 1]} ${expected.day}';
+    } else if (status != 'recovered' && estimatedLabel != null) {
+      recoverySubtitle = 'Est. recovery: $estimatedLabel';
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -3397,6 +3415,16 @@ class _CoachScreenState extends State<CoachScreen> {
               ),
             ],
           ),
+          if (recoverySubtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              recoverySubtitle,
+              style: GoogleFonts.manrope(
+                fontSize: 11,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
@@ -3420,7 +3448,7 @@ class _CoachScreenState extends State<CoachScreen> {
           child: _buildActionBtn(
             icon: Icons.add_circle_outline_rounded,
             label: 'LOG NEW\nINJURY',
-            onTap: _showLogInjurySheet,
+            onTap: _openLogInjuryScreen,
           ),
         ),
         const SizedBox(width: 12),
@@ -3522,162 +3550,21 @@ class _CoachScreenState extends State<CoachScreen> {
   }
 
   // INJURY ACTIONS
-  Future<void> _showLogInjurySheet() async {
-    // All body regions from BodyRegion enum mapped to display names
-    final regions = {
-      'leftShoulder': 'Left Shoulder',
-      'rightShoulder': 'Right Shoulder',
-      'chest': 'Chest',
-      'upperBack': 'Upper Back',
-      'lowerBack': 'Lower Back',
-      'leftArm': 'Left Arm',
-      'rightArm': 'Right Arm',
-      'core': 'Core / Abs',
-      'leftHip': 'Left Hip',
-      'rightHip': 'Right Hip',
-      'leftKnee': 'Left Knee',
-      'rightKnee': 'Right Knee',
-      'leftAnkle': 'Left Ankle',
-      'rightAnkle': 'Right Ankle',
-      'neck': 'Neck',
-    };
-
-    String? selectedRegion;
-    final labelController = TextEditingController();
-
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surfaceContainerLow,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-            left: 24, right: 24, top: 24,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 32,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('LOG NEW INJURY',
-                  style: GoogleFonts.spaceGrotesk(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface)),
-              const SizedBox(height: 20),
-              Text('Body Region',
-                  style: GoogleFonts.manrope(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.5,
-                      color: AppColors.onSurfaceVariant)),
-              const SizedBox(height: 10),
-              // Region chips
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: regions.entries.map((entry) {
-                  final isSelected = selectedRegion == entry.key;
-                  return GestureDetector(
-                    onTap: () =>
-                        setSheetState(() => selectedRegion = entry.key),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.primary.withValues(alpha: 0.2)
-                            : AppColors.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isSelected
-                              ? AppColors.primary
-                              : Colors.transparent,
-                        ),
-                      ),
-                      child: Text(entry.value,
-                          style: GoogleFonts.manrope(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: isSelected
-                                  ? AppColors.primary
-                                  : AppColors.onSurface)),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 20),
-              Text('Description (optional)',
-                  style: GoogleFonts.manrope(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.5,
-                      color: AppColors.onSurfaceVariant)),
-              const SizedBox(height: 8),
-              TextField(
-                controller: labelController,
-                style: GoogleFonts.manrope(
-                    fontSize: 14, color: AppColors.onSurface),
-                decoration: InputDecoration(
-                  hintText: "e.g. Runner's knee, shoulder strain",
-                  hintStyle: GoogleFonts.manrope(
-                      color: AppColors.onSurfaceVariant),
-                  border: InputBorder.none,
-                  fillColor: AppColors.surfaceContainerHigh,
-                  filled: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 14),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: selectedRegion == null
-                    ? null
-                    : () async {
-                        final label = labelController.text.trim().isEmpty
-                            ? regions[selectedRegion!]!
-                            : labelController.text.trim();
-                        await _saveInjury(selectedRegion!, label);
-                        if (ctx.mounted) Navigator.pop(ctx);
-                      },
-                child: Text('SAVE INJURY',
-                    style: GoogleFonts.spaceGrotesk(
-                        fontWeight: FontWeight.w700, letterSpacing: 1.5)),
-              ),
-            ],
-          ),
+  Future<void> _openLogInjuryScreen() async {
+    if (_uid == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LogInjuryScreen(
+          uid: _uid!,
+          gender: _bodyGender,
+          existingInjuries: _injuries,
         ),
       ),
     );
-  }
-
-  Future<void> _saveInjury(String region, String label) async {
-    if (_uid == null) return;
-    await _db.collection('users').doc(_uid).collection('injuries').add({
-      'region': region,
-      'label': label,
-      'isCustom': true,
-      'status': 'active',
-      'loggedAt': FieldValue.serverTimestamp(),
-      'recoveredAt': null,
-    });
-
-    final plan = await WorkoutPlanService().getActivePlan(_uid!);
-    if (plan != null) {
-      await InjuryService().triggerRegeneration(
-        uid: _uid!,
-        planId: plan['id'] as String,
-      );
-    }
-
-    await _loadRecovery(); // refresh
+    // Injuries are saved to Firestore as they're logged (not deferred until
+    // the screen closes), so always refresh on return rather than relying
+    // on a pop result — that covers the back button/gesture too.
+    await _loadRecovery();
   }
 
   Future<void> _showMarkRecoveredSheet() async {
