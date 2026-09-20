@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/validators.dart';
 import '../services/auth_service.dart';
-import '../../../shared/widgets/main_shell.dart';
 import 'register_screen.dart';
 import '../services/auth_navigation_service.dart';  
 
@@ -154,7 +154,8 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     try {
       await _authService.sendPasswordResetEmail(_emailController.text);
-      _showSuccess('Password reset email sent');
+      _showSuccess(
+          'If an account exists for that email, a reset link is on its way.');
     } catch (e) {
       _showError(e.toString());
     }
@@ -169,7 +170,8 @@ class _LoginScreenState extends State<LoginScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Form(
             key: _formKey,
-            child: Column(
+            child: AutofillGroup(
+             child: Column(
               children: [
                 const SizedBox(height: 48),
 
@@ -234,6 +236,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   inputType: TextInputType.emailAddress,
                   errorText: _emailError,
                   onChanged: (_) => _validateEmail(),
+                  autofillHints: const [AutofillHints.email],
+                  action: TextInputAction.next,
+                  onSubmit: () => _passwordFocus.requestFocus(),
                 ),
 
                 const SizedBox(height: 24),
@@ -265,6 +270,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   obscure: _obscurePassword,
                   errorText: _passwordError,
                   onChanged: (_) => _validatePassword(),
+                  autofillHints: const [AutofillHints.password],
+                  action: TextInputAction.done,
+                  onSubmit: _isLoading ? null : _signInWithEmail,
                   suffix: IconButton(
                     icon: Icon(
                       _obscurePassword
@@ -406,6 +414,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 32),
               ],
             ),
+           ),
           ),
         ),
       ),
@@ -421,6 +430,9 @@ class _LoginScreenState extends State<LoginScreen> {
     Widget? suffix,
     String? errorText,
     ValueChanged<String>? onChanged,
+    Iterable<String>? autofillHints,
+    TextInputAction? action,
+    VoidCallback? onSubmit,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -439,6 +451,12 @@ class _LoginScreenState extends State<LoginScreen> {
         obscureText: obscure,
         keyboardType: inputType,
         onChanged: onChanged,
+        autofillHints: autofillHints,
+        textInputAction: action,
+        onFieldSubmitted: (_) => onSubmit?.call(),
+        autocorrect: false,
+        enableSuggestions: !obscure,
+        inputFormatters: [LengthLimitingTextInputFormatter(128)],
         style: GoogleFonts.manrope(fontSize: 16, color: AppColors.onSurface),
         decoration: InputDecoration(
           hintText: hint,

@@ -8,6 +8,12 @@ service cloud.firestore {
     // account is public, or an accepted follower if it's private. `database`
     // is passed explicitly rather than relied on from the enclosing match,
     // since functions don't reliably inherit path variables.
+    // Server-side email verification gate: password accounts can't touch
+    // their data until the address is verified (Google accounts always are).
+    function isVerified() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
     function canViewActivity(database, uid) {
       return request.auth.uid == uid
         || get(/databases/$(database)/documents/users/$(uid)).data.isPrivate != true
@@ -26,7 +32,7 @@ service cloud.firestore {
     // this one to somehow be "more specific". Firestore grants access if
     // ANY matching rule allows it, so the two rules simply stack.
     match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null
+      allow read, write: if isVerified()
                          && request.auth.uid == userId;
     }
 
@@ -38,8 +44,8 @@ service cloud.firestore {
     // Readable by anyone signed in so search/profile views work; only the
     // owner can write it.
     match /users/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read: if isVerified();
+      allow write: if isVerified() && request.auth.uid == uid;
     }
 
     // Username uniqueness index: usernames/{usernameLower} -> {uid}.

@@ -31,6 +31,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     _autoPollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       _checkVerified(silent: true);
     });
+    // A verification email was just sent (sign-up or login), so start the
+    // resend cooldown straight away to prevent spamming.
+    _startCooldown();
   }
 
   @override
@@ -41,11 +44,27 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   }
 
   Future<void> _checkVerified({bool silent = false}) async {
-    if (!silent) setState(() => _isChecking = true);
+    if (_isChecking) return;
+    setState(() => _isChecking = true);
 
-    final verified = await _authService.reloadAndCheckVerified();
+    var verified = false;
+    try {
+      verified = await _authService.reloadAndCheckVerified();
+    } catch (_) {
+      // Network hiccup: treat as not verified yet.
+    }
 
     if (!mounted) return;
+
+    // Session ended (account deleted/disabled) — back to login.
+    if (_authService.currentUser == null) {
+      _autoPollTimer?.cancel();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
+      return;
+    }
 
     if (verified) {
       _autoPollTimer?.cancel();
@@ -58,8 +77,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       return;
     }
 
+    setState(() => _isChecking = false);
     if (!silent) {
-      setState(() => _isChecking = false);
       _showMessage('Not verified yet — check your inbox (and spam folder).');
     }
   }

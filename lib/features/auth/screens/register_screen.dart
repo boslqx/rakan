@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../core/utils/validators.dart';
 import '../services/auth_service.dart';
-import '../../onboarding/screens/onboarding_shell.dart';
-import '../../../shared/widgets/main_shell.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../../../features/onboarding/services/user_profile_service.dart';
 import 'email_verification_screen.dart';
 import '../services/auth_navigation_service.dart'; 
 
@@ -168,7 +165,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
+          child: AutofillGroup(
+           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 32),
@@ -309,6 +307,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       inputType: TextInputType.emailAddress,
                       errorText: _emailError,
                       onChanged: (_) => _validateEmail(),
+                      autofillHints: const [AutofillHints.newUsername],
+                      action: TextInputAction.next,
+                      onSubmit: () => _passwordFocus.requestFocus(),
                     ),
 
                     const SizedBox(height: 20),
@@ -320,6 +321,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       focusNode: _passwordFocus,
                       hint: '••••••••',
                       obscure: _obscurePassword,
+                      autofillHints: const [AutofillHints.newPassword],
+                      action: TextInputAction.next,
+                      onSubmit: () => _confirmFocus.requestFocus(),
                       suffix: IconButton(
                         icon: Icon(
                           _obscurePassword
@@ -351,6 +355,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       obscure: _obscureConfirm,
                       errorText: _confirmError,
                       onChanged: (_) => _validateConfirm(),
+                      autofillHints: const [AutofillHints.newPassword],
+                      action: TextInputAction.done,
+                      onSubmit: _isLoading ? null : _registerWithEmail,
                       suffix: IconButton(
                         icon: Icon(
                           _obscureConfirm
@@ -393,6 +400,43 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 20),
 
               Center(
+                child: Text(
+                  "We'll email you a link to verify your address.",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.manrope(
+                    fontSize: 12,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Text.rich(
+                    TextSpan(
+                      text: 'Already have an account?  ',
+                      style: GoogleFonts.manrope(
+                        fontSize: 13,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: 'Log in',
+                          style: GoogleFonts.manrope(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              Center(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -416,6 +460,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               const SizedBox(height: 32),
             ],
+           ),
           ),
         ),
       ),
@@ -431,6 +476,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     Widget? suffix,
     String? errorText,
     ValueChanged<String>? onChanged,
+    Iterable<String>? autofillHints,
+    TextInputAction? action,
+    VoidCallback? onSubmit,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -446,6 +494,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         obscureText: obscure,
         keyboardType: inputType,
         onChanged: onChanged,
+        autofillHints: autofillHints,
+        textInputAction: action,
+        onFieldSubmitted: (_) => onSubmit?.call(),
+        autocorrect: false,
+        enableSuggestions: !obscure,
+        inputFormatters: [LengthLimitingTextInputFormatter(128)],
         style: GoogleFonts.manrope(fontSize: 15, color: AppColors.onSurface),
         decoration: InputDecoration(
           hintText: hint,
