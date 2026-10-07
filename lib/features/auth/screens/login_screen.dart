@@ -6,6 +6,7 @@ import '../../../core/utils/validators.dart';
 import '../services/auth_service.dart';
 import 'register_screen.dart';
 import '../services/auth_navigation_service.dart';  
+import '../../../shared/widgets/pressable.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -184,7 +185,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: AppColors.surfaceContainerLow,
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(0.1),
+                        color: AppColors.primary.withValues(alpha: 0.1),
                         blurRadius: 40,
                         spreadRadius: 10,
                       ),
@@ -248,7 +249,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     _AuthLabel('ACCESS KEY'),
-                    GestureDetector(
+                    Pressable(
                       onTap: _forgotPassword,
                       child: Text(
                         'FORGOT?',
@@ -343,7 +344,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: GestureDetector(
+                      child: Pressable(
                         onTap: _isLoading ? null : _signInWithGoogle,
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -394,7 +395,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: AppColors.onSurfaceVariant,
                       ),
                     ),
-                    GestureDetector(
+                    Pressable(
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
                             builder: (_) => const RegisterScreen()),
@@ -462,7 +463,7 @@ class _LoginScreenState extends State<LoginScreen> {
           hintText: hint,
           hintStyle: GoogleFonts.manrope(
             fontSize: 16,
-            color: AppColors.onSurfaceVariant.withOpacity(0.5),
+            color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
           ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 14),

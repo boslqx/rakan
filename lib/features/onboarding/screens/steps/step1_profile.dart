@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../social/services/public_profile_service.dart';
 import '../../models/onboarding_data.dart';
+import '../../../../shared/widgets/pressable.dart';
 
 enum _UsernameStatus { idle, checking, available, taken, invalid, unchanged }
 
@@ -464,7 +465,7 @@ class _Step1ProfileState extends State<Step1Profile> {
           hintText: hint,
           hintStyle: GoogleFonts.spaceGrotesk(
             fontSize: 18,
-            color: AppColors.onSurfaceVariant.withOpacity(0.5),
+            color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
           ),
           suffixText: suffix,
           suffixStyle: GoogleFonts.manrope(
@@ -537,7 +538,7 @@ class _Step1ProfileState extends State<Step1Profile> {
           ),
           hintStyle: GoogleFonts.spaceGrotesk(
             fontSize: 18,
-            color: AppColors.onSurfaceVariant.withOpacity(0.5),
+            color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
           ),
           suffixIcon: suffixIcon,
           border: InputBorder.none,
@@ -601,14 +602,14 @@ class _GenderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: GestureDetector(
+      child: Pressable(
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
             color: isSelected
-                ? AppColors.primary.withOpacity(0.15)
+                ? AppColors.primary.withValues(alpha: 0.15)
                 : AppColors.surfaceContainerLow,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
@@ -721,7 +722,7 @@ class _AgeSelectorState extends State<_AgeSelector> {
                           : FontWeight.w400,
                       color: isSelected
                           ? AppColors.onSurface
-                          : AppColors.onSurfaceVariant.withOpacity(0.35),
+                          : AppColors.onSurfaceVariant.withValues(alpha: 0.35),
                     ),
                   ),
                 );
@@ -744,7 +745,7 @@ class _AgeSelectorState extends State<_AgeSelector> {
                     end: Alignment.bottomCenter,
                     colors: [
                       AppColors.surfaceContainerLowest,
-                      AppColors.surfaceContainerLowest.withOpacity(0),
+                      AppColors.surfaceContainerLowest.withValues(alpha: 0),
                     ],
                   ),
                 ),
@@ -766,7 +767,7 @@ class _AgeSelectorState extends State<_AgeSelector> {
                     end: Alignment.topCenter,
                     colors: [
                       AppColors.surfaceContainerLowest,
-                      AppColors.surfaceContainerLowest.withOpacity(0),
+                      AppColors.surfaceContainerLowest.withValues(alpha: 0),
                     ],
                   ),
                 ),
@@ -782,11 +783,11 @@ class _AgeSelectorState extends State<_AgeSelector> {
                 decoration: BoxDecoration(
                   border: Border(
                     top: BorderSide(
-                      color: AppColors.primary.withOpacity(0.3),
+                      color: AppColors.primary.withValues(alpha: 0.3),
                       width: 1,
                     ),
                     bottom: BorderSide(
-                      color: AppColors.primary.withOpacity(0.3),
+                      color: AppColors.primary.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
@@ -847,7 +848,7 @@ class _ToggleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -910,7 +911,7 @@ class _ActivityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = _content[level]!;
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -918,7 +919,7 @@ class _ActivityCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withOpacity(0.1)
+              ? AppColors.primary.withValues(alpha: 0.1)
               : AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(

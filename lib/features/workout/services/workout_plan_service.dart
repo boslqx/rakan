@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/exercise_data.dart';
 import 'schedule_matcher.dart';
@@ -18,13 +19,13 @@ class WorkoutPlanService {
           .get();
 
       if (activePlansSnapshot.docs.isEmpty) {
-        print('WorkoutPlanService: no active plan found for uid=$uid');
+        debugPrint('WorkoutPlanService: no active plan found for uid=$uid');
         return null;
       }
 
       final planDoc = activePlansSnapshot.docs.first;
       final planData = planDoc.data();
-      print(
+      debugPrint(
         'WorkoutPlanService: loaded active plan ${planDoc.id} for uid=$uid',
       );
 
@@ -38,7 +39,7 @@ class WorkoutPlanService {
         'days': await _loadDays(uid, planDoc.id),
       };
     } on FirebaseException catch (e) {
-      print(
+      debugPrint(
         'WorkoutPlanService: Firestore error for uid=$uid code=${e.code} message=${e.message}',
       );
       rethrow;

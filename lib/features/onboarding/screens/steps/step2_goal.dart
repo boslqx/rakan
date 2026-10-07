@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../models/onboarding_data.dart';
+import '../../../../shared/widgets/pressable.dart';
 
 class Step2Goal extends StatefulWidget {
   final OnboardingData data;
@@ -135,7 +136,7 @@ class _GoalCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final content = _content[goal]!;
 
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -143,7 +144,7 @@ class _GoalCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withOpacity(0.1)
+              ? AppColors.primary.withValues(alpha: 0.1)
               : AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
@@ -163,7 +164,7 @@ class _GoalCard extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: isSelected
-                    ? AppColors.primary.withOpacity(0.2)
+                    ? AppColors.primary.withValues(alpha: 0.2)
                     : AppColors.surfaceContainerHigh,
               ),
               child: Icon(
@@ -221,7 +222,7 @@ class _GoalCard extends StatelessWidget {
                 border: Border.all(
                   color: isSelected
                       ? AppColors.primary
-                      : AppColors.onSurfaceVariant.withOpacity(0.4),
+                      : AppColors.onSurfaceVariant.withValues(alpha: 0.4),
                   width: 1.5,
                 ),
               ),

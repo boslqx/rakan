@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../data/exercise_data.dart';
 import 'exercise_detail_sheet.dart';
+import '../../../shared/widgets/pressable.dart';
 
 class ExerciseLibraryScreen extends StatefulWidget {
   const ExerciseLibraryScreen({super.key});
@@ -128,7 +129,7 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
               size: 20,
             ),
             suffixIcon: _searchQuery.isNotEmpty
-                ? GestureDetector(
+                ? Pressable(
                     onTap: () {
                       _searchController.clear();
                       setState(() => _searchQuery = '');
@@ -163,7 +164,7 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
           final isSelected = _selectedMuscle == group;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
+            child: Pressable(
               onTap: () => setState(() => _selectedMuscle = group),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
@@ -208,7 +209,7 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
           final isSelected = _selectedDifficulty == diff;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
+            child: Pressable(
               onTap: () => setState(() => _selectedDifficulty = diff),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
@@ -262,7 +263,7 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
           ),
           if (_hasActiveFilters) ...[
             const Spacer(),
-            GestureDetector(
+            Pressable(
               onTap: _clearFilters,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -331,7 +332,7 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
             ),
             if (_hasActiveFilters) ...[
               const SizedBox(height: 20),
-              GestureDetector(
+              Pressable(
                 onTap: _clearFilters,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
@@ -421,7 +422,7 @@ class _ExerciseCard extends StatelessWidget {
   }
 
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: () => _openDetail(context),
       child: Container(
         decoration: BoxDecoration(

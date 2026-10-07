@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_colors.dart';
+import 'pressable.dart';
 
 class RakanBottomNavBar extends StatelessWidget {
   final int currentIndex;
@@ -17,10 +18,10 @@ class RakanBottomNavBar extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         // Glassmorphism effect from design.md
-        color: AppColors.surfaceContainerLow.withOpacity(0.9),
+        color: AppColors.surfaceContainerLow.withValues(alpha: 0.9),
         border: Border(
           top: BorderSide(
-            color: AppColors.outlineVariant.withOpacity(0.15),
+            color: AppColors.outlineVariant.withValues(alpha: 0.15),
             width: 1,
           ),
         ),
@@ -99,7 +100,15 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    // Semantics: tells screen readers (TalkBack/VoiceOver) this is a tab
+    // button and which tab is selected — GestureDetector alone exposes
+    // neither.
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: '$label tab',
+      excludeSemantics: true,
+      child: Pressable(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
@@ -107,7 +116,7 @@ class _NavItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withOpacity(0.1)
+              ? AppColors.primary.withValues(alpha: 0.1)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(48),
         ),
@@ -136,6 +145,7 @@ class _NavItem extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../models/onboarding_data.dart';
 import 'body_map_painter.dart';
+import '../../../../shared/widgets/pressable.dart';
 
 class Step8Safety extends StatefulWidget {
   final OnboardingData data;
@@ -171,7 +172,7 @@ class _Step8SafetyState extends State<Step8Safety> {
                       ...injuries.map((injury) {
                         final isSelected =
                             currentLabels.contains(injury);
-                        return GestureDetector(
+                        return Pressable(
                           onTap: () => setSheetState(() {
                             if (isSelected) {
                               currentLabels.remove(injury);
@@ -188,7 +189,7 @@ class _Step8SafetyState extends State<Step8Safety> {
                             ),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? AppColors.error.withOpacity(0.1)
+                                  ? AppColors.error.withValues(alpha: 0.1)
                                   : AppColors.surfaceContainerHigh,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
@@ -253,7 +254,7 @@ class _Step8SafetyState extends State<Step8Safety> {
                             hintText: 'Describe your injury...',
                             hintStyle: GoogleFonts.manrope(
                               color: AppColors.onSurfaceVariant
-                                  .withOpacity(0.5),
+                                  .withValues(alpha: 0.5),
                               fontSize: 14,
                             ),
                             border: InputBorder.none,
@@ -393,7 +394,7 @@ class _Step8SafetyState extends State<Step8Safety> {
                             : BodyGender.male,
                         data: _heatmapData,
                         colors: [
-                          AppColors.error.withOpacity(0.3),
+                          AppColors.error.withValues(alpha: 0.3),
                           AppColors.error,
                         ],
                         bodyColor: AppColors.surfaceContainerHigh,
@@ -420,7 +421,7 @@ class _Step8SafetyState extends State<Step8Safety> {
                           return Positioned(
                             left: dx,
                             top: dy,
-                            child: GestureDetector(
+                            child: Pressable(
                               onTap: () => _showInjurySheet(region),
                               child: _InjuryDot(isInjured: isInjured),
                             ),
@@ -449,10 +450,10 @@ class _Step8SafetyState extends State<Step8Safety> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.error.withOpacity(0.1),
+                    color: AppColors.error.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(48),
                     border: Border.all(
-                      color: AppColors.error.withOpacity(0.4),
+                      color: AppColors.error.withValues(alpha: 0.4),
                     ),
                   ),
                   child: Row(
@@ -467,7 +468,7 @@ class _Step8SafetyState extends State<Step8Safety> {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      GestureDetector(
+                      Pressable(
                         onTap: () => setState(() {
                           widget.data.injuries.remove(injury);
                         }),
@@ -573,16 +574,16 @@ class _InjuryDotState extends State<_InjuryDot>
           shape: BoxShape.circle,
           color: widget.isInjured
               ? AppColors.error
-              : AppColors.primary.withOpacity(0.9),
+              : AppColors.primary.withValues(alpha: 0.9),
           border: Border.all(
-            color: Colors.white.withOpacity(0.7),
+            color: Colors.white.withValues(alpha: 0.7),
             width: 1.5,
           ),
           boxShadow: [
             BoxShadow(
               color: widget.isInjured
-                  ? AppColors.error.withOpacity(0.6)
-                  : AppColors.primary.withOpacity(0.5),
+                  ? AppColors.error.withValues(alpha: 0.6)
+                  : AppColors.primary.withValues(alpha: 0.5),
               blurRadius: 8,
               spreadRadius: 2,
             ),
@@ -607,7 +608,7 @@ class _ToggleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),

@@ -13,6 +13,7 @@ import 'steps/step7_focus_areas.dart';
 import 'steps/step8_safety.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/user_profile_service.dart';
+import '../../../shared/widgets/pressable.dart';
 
 class OnboardingShell extends StatefulWidget {
   // Pre-fills every step with an existing profile (e.g. Reset Plan's
@@ -139,7 +140,7 @@ class _OnboardingShellState extends State<OnboardingShell> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Row(
                 children: [
-                  GestureDetector(
+                  Pressable(
                     onTap: _previousStep,
                     child: Container(
                       width: 40,

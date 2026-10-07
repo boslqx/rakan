@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../services/auth_service.dart';
 import '../services/auth_navigation_service.dart';
 import 'login_screen.dart';
+import '../../../shared/widgets/pressable.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
   const EmailVerificationScreen({super.key});
@@ -31,9 +32,11 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     _autoPollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       _checkVerified(silent: true);
     });
-    // A verification email was just sent (sign-up or login), so start the
-    // resend cooldown straight away to prevent spamming.
-    _startCooldown();
+    // Send the verification email as soon as this screen opens. Previously
+    // only sign-up sent one (and swallowed failures), so users arriving via
+    // login/app restart saw "check your inbox" with nothing sent, and the
+    // resend button was locked by a 60s cooldown.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _resend());
   }
 
   @override
@@ -223,13 +226,13 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
               ),
               const SizedBox(height: 32),
 
-              GestureDetector(
+              Pressable(
                 onTap: _signOutAndReturnToLogin,
                 child: Text(
                   'Wrong email? Sign out and try again',
                   style: GoogleFonts.manrope(
                     fontSize: 12,
-                    color: AppColors.onSurfaceVariant.withOpacity(0.6),
+                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
                   ),
                 ),
               ),

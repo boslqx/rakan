@@ -6,7 +6,6 @@ import '../../onboarding/services/user_profile_service.dart';
 import '../../social/screens/find_users_screen.dart';
 import '../../social/services/public_profile_service.dart';
 import '../../social/widgets/activity_log_card.dart';
-import '../../workout/screens/workout_active_screen.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../../workout/screens/workout_preview_screen.dart';
 import '../../workout/screens/workout_log_detail_screen.dart';
@@ -16,6 +15,8 @@ import '../../workout/services/schedule_matcher.dart';
 import '../../workout/services/adapt_service.dart';
 import '../widgets/plan_changes_dialog.dart';
 import '../widgets/missed_day_dialog.dart';
+import '../../../shared/widgets/pressable.dart';
+import '../../../shared/widgets/skeleton.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -104,6 +105,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     WeeklySummaryService().checkAndGenerateWeeklySummary(uid);
+    // Fire-and-forget; a no-op once old inline photos have been moved.
+    WorkoutLogService().migrateLegacyProgressPhotos(uid);
 
     Map<String, dynamic>? todayDay;
     List<Map<String, dynamic>> planDays = [];
@@ -491,12 +494,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // No AppBar — matches your design spec
       body: SafeArea(
         child: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(
-                  color: AppColors.primary,
-                  strokeWidth: 1.5,
-                ),
-              )
+            ? _buildLoadingSkeleton()
             : RefreshIndicator(
                 // Pull to refresh reloads the profile from Firestore
                 onRefresh: _loadProfile,
@@ -524,6 +522,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SizedBox(height: 12),
                             ],
                             _buildHeroCard(),
+                            if (_planDays.isNotEmpty) ...[
+                              const SizedBox(height: 16),
+                              _buildWeekProgressCard(),
+                            ],
                             const SizedBox(height: 32),
                             _buildSectionLabel('ACTIVITY LOG'),
                             const SizedBox(height: 16),
@@ -640,7 +642,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        GestureDetector(
+        Pressable(
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const FindUsersScreen()),
           ),
@@ -1035,6 +1037,222 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ── Loading skeleton ────────────────────────────────────────────────
+  /// Mirrors the real layout (header, hero card, progress card, feed) so
+  /// the page doesn't jump when data arrives — replaces a lone spinner.
+  Widget _buildLoadingSkeleton() {
+    return ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      children: const [
+        SkeletonBox(width: 90, height: 10, radius: 4),
+        SizedBox(height: 10),
+        SkeletonBox(width: 180, height: 30, radius: 8),
+        SizedBox(height: 32),
+        SkeletonBox(height: 300, radius: 24),
+        SizedBox(height: 16),
+        SkeletonBox(height: 110, radius: 20),
+        SizedBox(height: 32),
+        SkeletonBox(width: 110, height: 10, radius: 4),
+        SizedBox(height: 16),
+        SkeletonBox(height: 120, radius: 20),
+        SizedBox(height: 12),
+        SkeletonBox(height: 120, radius: 20),
+      ],
+    );
+  }
+
+  // ── This week's progress ────────────────────────────────────────────
+  /// Monday-Sunday adherence at a glance: one segment per scheduled
+  /// workout (filled when logged), plus the current streak and minutes
+  /// trained. Seeing progress toward the week's target is a simple,
+  /// well-evidenced adherence nudge — relevant to Objective 3.
+  Widget _buildWeekProgressCard() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final monday = today.subtract(Duration(days: today.weekday - 1));
+    final week = List.generate(7, (i) => monday.add(Duration(days: i)));
+
+    final scheduled = <DateTime>[];
+    for (final date in week) {
+      final day = _resolvedDayForDate(date);
+      if (day != null && day['dayType'] != 'rest') scheduled.add(date);
+    }
+    final doneDates = week.where((d) => _logForDate(d) != null).toSet();
+    final doneScheduled = scheduled.where(doneDates.contains).length;
+
+    int minutes = 0;
+    for (final log in _allLogs) {
+      final at = DateTime.tryParse(log['completedAt'] as String? ?? '');
+      if (at != null && !at.isBefore(monday)) {
+        minutes += (log['totalDurationMins'] as num?)?.toInt() ?? 0;
+      }
+    }
+
+    final streak = _workoutStreak(today);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'THIS WEEK',
+                style: GoogleFonts.manrope(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              Text.rich(
+                TextSpan(children: [
+                  TextSpan(
+                    text: '$doneScheduled',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' / ${scheduled.length} workouts',
+                    style: GoogleFonts.manrope(
+                      fontSize: 12,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ]),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // One segment per weekday: filled = trained, outlined = scheduled
+          // but not yet done, faint = rest day. Today is marked underneath.
+          Row(
+            children: [
+              for (int i = 0; i < 7; i++) ...[
+                if (i > 0) const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        height: 8,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(4),
+                          color: doneDates.contains(week[i])
+                              ? AppColors.primary
+                              : scheduled.contains(week[i])
+                                  ? AppColors.surfaceContainerHigh
+                                  : AppColors.surfaceContainerHigh
+                                      .withValues(alpha: 0.4),
+                          border: scheduled.contains(week[i]) &&
+                                  !doneDates.contains(week[i])
+                              ? Border.all(
+                                  color: AppColors.primary
+                                      .withValues(alpha: 0.35))
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'MTWTFSS'[i],
+                        style: GoogleFonts.manrope(
+                          fontSize: 10,
+                          fontWeight: week[i] == today
+                              ? FontWeight.w800
+                              : FontWeight.w500,
+                          color: week[i] == today
+                              ? AppColors.onSurface
+                              : AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _buildMiniStat(
+                icon: Icons.local_fire_department_rounded,
+                value: '$streak',
+                label: 'workout streak',
+              ),
+              const SizedBox(width: 24),
+              _buildMiniStat(
+                icon: Icons.timer_outlined,
+                value: '$minutes',
+                label: 'min this week',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Consecutive scheduled workouts completed, counting back from today.
+  /// Rest days don't break a streak; today only counts once it's logged
+  /// (an unfinished today doesn't break it either). Bounded by the logs
+  /// Home already loads (last 30).
+  int _workoutStreak(DateTime today) {
+    int streak = 0;
+    for (int offset = 0; offset < 60; offset++) {
+      final date = today.subtract(Duration(days: offset));
+      final day = _resolvedDayForDate(date);
+      final logged = _logForDate(date) != null;
+      final isWorkoutDay = day != null && day['dayType'] != 'rest';
+
+      if (logged) {
+        streak++;
+      } else if (isWorkoutDay && offset > 0) {
+        break; // a missed scheduled workout ends the streak
+      }
+    }
+    return streak;
+  }
+
+  Widget _buildMiniStat({
+    required IconData icon,
+    required String value,
+    required String label,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: AppColors.primary),
+        const SizedBox(width: 6),
+        Text(
+          value,
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: GoogleFonts.manrope(
+            fontSize: 12,
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
   // Section label
   Widget _buildSectionLabel(String text) {
     return Text(
@@ -1072,7 +1290,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: GestureDetector(
+              child: Pressable(
                 onTap: () => _onCalendarDayTap(date),
                 child: Container(
                   width: 44,
@@ -1096,7 +1314,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         style: GoogleFonts.spaceGrotesk(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
-                          color: isToday ? Colors.white : AppColors.onSurface,
+                          color: isToday ? AppColors.onPrimary : AppColors.onSurface,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -1106,7 +1324,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                           color: isToday
-                              ? Colors.white.withValues(alpha: 0.92)
+                              ? AppColors.onPrimary.withValues(alpha: 0.75)
                               : AppColors.onSurfaceVariant,
                         ),
                       ),
@@ -1122,13 +1340,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: isCompleted
-                                      ? (isToday ? Colors.white : AppColors.primary)
+                                      ? (isToday ? AppColors.onPrimary : AppColors.primary)
                                       : Colors.transparent,
                                   border: isCompleted
                                       ? null
                                       : Border.all(
                                           color: isToday
-                                              ? Colors.white54
+                                              ? AppColors.onPrimary.withValues(alpha: 0.4)
                                               : AppColors.outlineVariant,
                                           width: 1,
                                         ),

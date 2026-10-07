@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../onboarding/models/onboarding_data.dart';
 import '../../onboarding/services/user_profile_service.dart';
+import '../../../shared/widgets/pressable.dart';
 
 class EditStatsScreen extends StatefulWidget {
   const EditStatsScreen({super.key});
@@ -442,7 +443,7 @@ class _ToggleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -502,7 +503,7 @@ class _ActivityOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = _content[level]!;
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),

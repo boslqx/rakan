@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../services/activity_interaction_service.dart';
+import '../../../shared/widgets/pressable.dart';
 
 /// Like/comment/share row appended below an ActivityLogCard. Owns its own
 /// like/comment-count state so the card itself stays a simple, stateless
@@ -142,7 +143,7 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -222,6 +223,13 @@ class _CommentsSheetState extends State<_CommentsSheet> {
       );
       _textController.clear();
       await _load();
+    } catch (e) {
+      // e.g. the post became private, or no connection
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't post your comment. Try again.")),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isPosting = false);
     }
@@ -319,7 +327,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                                       ),
                                     ),
                                     if (canDelete)
-                                      GestureDetector(
+                                      Pressable(
                                         onTap: () => _delete(comment['id'] as String),
                                         child: const Padding(
                                           padding: EdgeInsets.all(4),
@@ -345,12 +353,15 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                         ),
                         child: TextField(
                           controller: _textController,
+                          // Matches the 500-character limit in firestore.rules
+                          maxLength: 500,
                           style: GoogleFonts.manrope(fontSize: 14, color: AppColors.onSurface),
                           decoration: InputDecoration(
                             hintText: 'Add a comment…',
                             hintStyle: GoogleFonts.manrope(
                                 fontSize: 14, color: AppColors.onSurfaceVariant),
                             border: InputBorder.none,
+                            counterText: '', // hide the 0/500 counter
                             contentPadding:
                                 const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                           ),
@@ -358,7 +369,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    GestureDetector(
+                    Pressable(
                       onTap: _isPosting ? null : _post,
                       child: Container(
                         width: 40,

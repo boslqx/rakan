@@ -9,6 +9,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/main_shell.dart';
 import '../services/adapt_service.dart';
+import '../services/workout_log_service.dart';
+import '../../../shared/widgets/pressable.dart';
 
 class WorkoutCompleteScreen extends StatefulWidget {
   final String workoutName;
@@ -21,6 +23,7 @@ class WorkoutCompleteScreen extends StatefulWidget {
   final double completionRate;
   final List<Map<String, dynamic>> exerciseLogs; // ← NEW
   final String logId;                             // ← NEW
+  final List<String> prExerciseNames;
 
   const WorkoutCompleteScreen({
     super.key,
@@ -34,6 +37,7 @@ class WorkoutCompleteScreen extends StatefulWidget {
     required this.completionRate,
     required this.exerciseLogs,
     required this.logId,
+    this.prExerciseNames = const [],
   });
 
   @override
@@ -103,7 +107,11 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
         .get();
 
     final profileData = profileSnap.data() ?? {};
-    final experienceStr = profileData['experience'] as String? ?? 'beginner';
+    // The profile stores this as 'experienceLevel' (OnboardingData.toMap).
+    // Reading 'experience' here always fell back to 'beginner', so every
+    // user was sent to the fatigue model as experience level 0.
+    final experienceStr =
+        profileData['experienceLevel'] as String? ?? 'beginner';
 
     switch (experienceStr.toLowerCase()) {
       case 'beginner':
@@ -191,7 +199,7 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
     required String label,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -252,14 +260,13 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
       // Convert bytes to base64 string for Firestore storage
       final base64String = base64Encode(compressed);
 
-      // Save base64 string to the workout log document in Firestore
-      // Path: users/{uid}/workoutLogs/{logId}
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.uid)
-          .collection('workoutLogs')
-          .doc(widget.logId)
-          .update({'progressPhotoBase64': base64String});
+      // Saved to users/{uid}/progressPhotos/{logId}, not onto the workout
+      // log itself — see WorkoutLogService.saveProgressPhoto for why.
+      await WorkoutLogService().saveProgressPhoto(
+        uid: widget.uid,
+        logId: widget.logId,
+        photoBase64: base64String,
+      );
 
       if (!mounted) return;
       setState(() {
@@ -295,6 +302,8 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
           slivers: [
             SliverToBoxAdapter(child: _buildHeroSection()),
             SliverToBoxAdapter(child: _buildStatsRow()),
+            if (widget.prExerciseNames.isNotEmpty)
+              SliverToBoxAdapter(child: _buildPrBanner()),
             SliverToBoxAdapter(child: _buildAdaptBanner()),
             SliverToBoxAdapter(child: _buildPhotoSection()),
             SliverToBoxAdapter(
@@ -338,7 +347,7 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
             height: 80,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.primary.withOpacity(0.12),
+              color: AppColors.primary.withValues(alpha: 0.12),
             ),
             child: const Icon(
               Icons.emoji_events_rounded,
@@ -367,6 +376,26 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
               height: 1.1,
             ),
           ),
+          // Finished early: say so honestly rather than implying 100%.
+          if (widget.completionRate < 1.0) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(100),
+              ),
+              child: Text(
+                '${(widget.completionRate * 100).round()}% OF PLANNED SETS',
+                style: GoogleFonts.manrope(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -398,17 +427,36 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
   }
 
   Widget _buildStat(String label, String value, String unit) {
+    // Numbers count up from zero when the screen appears — a small
+    // celebratory touch that also draws the eye to the results.
+    final target = double.tryParse(value);
     return Expanded(
       child: Column(
         children: [
-          Text(
-            value,
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
+          if (target == null)
+            Text(
+              value,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            )
+          else
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: target),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeOutCubic,
+              builder: (context, v, _) => Text(
+                v.round().toString(),
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: AppColors.onSurface,
+                ),
+              ),
             ),
-          ),
           Text(
             unit,
             style: GoogleFonts.manrope(
@@ -428,6 +476,61 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Personal-record callout — PRs were detected and stored but never
+  /// shown to the user at the moment they happened.
+  Widget _buildPrBanner() {
+    final names = widget.prExerciseNames;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
+            colors: [
+              AppColors.primary.withValues(alpha: 0.18),
+              AppColors.primary.withValues(alpha: 0.06),
+            ],
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.military_tech_rounded,
+                color: AppColors.primary, size: 30),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    names.length == 1
+                        ? 'NEW PERSONAL RECORD'
+                        : '${names.length} NEW PERSONAL RECORDS',
+                    style: GoogleFonts.manrope(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    names.join(' · '),
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -514,7 +617,7 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
   }
 
   Widget _buildAddPhotoButton() {
-    return GestureDetector(
+    return Pressable(
       onTap: _isUploadingPhoto ? null : _showPhotoOptions,
       child: Container(
         height: 120,
@@ -522,7 +625,7 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
           color: AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: AppColors.outlineVariant.withOpacity(0.4),
+            color: AppColors.outlineVariant.withValues(alpha: 0.4),
           ),
         ),
         child: _isUploadingPhoto
@@ -555,7 +658,7 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
                     'Optional — saved to your log',
                     style: GoogleFonts.manrope(
                       fontSize: 10,
-                      color: AppColors.onSurfaceVariant.withOpacity(0.6),
+                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
                     ),
                   ),
                 ],
@@ -585,7 +688,7 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: AppColors.surface.withOpacity(0.85),
+                color: AppColors.surface.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(48),
               ),
               child: Row(
@@ -611,13 +714,13 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
         Positioned(
           bottom: 12,
           right: 12,
-          child: GestureDetector(
+          child: Pressable(
             onTap: _showPhotoOptions,
             child: Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: AppColors.surface.withOpacity(0.85),
+                color: AppColors.surface.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(48),
               ),
               child: Text(
@@ -691,7 +794,7 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: _rpeColor(rpe).withOpacity(0.12),
+                    color: _rpeColor(rpe).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(48),
                   ),
                   child: Text(

@@ -23,13 +23,10 @@ class AuthService {
         email: email.trim(),
         password: password,
       );
-      // Send email verification immediately after account creation. The
-      // account already exists at this point, so a failure here must not
-      // surface as a sign-up error — the verification screen offers a
-      // resend instead.
-      try {
-        await credential.user?.sendEmailVerification();
-      } catch (_) {}
+      // The verification email is sent by EmailVerificationScreen when it
+      // opens, so every route into that screen (sign-up, login, app restart)
+      // actually triggers an email and any send error is shown to the user
+      // instead of being silently swallowed here.
       return credential;
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
@@ -117,6 +114,10 @@ class AuthService {
     try {
       await user.sendEmailVerification();
     } on FirebaseAuthException catch (e) {
+      if (e.code == 'too-many-requests') {
+        throw 'An email was sent recently. Check your inbox and spam folder, '
+            'or try again in a few minutes.';
+      }
       throw _handleAuthException(e);
     }
   }

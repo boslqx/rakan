@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../../workout/services/workout_plan_service.dart';
 import '../../onboarding/services/user_profile_service.dart';
 
 /// Maps a BodyRegion (stored as its raw .name string, e.g. "rightShoulder")
@@ -66,6 +65,9 @@ class InjuryService {
       'equipment': (profile['equipment'] as List?)?.cast<String>() ?? [],
       'session_duration': profile['sessionDuration'] ?? 'sixtyMin',
       'focus_areas': (profile['focusAreas'] as List?)?.cast<String>() ?? [],
+      // Local date, so the backend works out "this week" in the user's
+      // timezone rather than UTC.
+      'client_date': DateTime.now().toIso8601String().substring(0, 10),
     });
 
     // Deliberately NOT re-thrown to the caller 

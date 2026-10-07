@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../../../core/theme/app_colors.dart'; // adjust relative path to match your project
 import '../models/weight_record.dart';
 import '../services/weight_record_service.dart';
+import '../../../shared/widgets/pressable.dart';
 
 /// Add-or-edit form for a single weight record
 class LogWeightScreen extends StatefulWidget {
@@ -229,7 +229,7 @@ class _LogWeightScreenState extends State<LogWeightScreen> {
             const SizedBox(height: 24),
             _buildLabel('DATE'),
             const SizedBox(height: 8),
-            GestureDetector(
+            Pressable(
               onTap: _pickDate,
               child: _buildBottomEtchedField(
                 child: Row(
@@ -314,7 +314,7 @@ class _LogWeightScreenState extends State<LogWeightScreen> {
           Positioned(
             top: 8,
             right: 8,
-            child: GestureDetector(
+            child: Pressable(
               onTap: _removeImage,
               child: Container(
                 padding: const EdgeInsets.all(6),
@@ -330,7 +330,7 @@ class _LogWeightScreenState extends State<LogWeightScreen> {
       );
     }
 
-    return GestureDetector(
+    return Pressable(
       onTap: _pickImage,
       child: Container(
         height: 120,

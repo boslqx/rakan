@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/user_avatar.dart';
+import '../../../shared/widgets/pressable.dart';
 
 /// A single row for a user list — search results, followers, following,
 /// pending requests. [profile] is a `users/{uid}` public-doc map (must
@@ -25,7 +26,7 @@ class UserListTile extends StatelessWidget {
     final username = profile['username'] as String?;
     final photoBase64 = profile['photoBase64'] as String?;
 
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),

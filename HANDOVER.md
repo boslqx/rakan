@@ -1,4 +1,4 @@
-# Rakan — FYP Project Handover Summary (Updated — Phase 27)
+# Rakan — FYP Project Handover Summary (Updated — Phase 28)
 
 ## Project Overview
 
@@ -236,6 +236,126 @@ called done for the dissertation — logged as an open item below, not
 claimed as complete.
 
 ---
+
+## Phase 28: Review Fixes (bugs, security, performance, UX)
+
+A full code review found 8 correctness/security bugs plus performance and
+UX issues. All fixes below are **uncommitted** at the time of writing, so
+`git diff` shows exactly what changed. Backend: 14 pytest tests pass (11
+new). Dart: syntax-checked only, because no Flutter SDK was available
+during the fix. **Run `flutter analyze` and `flutter test` before
+committing.**
+
+### Correctness fixes
+1. **Posture angles were distorted (Objective 2).** MediaPipe x/y are
+   fractions of frame width/height; on a 640x480 frame, angles measured on
+   them are skewed by up to ~16 degrees near 90 degrees.
+   `AngleCalculator.toPixelSpace()` now scales landmarks to pixels before
+   analysis, in both `PoseDetectionScreen` and `AutoLogScreen`. The overlay
+   still uses normalized coordinates. **Any accuracy data logged before
+   this fix used distorted angles, so re-run the posture study.**
+   `SquatAnalyser` also now uses the single visible leg in a side-on view
+   instead of refusing to analyse.
+2. **Plan generator split bug.** "arms" was one group, so Pull days got
+   tricep dips / close-grip presses (92% of Pull days) and Push days often
+   had no shoulder work. Arms are now resolved to biceps/triceps
+   (`_target_group`), and exercises are picked round-robin across the
+   day's muscles. Focus areas can no longer add off-split exercises.
+3. **Session length ignored.** A 60-minute choice produced ~29-minute
+   sessions. `_build_session` now fills the chosen length (minus 10 min
+   warm-up/cool-down) within experience bounds (beginner 3-6 exercises,
+   intermediate 3-7, advanced 3-8), trimming or adding sets as needed.
+   `durationMinutes` now includes the warm-up/cool-down. Beginners choosing
+   90+ minutes are capped at about 60, by design.
+4. **Goal had no effect on the prescription.** `GOAL_PRESCRIPTION` now
+   shifts reps and rest per goal (endurance: 15-20 reps, rest of 45 s or
+   less; weight loss and flexibility: 12-15 reps, rest of 60 s or less).
+   Timed holds (reps <= 1) are untouched.
+5. **completion_rate was always 1.0.** Finishing required every set to be
+   done. Users can now finish early (with a confirmation dialog) once at
+   least one set is done. `totalSetsPlanned` and `completionRate` are
+   stored on the log. Only exercises with completed sets feed RPE,
+   exercise count and adaptation proposals.
+6. **Unrated RPE counted as 5.** `ExerciseSessionState.rpeRated` now
+   tracks whether the user actually rated an exercise. Only rated
+   exercises feed avg/max RPE; if none were rated, the value falls back
+   to 5. Stored as `rpeRated` on each exercise log.
+7. **Experience level always "beginner"** in `/adapt-plan`
+   (`workout_complete_screen` read `experience` instead of
+   `experienceLevel`). Fixed.
+8. **Plan reset could leave no active plan.** The app deactivated the old
+   plan before generating a new one. `/generate-plan` now retires old
+   active plans in the same batch that publishes the new one, and only
+   after the new plan's days are saved. `PlanGenerationScreen` clears the
+   navigation stack, so a reset no longer leaves two MainShells.
+9. **Plateau detection could never fire** (new bug, found during the fix).
+   `getRecentSessionMaxWeights` defaulted to `limit: 4`, but `detectPlateau`
+   needs 5 sessions (Decision #59). The default is now 5.
+10. **Week boundary / timestamps.** `get_logged_day_numbers_this_week` uses
+    the user's local date (`client_date`, sent by `InjuryService`, falling
+    back to UTC+8) instead of UTC. `generatedAt` is now timezone-aware UTC,
+    and the app converts it with `.toLocal()`.
+
+### Workout save robustness
+- `saveWorkoutLog` writes everything in one atomic batch. If the server
+  doesn't acknowledge within 15 s, the save is treated as queued offline:
+  Firestore already holds it locally and syncs later, and the user is
+  told. Errors no longer leave the button spinning; a retry reuses the
+  same `logId`, so it can't create duplicates.
+- Back button / back gesture on the active workout now asks before
+  discarding progress (`PopScope`).
+- Empty-workout `reduce()` crashes are guarded.
+
+### Security (firestore.rules)
+- Follow create: the doc id must equal `followerUid_followingUid`, and
+  `status: 'accepted'` is only allowed if the target is public. Before
+  this, anyone could self-approve a follow on a private account, or spoof
+  the doc id that `canViewActivity()` trusts.
+- Likes/comments: creating one requires being able to view the post.
+  Comments are limited to 1-500 characters (the client field matches).
+  Social reads use `isVerified()`.
+- Backend: removed the public `/test-firebase` write endpoint. Added
+  range validation on `/adapt-plan` (RPE 1-10, completion 0-1, etc.) and
+  `/generate-plan` (`workout_days` 1-7, non-empty).
+- **Still open:** backend endpoints don't verify a Firebase ID token
+  (limitation 3 in SYSTEM_OVERVIEW §17).
+
+### Performance
+- Progress photos moved from `workoutLogs.progressPhotoBase64` to
+  `users/{uid}/progressPhotos/{logId}`, with a `hasProgressPhoto` flag on
+  the log. Old inline photos are migrated once, in the background, by
+  `migrateLegacyProgressPhotos`, which is called from Home.
+  `ProgressPhoto` loads a photo lazily and still reads the legacy field.
+- History reads use `orderBy('completedAt').limit(n)`. This is a
+  single-field index, which Firestore creates automatically, so no
+  composite index is needed. Date-range queries are used for
+  `getLogForDate` and `updateMuscleRecovery`, and per-log subcollection
+  reads run in parallel.
+- `getWeightHistory()` builds last/max/session-max weights for every
+  exercise in one pass. It replaces a full collection scan per exercise
+  on workout start (weight prefill) and on Complete (PR detection).
+- `Base64ImageCache` decodes avatars/photos once instead of on every
+  rebuild (`gaplessPlayback` stops the flicker).
+
+### UX / housekeeping
+- Splash shows a retry screen if startup routing fails, instead of an
+  endless spinner.
+- In-app account deletion (Settings → Delete account): asks the user to
+  sign in again, then deletes all their data, follows, username and the
+  Auth user (`AccountDeletionService`). This is required by Google Play.
+  Comments the user left on other people's posts remain.
+- All 69 `withOpacity()` calls became `withValues(alpha:)`, so the design
+  system rule now holds everywhere. All `print()` calls became
+  `debugPrint()`. Bottom-nav tabs expose button/selected semantics to
+  screen readers.
+
+### Not changed (deliberately)
+- Progress photos are still not copied to the follower `activityFeed`
+  (privacy design).
+- The GestureDetector → InkWell / Semantics pass across ~110 tap targets,
+  and moving 738 inline `GoogleFonts` calls into the theme. Both are
+  too large to do safely without compiling; do them as a dedicated pass.
+- Fonts are still fetched at runtime (`assets/fonts/` is empty).
 
 ## Key Academic Citations (for dissertation)
 

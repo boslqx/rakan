@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -327,7 +328,10 @@ class AdaptService {
     // same as before this fix.
     final generatedAtStr = plan['generatedAt'] as String?;
     final planStartDate =
-        generatedAtStr != null ? DateTime.tryParse(generatedAtStr) : null;
+        // toLocal(): new plans store a UTC timestamp with an offset; without
+        // this the date part would be the UTC date, which is the previous
+        // day for plans generated before 8am Malaysia time.
+        generatedAtStr != null ? DateTime.tryParse(generatedAtStr)?.toLocal() : null;
 
     final allMissed = computeMissedDays(
       planDays: planDays,
@@ -436,9 +440,9 @@ class AdaptService {
       // Surfaced rather than left silent: a caller awaiting this (the
       // missed-day popup) needs the rejection to know the card shouldn't
       // be treated as resolved.
-      print('AdaptService.resolveMissedDayAsRescheduled failed for '
+      debugPrint('AdaptService.resolveMissedDayAsRescheduled failed for '
           'uid=$uid muscleGroup=$muscleGroup missedDate=$missedDate: $e');
-      print(st);
+      debugPrint('$st');
       rethrow;
     }
   }
@@ -490,9 +494,9 @@ class AdaptService {
           .collection('adaptationProposals')
           .add(proposal);
     } catch (e, st) {
-      print('AdaptService.resolveMissedDayAsSkipped failed for '
+      debugPrint('AdaptService.resolveMissedDayAsSkipped failed for '
           'uid=$uid muscleGroup=$muscleGroup missedDate=$missedDate: $e');
-      print(st);
+      debugPrint('$st');
       rethrow;
     }
   }
@@ -642,7 +646,7 @@ class AdaptService {
       final double fatigueScore = (result['fatigue_score'] as num).toDouble();
       final String fatigueLevel = result['fatigue_level'] as String;
       // The backend message describes a raw adjustment.
-      print(
+      debugPrint(
         'AdaptService: fatigue=$fatigueLevel; '
         'backend message=${result['message']}',
       );
@@ -682,7 +686,7 @@ class AdaptService {
 
       return fatigueLevel;
     } catch (e) {
-      print('AdaptService error: $e');
+      debugPrint('AdaptService error: $e');
       return '';
     }
   }

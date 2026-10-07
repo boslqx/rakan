@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,10 +16,12 @@ import '../../social/services/public_profile_service.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../../workout/services/notification_service.dart';
 import '../../coach/services/plan_reset_flow.dart';
+import '../services/account_deletion_service.dart';
 import 'change_password_dialog.dart';
 import 'edit_profile_screen.dart';
 import 'edit_equipment_screen.dart';
 import 'edit_stats_screen.dart';
+import '../../../shared/widgets/pressable.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -150,6 +153,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _isUpdatingReminders = true);
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
+    DateTime? nextAt;
 
     try {
       if (value) {
@@ -176,7 +180,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           final plan = await WorkoutPlanService().getActivePlan(uid);
           if (plan != null) {
             final days = (plan['days'] as List).cast<Map<String, dynamic>>();
-            await NotificationService().scheduleWeeklyReminders(
+            nextAt = await NotificationService().scheduleWeeklyReminders(
               days: days,
               hour: _reminderTime.hour,
               minute: _reminderTime.minute,
@@ -197,7 +201,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              value ? 'Workout reminders enabled' : 'Workout reminders disabled',
+              !value
+                  ? 'Workout reminders disabled'
+                  : nextAt != null
+                      ? 'Reminders on. Next: ${NotificationService.describe(nextAt)}'
+                      : 'Workout reminders enabled',
               style: GoogleFonts.manrope(color: AppColors.onSurface),
             ),
             backgroundColor: AppColors.surfaceContainerHigh,
@@ -244,22 +252,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // If reminders are active, reschedule with the new time
     if (_remindersEnabled) {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid != null) {
-        final plan = await WorkoutPlanService().getActivePlan(uid);
-        if (plan != null) {
-          final days = (plan['days'] as List).cast<Map<String, dynamic>>();
-          await NotificationService().scheduleWeeklyReminders(
-            days: days,
-            hour: _reminderTime.hour,
-            minute: _reminderTime.minute,
-          );
+      // Previously unguarded: if scheduling threw (e.g. timezone lookup
+      // failure), the user saw nothing at all — no reminder, no error.
+      DateTime? nextAt;
+      bool failed = false;
+      try {
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid != null) {
+          final plan = await WorkoutPlanService().getActivePlan(uid);
+          if (plan != null) {
+            final days = (plan['days'] as List).cast<Map<String, dynamic>>();
+            nextAt = await NotificationService().scheduleWeeklyReminders(
+              days: days,
+              hour: _reminderTime.hour,
+              minute: _reminderTime.minute,
+            );
+          }
         }
+      } catch (e, stack) {
+        debugPrint('_pickReminderTime failed: $e\n$stack');
+        failed = true;
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Reminder time updated',
+            content: Text(
+                failed
+                    ? 'Could not update reminders'
+                    : nextAt != null
+                        ? 'Reminder time updated. Next: ${NotificationService.describe(nextAt)}'
+                        : 'Reminder time updated',
                 style: GoogleFonts.manrope(color: AppColors.onSurface)),
             backgroundColor: AppColors.surfaceContainerHigh,
           ),
@@ -317,6 +339,123 @@ class _SettingsScreenState extends State<SettingsScreen> {
         (_) => false,
       );
     }
+  }
+
+  /// Permanently deletes the account and all its data after the user
+  /// confirms and re-verifies their identity (see AccountDeletionService).
+  Future<void> _deleteAccount(BuildContext context) async {
+    final service = AccountDeletionService();
+    final needsPassword = service.usesPassword;
+    final passwordController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Delete account?',
+          style: GoogleFonts.spaceGrotesk(
+            color: AppColors.onSurface,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This permanently deletes your profile, plans, workout history, '
+              'photos and followers. It cannot be undone.',
+              style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant),
+            ),
+            if (needsPassword) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                style: GoogleFonts.manrope(color: AppColors.onSurface),
+                decoration: const InputDecoration(
+                  labelText: 'Password',
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 12),
+              Text(
+                "You'll be asked to sign in with Google again to confirm.",
+                style: GoogleFonts.manrope(
+                    fontSize: 12, color: AppColors.onSurfaceVariant),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(
+              'Delete',
+              style: GoogleFonts.manrope(
+                color: AppColors.error,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    // Blocking progress indicator while everything is deleted
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      ),
+    );
+
+    String? error;
+    try {
+      final verified =
+          await service.reauthenticate(password: passwordController.text);
+      if (verified) {
+        await service.deleteAccount();
+      } else {
+        error = 'Account deletion cancelled.';
+      }
+    } catch (e) {
+      error = e is String ? e : "Couldn't delete your account. Please try again.";
+      debugPrint('Account deletion failed: $e');
+    }
+
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // progress dialog
+
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error,
+              style: GoogleFonts.manrope(color: AppColors.onSurface)),
+          backgroundColor: AppColors.surfaceContainerHigh,
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
   }
 
   void _showAboutDialog(BuildContext context) {
@@ -403,7 +542,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 32),
 
             // User info card
-            GestureDetector(
+            Pressable(
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const EditProfileScreen()),
@@ -520,7 +659,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
 
             // Logout button
-            GestureDetector(
+            Pressable(
               onTap: () => _logout(context),
               child: Container(
                 width: double.infinity,
@@ -541,6 +680,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       letterSpacing: 2,
                       color: AppColors.error,
                     ),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+            Center(
+              child: TextButton(
+                onPressed: () => _deleteAccount(context),
+                child: Text(
+                  'Delete account',
+                  style: GoogleFonts.manrope(
+                    fontSize: 13,
+                    color: AppColors.onSurfaceVariant,
+                    decoration: TextDecoration.underline,
+                    decorationColor: AppColors.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -604,7 +759,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: AppColors.outlineVariant.withValues(alpha: 0.15),
                 height: 1,
               ),
-              GestureDetector(
+              Pressable(
                 onTap: _pickReminderTime,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -634,6 +789,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Icons.chevron_right_rounded,
                         color: AppColors.onSurfaceVariant,
                         size: 18,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            // Debug-only: fire a notification immediately. Separates
+            // "can this phone show notifications at all?" from "did the
+            // scheduled alarm fire?". Compiled out of release builds.
+            if (kDebugMode && _remindersEnabled) ...[
+              Divider(
+                color: AppColors.outlineVariant.withValues(alpha: 0.15),
+                height: 1,
+              ),
+              Pressable(
+                onTap: () => NotificationService().showTestNotification(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 16),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 36),
+                      Expanded(
+                        child: Text(
+                          'Send test notification (debug)',
+                          style: GoogleFonts.manrope(
+                            fontSize: 13,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -758,7 +944,7 @@ class _SocialStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Column(
         children: [
@@ -800,7 +986,7 @@ class _SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),

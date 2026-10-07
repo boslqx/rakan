@@ -8,6 +8,7 @@ import '../../onboarding/screens/steps/body_map_painter.dart'
     show regionInjuries;
 import '../../workout/services/workout_plan_service.dart';
 import '../services/injury_service.dart';
+import '../../../shared/widgets/pressable.dart';
 
 const List<String> _kMonthAbbrev = [
   'Jan',
@@ -268,7 +269,7 @@ class _LogInjuryScreenState extends State<LogInjuryScreen> {
                     const SizedBox(height: 10),
                     ...predefined.map((injury) {
                       final isSelected = selectedLabels.contains(injury);
-                      return GestureDetector(
+                      return Pressable(
                         onTap: () => setSheetState(() {
                           if (isSelected) {
                             selectedLabels.remove(injury);
@@ -387,7 +388,7 @@ class _LogInjuryScreenState extends State<LogInjuryScreen> {
                       runSpacing: 8,
                       children: List.generate(_recoveryOptions.length, (i) {
                         final isSelected = selectedRecoveryIndex == i;
-                        return GestureDetector(
+                        return Pressable(
                           onTap: () =>
                               setSheetState(() => selectedRecoveryIndex = i),
                           child: Container(
@@ -503,6 +504,12 @@ class _LogInjuryScreenState extends State<LogInjuryScreen> {
       });
     }
 
+    // Plan regeneration hits the Render backend (~50 s cold start), so run it
+    // in the background instead of leaving the CONFIRM spinner up for it.
+    _regeneratePlanInBackground();
+  }
+
+  Future<void> _regeneratePlanInBackground() async {
     try {
       final plan = await WorkoutPlanService().getActivePlan(widget.uid);
       if (plan != null) {
@@ -687,7 +694,7 @@ class _LogInjuryScreenState extends State<LogInjuryScreen> {
                               return Positioned(
                                 left: dx,
                                 top: dy,
-                                child: GestureDetector(
+                                child: Pressable(
                                   onTap: () => _showInjurySheet(region),
                                   child: _InjuryDot(isInjured: isInjured),
                                 ),
@@ -830,7 +837,7 @@ class _ToggleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),

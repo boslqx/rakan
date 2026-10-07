@@ -1,8 +1,8 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
+import '../utils/base64_image_cache.dart';
 
 /// Single source of truth for rendering a user's avatar
 class UserAvatar extends StatelessWidget {
@@ -24,16 +24,9 @@ class UserAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Uint8List? bytes;
-    if (photoBase64 != null && photoBase64!.isNotEmpty) {
-      try {
-        bytes = base64Decode(photoBase64!);
-      } catch (_) {
-        // Corrupted/invalid data — fail closed to the initials
-        // fallback rather than crashing the whole avatar render.
-        bytes = null;
-      }
-    }
+    // Decoded once and cached (see Base64ImageCache) instead of on every
+    // rebuild. Corrupted data returns null, falling back to the initials.
+    final Uint8List? bytes = Base64ImageCache.decode(photoBase64);
 
     return Container(
       width: size,
@@ -47,7 +40,8 @@ class UserAvatar extends StatelessWidget {
           ? Image.memory(
               bytes,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _initials(),
+              gaplessPlayback: true,
+              errorBuilder: (_, _, _) => _initials(),
             )
           : _initials(),
     );

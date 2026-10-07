@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../models/onboarding_data.dart';
+import '../../../shared/widgets/pressable.dart';
 
 /// Shared equipment multi-select UI + selection rules.
 class EquipmentSelector extends StatefulWidget {
@@ -189,7 +190,7 @@ class _EquipmentTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final content = _content[type]!;
 
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),

@@ -1,9 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../shared/widgets/progress_photo.dart';
 import '../services/workout_log_service.dart';
+import '../../../shared/widgets/pressable.dart';
 
 /// Read-only view of a single past workout
 class WorkoutLogDetailScreen extends StatefulWidget {
@@ -70,7 +71,6 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
     final completedAt = log['completedAt'] as String? ?? '';
     final durationMins = log['totalDurationMins'] as int? ?? 0;
     final totalVolume = (log['totalVolume'] as num?)?.toDouble() ?? 0;
-    final photoBase64 = log['progressPhotoBase64'] as String?;
 
     final avgRpe = _exerciseLogs.isEmpty
         ? null
@@ -91,7 +91,7 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
                 children: [
                   Row(
                     children: [
-                      GestureDetector(
+                      Pressable(
                         onTap: () => Navigator.of(context).pop(),
                         child: Container(
                           width: 36,
@@ -127,16 +127,12 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  if (photoBase64 != null && photoBase64.isNotEmpty) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Image.memory(
-                        base64Decode(photoBase64),
-                        width: double.infinity,
-                        height: 220,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                      ),
+                  if (ProgressPhoto.hasPhoto(log)) ...[
+                    ProgressPhoto(
+                      log: log,
+                      ownerUid: FirebaseAuth.instance.currentUser?.uid,
+                      height: 220,
+                      borderRadius: 20,
                     ),
                     const SizedBox(height: 20),
                   ],

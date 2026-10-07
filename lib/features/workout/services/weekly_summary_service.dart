@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -37,7 +38,7 @@ class WeeklySummaryService {
         'lastWeeklySummaryAt': now.toIso8601String(),
       });
     } catch (e) {
-      print('checkAndGenerateWeeklySummary failed for $uid: $e');
+      debugPrint('checkAndGenerateWeeklySummary failed for $uid: $e');
     }
   }
 
@@ -188,7 +189,7 @@ class WeeklySummaryService {
       if (response.statusCode == 200) {
         commitResult = jsonDecode(response.body) as Map<String, dynamic>;
       } else {
-        print(
+        debugPrint(
             'commit-adaptations failed: ${response.statusCode} — skipping this run\'s adaptations');
       }
     }

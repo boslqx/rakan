@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../models/onboarding_data.dart';
+import '../../../../shared/widgets/pressable.dart';
 
 class Step6Motivation extends StatefulWidget {
   final OnboardingData data;
@@ -97,7 +98,7 @@ class _Step6MotivationState extends State<Step6Motivation> {
             final content = _content[motivation]!;
             final isSelected = widget.data.motivation == motivation;
 
-            return GestureDetector(
+            return Pressable(
               onTap: () => setState(
                 () => widget.data.motivation = motivation,
               ),
@@ -110,7 +111,7 @@ class _Step6MotivationState extends State<Step6Motivation> {
                 ),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? AppColors.primary.withOpacity(0.1)
+                      ? AppColors.primary.withValues(alpha: 0.1)
                       : AppColors.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
@@ -130,7 +131,7 @@ class _Step6MotivationState extends State<Step6Motivation> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: isSelected
-                            ? AppColors.primary.withOpacity(0.2)
+                            ? AppColors.primary.withValues(alpha: 0.2)
                             : AppColors.surfaceContainerHigh,
                       ),
                       child: Icon(
@@ -181,7 +182,7 @@ class _Step6MotivationState extends State<Step6Motivation> {
                         border: Border.all(
                           color: isSelected
                               ? AppColors.primary
-                              : AppColors.onSurfaceVariant.withOpacity(0.4),
+                              : AppColors.onSurfaceVariant.withValues(alpha: 0.4),
                           width: 1.5,
                         ),
                       ),

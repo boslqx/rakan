@@ -9,6 +9,7 @@ import '../services/pose_service.dart';
 import '../services/angle_calculator.dart';
 import '../widgets/pose_countdown_overlay.dart';
 import 'pose_detection_screen.dart';
+import '../../../shared/widgets/pressable.dart';
 
 
 enum _ScreenPhase { ready, active, resting, rpe }
@@ -162,7 +163,13 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
           return;
         }
 
-        final result = _analyser.analyse(landmarks);
+        // Analyse in pixel space (equal units on both axes) — the overlay
+        // keeps using the normalized `landmarks`, which its painter expects.
+        final result = _analyser.analyse(AngleCalculator.toPixelSpace(
+          landmarks,
+          frameWidth: (data['frameWidth'] as int?) ?? 640,
+          frameHeight: (data['frameHeight'] as int?) ?? 480,
+        ));
 
         setState(() {
           _poseDetected = true;
@@ -234,6 +241,9 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   }
 
   void _confirmRpeAndAdvance() {
+    // The guided flow always shows the RPE step, so pressing on counts as
+    // a rating even if the slider was left at its default.
+    _currentExercise.rpeRated = true;
     if (_exerciseIndex + 1 < widget.exercises.length) {
       _exerciseIndex++;
     } else {
@@ -377,7 +387,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Row(
         children: [
-          GestureDetector(
+          Pressable(
             onTap: _quit,
             child: Container(
               padding: const EdgeInsets.all(8),
@@ -456,7 +466,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                     _readyStat('${set.reps}', 'TARGET REPS'),
                     if (ex.tracksWeight) ...[
                       const SizedBox(width: 12),
-                      GestureDetector(
+                      Pressable(
                         onTap: _editWeight,
                         child: _readyStat(
                           set.weightKg == 0 ? 'TAP' : '${set.weightKg.toStringAsFixed(0)}kg',
@@ -855,7 +865,10 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                     min: 1,
                     max: 10,
                     divisions: 9,
-                    onChanged: (val) => setState(() => ex.rpe = val.round()),
+                    onChanged: (val) => setState(() {
+                      ex.rpe = val.round();
+                      ex.rpeRated = true;
+                    }),
                   ),
                 ),
                 Row(

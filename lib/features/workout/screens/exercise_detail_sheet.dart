@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../data/exercise_data.dart';
 import '../services/workout_plan_service.dart';
 import 'pose_detection_screen.dart';
+import '../../../shared/widgets/pressable.dart';
 
 class ExerciseDetailSheet extends StatefulWidget {
   final ExerciseData exercise;
@@ -763,7 +764,7 @@ class _WorkoutDayPickerSheet extends StatelessWidget {
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: GestureDetector(
+                    child: Pressable(
                       onTap: () => Navigator.pop(context, day),
                       child: Container(
                         padding: const EdgeInsets.all(20),

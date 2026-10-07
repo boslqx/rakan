@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../models/onboarding_data.dart';
+import '../../../../shared/widgets/pressable.dart';
 
 class Step4Preference extends StatefulWidget {
   final OnboardingData data;
@@ -214,7 +215,7 @@ class _DaySelector extends StatelessWidget {
         final int value = day['value'] as int;
         final bool isSelected = selectedDays.contains(value);
 
-        return GestureDetector(
+        return Pressable(
           onTap: () {
             final updated = Set<int>.from(selectedDays);
             if (isSelected) {
@@ -300,7 +301,7 @@ class _DurationSelector extends StatelessWidget {
         final bool isSelected = selected == duration;
 
         return Expanded(
-          child: GestureDetector(
+          child: Pressable(
             onTap: () => onChanged(duration),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
@@ -308,7 +309,7 @@ class _DurationSelector extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 16),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? AppColors.primary.withOpacity(0.15)
+                    ? AppColors.primary.withValues(alpha: 0.15)
                     : AppColors.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(

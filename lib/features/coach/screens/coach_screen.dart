@@ -21,6 +21,7 @@ import '../services/plan_reset_flow.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../widgets/plan_changes_section.dart';
 import 'log_injury_screen.dart';
+import '../../../shared/widgets/pressable.dart';
 
 /// Maps each broad muscle group used by `muscleRecovery` docs onto the
 const Map<String, List<Muscle>> kBroadMuscleGroupToHeatmapMuscles = {
@@ -241,7 +242,7 @@ class _CoachScreenState extends State<CoachScreen> {
       }
 
       // Target: current plan's workout-day count × 4
-      final plan = await WorkoutPlanService().getActivePlan(_uid!);
+      final plan = await WorkoutPlanService().getActivePlan(_uid);
       int workoutDaysInPlan = 0;
       if (plan != null) {
         final days = plan['days'] as List<dynamic>? ?? [];
@@ -387,7 +388,7 @@ class _CoachScreenState extends State<CoachScreen> {
     try {
       // 500 is generous headroom, not a magic number: even at 5 sessions/
       // week, 3 months is ~65 logs.
-      final logs = await WorkoutLogService().getRecentLogs(_uid!, limit: 500);
+      final logs = await WorkoutLogService().getRecentLogs(_uid, limit: 500);
       _trendLogs = logs;
       _trendPoints = _buildTrendPoints(_trendLogs, _trendsRangeIndex);
       _recomputeMonthlyOverview();
@@ -571,7 +572,7 @@ class _CoachScreenState extends State<CoachScreen> {
           .get();
       final profileData = profileSnap.data();
 
-      final records = await WeightRecordService().getAllRecordsAscending(_uid!);
+      final records = await WeightRecordService().getAllRecordsAscending(_uid);
 
       if (!mounted) return;
       setState(() {
@@ -928,10 +929,10 @@ class _CoachScreenState extends State<CoachScreen> {
 
     try {
       // Get all recent logs
-      final logs = await WorkoutLogService().getRecentLogs(_uid!, limit: 50);
+      final logs = await WorkoutLogService().getRecentLogs(_uid, limit: 50);
 
       // Get active plan to count planned workouts this week
-      final plan = await WorkoutPlanService().getActivePlan(_uid!);
+      final plan = await WorkoutPlanService().getActivePlan(_uid);
 
       // Compute weekly volume 
       final now = DateTime.now();
@@ -1041,7 +1042,7 @@ class _CoachScreenState extends State<CoachScreen> {
         _recoveryLoading = false;
       });
     } catch (e) {
-      print('CoachScreen recovery error: $e');
+      debugPrint('CoachScreen recovery error: $e');
       setState(() => _recoveryLoading = false);
     }
   }
@@ -1143,7 +1144,7 @@ class _CoachScreenState extends State<CoachScreen> {
   Widget _buildSegmentBtn(String label, int index) {
     final isSelected = _selectedTab == index;
     return Expanded(
-      child: GestureDetector(
+      child: Pressable(
         onTap: () {
           HapticFeedback.selectionClick();
           setState(() => _selectedTab = index);
@@ -1269,7 +1270,7 @@ class _CoachScreenState extends State<CoachScreen> {
         final isSelected = _trendsRangeIndex == i;
         return Padding(
           padding: const EdgeInsets.only(right: 8),
-          child: GestureDetector(
+          child: Pressable(
             onTap: () => _onTrendsRangeChanged(i),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -1987,7 +1988,7 @@ class _CoachScreenState extends State<CoachScreen> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: _muscleFocusStats.map((stat) {
         final isSelected = _selectedMuscleFocusGroup == stat.group;
-        return GestureDetector(
+        return Pressable(
           onTap: () => setState(() => _selectedMuscleFocusGroup = stat.group),
           child: Column(
             children: [
@@ -2255,7 +2256,7 @@ class _CoachScreenState extends State<CoachScreen> {
         final isSelected = _adherenceViewIndex == i;
         return Padding(
           padding: const EdgeInsets.only(right: 8),
-          child: GestureDetector(
+          child: Pressable(
             onTap: () => setState(() => _adherenceViewIndex = i),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -2287,7 +2288,7 @@ class _CoachScreenState extends State<CoachScreen> {
   /// screen's pill/chip controls instead of a native DropdownButton (which
   /// pops a system menu that breaks the app's own visual language).
   Widget _buildExercisePickerField() {
-    return GestureDetector(
+    return Pressable(
       onTap: _showExercisePickerSheet,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -2434,7 +2435,7 @@ class _CoachScreenState extends State<CoachScreen> {
               final isSelected = _progressionRangeIndex == i;
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
+                child: Pressable(
                   onTap: () => _onRangeChanged(i),
                   child: Container(
                     padding:
@@ -2775,7 +2776,7 @@ class _CoachScreenState extends State<CoachScreen> {
     return Row(
       children: [
         Expanded(
-          child: GestureDetector(
+          child: Pressable(
             onTap: weight == null ? () => _openLogWeight() : null,
             child: _buildBodyStatChip(
               icon: Icons.monitor_weight_outlined,
@@ -2881,7 +2882,7 @@ class _CoachScreenState extends State<CoachScreen> {
                   ),
                 ),
               ),
-              GestureDetector(
+              Pressable(
                 onTap: () => _openLogWeight(),
                 child: Container(
                   padding:
@@ -3114,7 +3115,7 @@ class _CoachScreenState extends State<CoachScreen> {
                 )),
             const SizedBox(height: 4),
             Center(
-              child: GestureDetector(
+              child: Pressable(
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -3267,7 +3268,7 @@ class _CoachScreenState extends State<CoachScreen> {
 
   Widget _buildSideBtn(String label, BodySide side) {
     final isSelected = _heatmapSide == side;
-    return GestureDetector(
+    return Pressable(
       onTap: () => setState(() => _heatmapSide = side),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -3468,7 +3469,7 @@ class _CoachScreenState extends State<CoachScreen> {
     required String label,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 20),
@@ -3555,7 +3556,7 @@ class _CoachScreenState extends State<CoachScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => LogInjuryScreen(
-          uid: _uid!,
+          uid: _uid,
           gender: _bodyGender,
           existingInjuries: _injuries,
         ),
@@ -3625,7 +3626,7 @@ class _CoachScreenState extends State<CoachScreen> {
                                 color: AppColors.onSurface)),
                       ),
                       // Toggle between active → recovering → recovered
-                      GestureDetector(
+                      Pressable(
                         onTap: () async {
                           final nextStatus = status == 'active'
                               ? 'recovering'
@@ -3675,10 +3676,10 @@ class _CoachScreenState extends State<CoachScreen> {
         'recoveredAt': FieldValue.serverTimestamp(),
     });
 
-    final plan = await WorkoutPlanService().getActivePlan(_uid!);
+    final plan = await WorkoutPlanService().getActivePlan(_uid);
     if (plan != null) {
       await InjuryService().triggerRegeneration(
-        uid: _uid!,
+        uid: _uid,
         planId: plan['id'] as String,
       );
     }

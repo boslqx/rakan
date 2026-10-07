@@ -6,6 +6,7 @@ import '../../../core/utils/validators.dart';
 import '../services/auth_service.dart';
 import 'email_verification_screen.dart';
 import '../services/auth_navigation_service.dart'; 
+import '../../../shared/widgets/pressable.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -124,7 +125,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           password: _passwordController.text,
         );
         if (!mounted) return;
-        // Verification email already sent inside signUpWithEmail.
+        // Verification email is sent by EmailVerificationScreen on open.
         // New email/password accounts always go to the verification
         // gate first — never straight to onboarding.
         Navigator.of(context).pushAndRemoveUntil(
@@ -183,7 +184,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       color: AppColors.onSurfaceVariant,
                     ),
                   ),
-                  GestureDetector(
+                  Pressable(
                     onTap: () => Navigator.of(context).pop(),
                     child: Container(
                       width: 36,
@@ -236,7 +237,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 child: Column(
                   children: [
-                    GestureDetector(
+                    Pressable(
                       onTap: _isLoading ? null : _signInWithGoogle,
                       child: Container(
                         width: double.infinity,
@@ -278,7 +279,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       style: GoogleFonts.manrope(
                         fontSize: 10,
                         letterSpacing: 1.5,
-                        color: AppColors.onSurfaceVariant.withOpacity(0.5),
+                        color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
                       ),
                     ),
                   ],
@@ -411,7 +412,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 16),
               Center(
-                child: GestureDetector(
+                child: Pressable(
                   onTap: () => Navigator.of(context).pop(),
                   child: Text.rich(
                     TextSpan(
@@ -443,7 +444,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     Icon(
                       Icons.lock_outline_rounded,
                       size: 12,
-                      color: AppColors.onSurfaceVariant.withOpacity(0.4),
+                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.4),
                     ),
                     const SizedBox(width: 6),
                     Text(
@@ -451,7 +452,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       style: GoogleFonts.manrope(
                         fontSize: 10,
                         letterSpacing: 1.5,
-                        color: AppColors.onSurfaceVariant.withOpacity(0.4),
+                        color: AppColors.onSurfaceVariant.withValues(alpha: 0.4),
                       ),
                     ),
                   ],
@@ -505,7 +506,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           hintText: hint,
           hintStyle: GoogleFonts.manrope(
             fontSize: 15,
-            color: AppColors.onSurfaceVariant.withOpacity(0.4),
+            color: AppColors.onSurfaceVariant.withValues(alpha: 0.4),
           ),
           border: InputBorder.none,
           contentPadding:

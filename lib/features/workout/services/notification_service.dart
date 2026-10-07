@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -46,8 +47,7 @@ class NotificationService {
     // dataset only ships canonical zone names and throws on alias lookups
     // ("Location ... doesn't exist") — "latest_all" includes the aliases.
     tzdata.initializeTimeZones();
-    final currentTimeZone = await FlutterTimezone.getLocalTimezone();
-    tz.setLocalLocation(tz.getLocation(currentTimeZone.identifier));
+    await _setLocalTimezone();
 
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
@@ -75,10 +75,62 @@ class NotificationService {
     _initialized = true;
   }
 
+  /// Points package:timezone's `tz.local` at the device's zone.
+  ///
+  /// WHY A FALLBACK: some older / regional Android ROMs report the zone as
+  /// a non-IANA string (e.g. "GMT+08:00") instead of "Asia/Kuala_Lumpur".
+  /// `tz.getLocation` throws on those, which previously aborted init()
+  /// and silently stopped every reminder from being scheduled. If the name
+  /// can't be resolved, we fall back to a fixed-offset "Etc/GMT" zone built
+  /// from the phone's current UTC offset — correct for Malaysia, which has
+  /// no daylight saving time.
+  Future<void> _setLocalTimezone() async {
+    String? reported;
+    try {
+      reported = (await FlutterTimezone.getLocalTimezone()).identifier;
+      tz.setLocalLocation(tz.getLocation(reported));
+      debugPrint('[Notif] timezone: $reported');
+      return;
+    } catch (e) {
+      debugPrint('[Notif] could not resolve timezone "$reported": $e');
+    }
+
+    // Etc/GMT names use an inverted sign: UTC+8 is "Etc/GMT-8".
+    final offsetHours = DateTime.now().timeZoneOffset.inHours;
+    final etcName = offsetHours == 0
+        ? 'Etc/UTC'
+        : 'Etc/GMT${offsetHours > 0 ? '-' : '+'}${offsetHours.abs()}';
+    try {
+      tz.setLocalLocation(tz.getLocation(etcName));
+      debugPrint('[Notif] timezone fallback: $etcName');
+    } catch (_) {
+      tz.setLocalLocation(tz.UTC);
+      debugPrint('[Notif] timezone fallback: UTC');
+    }
+  }
+
+  /// Human-readable description of when a reminder will next fire,
+  /// e.g. "Thu 8:37 PM" — shown to the user right after scheduling so a
+  /// wrong AM/PM or wrong weekday is obvious immediately instead of
+  /// looking like "the notification never came".
+  static String describe(DateTime t) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final h12 = t.hour % 12 == 0 ? 12 : t.hour % 12;
+    final mm = t.minute.toString().padLeft(2, '0');
+    final ampm = t.hour < 12 ? 'AM' : 'PM';
+    final now = DateTime.now();
+    final isToday =
+        t.year == now.year && t.month == now.month && t.day == now.day;
+    return '${isToday ? 'Today' : days[t.weekday - 1]} $h12:$mm $ampm';
+  }
+
   /// Schedules weekly reminders for each day in the user's 7-day plan.
   /// [hour] and [minute] define the reminder time (e.g. 8, 0 = 8:00 AM).
   /// dayNumber 1–7 maps directly to weekday 1–7 (Mon–Sun).
-  Future<void> scheduleWeeklyReminders({
+  ///
+  /// Returns the soonest scheduled fire time (null if [days] is empty), so
+  /// the caller can tell the user exactly when the next reminder arrives.
+  Future<tz.TZDateTime?> scheduleWeeklyReminders({
     required List<Map<String, dynamic>> days,
     required int hour,
     required int minute,
@@ -86,6 +138,8 @@ class NotificationService {
     await init();
     // Cancel existing reminders before rescheduling to avoid duplicates
     await cancelAllReminders();
+
+    tz.TZDateTime? soonest;
 
     for (final day in days) {
       final dayNumber = day['dayNumber'] as int? ?? 1;
@@ -103,7 +157,7 @@ class NotificationService {
         body = 'Recovery is part of the plan — take it easy today.';
       }
 
-      await _scheduleWeekly(
+      final at = await _scheduleWeekly(
         id: _baseNotificationId + dayNumber,
         title: title,
         body: body,
@@ -111,12 +165,15 @@ class NotificationService {
         hour: hour,
         minute: minute,
       );
+      if (soonest == null || at.isBefore(soonest)) soonest = at;
     }
+    await _logPending();
+    return soonest;
   }
 
   /// Schedules a single notification that repeats every week on
   /// [weekday] (1=Monday … 7=Sunday) at [hour]:[minute].
-  Future<void> _scheduleWeekly({
+  Future<tz.TZDateTime> _scheduleWeekly({
     required int id,
     required String title,
     required String body,
@@ -125,6 +182,8 @@ class NotificationService {
     required int minute,
   }) async {
     final scheduledDate = _nextInstanceOfWeekdayTime(weekday, hour, minute);
+    debugPrint('[Notif] id=$id weekday=$weekday -> $scheduledDate '
+        '(now ${tz.TZDateTime.now(tz.local)})');
 
     // v22: all parameters are named
     await _plugin.zonedSchedule(
@@ -143,6 +202,37 @@ class NotificationService {
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+    );
+    return scheduledDate;
+  }
+
+  /// Debug aid: prints every reminder the plugin currently has queued, so
+  /// "did it actually get scheduled?" can be answered from the VS Code
+  /// debug console instead of guessed at.
+  Future<void> _logPending() async {
+    if (!kDebugMode) return;
+    final pending = await _plugin.pendingNotificationRequests();
+    debugPrint('[Notif] ${pending.length} pending: '
+        '${pending.map((p) => p.id).join(', ')}');
+  }
+
+  /// Fires a notification immediately. Used to separate "can this phone
+  /// show Rakan notifications at all?" from "did the alarm fire on time?".
+  Future<void> showTestNotification() async {
+    await init();
+    await _plugin.show(
+      id: 999,
+      title: 'Rakan test notification',
+      body: 'If you can see this, notifications work on this phone.',
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'workout_reminders',
+          'Workout Reminders',
+          channelDescription: 'Reminders for your weekly workout schedule',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
     );
   }
 
@@ -176,14 +266,16 @@ class NotificationService {
   /// Schedules a "time to start" reminder for a single workout day
   /// (Schedule tab), repeating weekly on [dayNumber] (1=Monday…7=Sunday)
   /// at [hour]:[minute].
-  Future<void> scheduleDayReminder({
+  ///
+  /// Returns the next fire time so the caller can show it to the user.
+  Future<tz.TZDateTime> scheduleDayReminder({
     required int dayNumber,
     required String workoutName,
     required int hour,
     required int minute,
   }) async {
     await init();
-    await _scheduleWeekly(
+    final at = await _scheduleWeekly(
       id: _dayReminderBaseId + dayNumber,
       title: 'Time to train 💪',
       body: "$workoutName starts now. Let's get it done.",
@@ -191,6 +283,8 @@ class NotificationService {
       hour: hour,
       minute: minute,
     );
+    await _logPending();
+    return at;
   }
 
   /// Cancels a single day's "time to start" reminder.

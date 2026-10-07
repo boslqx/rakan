@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from typing import Optional
+from pydantic import BaseModel, Field
 from services.plan_generator import generate_plan, regenerate_days, get_logged_day_numbers_this_week
 from firebase_config import db
 
@@ -11,12 +12,15 @@ class GeneratePlanRequest(BaseModel):
     goal: str
     experience: str
     equipment: list[str]
-    workout_days: list[int]
+    # Weekday numbers 1 (Mon) .. 7 (Sun)
+    workout_days: list[int] = Field(min_length=1, max_length=7)
     session_duration: str
     focus_areas: list[str]
 
 @router.post("/generate-plan")
 async def generate_plan_endpoint(request: GeneratePlanRequest):
+    if any(d < 1 or d > 7 for d in request.workout_days):
+        raise HTTPException(status_code=422, detail="workout_days must be 1-7")
     try:
         # Step 1: Generate the plan using our rule-based engine
         plan = generate_plan(
@@ -32,8 +36,7 @@ async def generate_plan_endpoint(request: GeneratePlanRequest):
         plan_id = plan["planId"]
 
         # Step 2: Save to Firestore
-        # Structure: users/{uid}/workoutPlans/{planId}
-        # We save the plan metadata first, then days as a subcollection
+        # Structure: users/{uid}/workoutPlans/{planId}/days/{dayId}/exercises
         plan_ref = (
             db.collection("users")
             .document(request.uid)
@@ -41,18 +44,9 @@ async def generate_plan_endpoint(request: GeneratePlanRequest):
             .document(plan_id)
         )
 
-        # Save top-level plan metadata (without days — those go in subcollection)
-        plan_ref.set({
-            "planId": plan_id,
-            "uid": request.uid,
-            "planName": plan["planName"],
-            "status": plan["status"],
-            "generatedAt": plan["generatedAt"],
-            "weekNumber": plan["weekNumber"],
-        })
-
-        # Step 3: Save each day as a document in the days subcollection
-        # We also save exercises as a subcollection under each day
+        # Step 3: Save each day (and its exercises) under the new plan
+        # first. The plan's own metadata doc is written last, below, so the
+        # new plan only becomes visible as "active" once all its days exist.
         for day in plan["days"]:
             day_id = day["dayPlanId"]
             day_ref = plan_ref.collection("days").document(day_id)
@@ -74,6 +68,27 @@ async def generate_plan_endpoint(request: GeneratePlanRequest):
                     exercise["exerciseId"]
                 )
                 ex_ref.set(exercise)
+
+        # Step 3b: switch plans atomically — publish the new plan as active
+        # and retire any previously active plan in ONE batch. Doing the
+        # retirement here (only after the new plan is fully written) means a
+        # failed or abandoned generation can never leave the user with no
+        # active plan, which is what happened when the app deactivated the
+        # old plan before calling this endpoint.
+        plans_col = db.collection("users").document(request.uid).collection("workoutPlans")
+        batch = db.batch()
+        batch.set(plan_ref, {
+            "planId": plan_id,
+            "uid": request.uid,
+            "planName": plan["planName"],
+            "status": plan["status"],
+            "generatedAt": plan["generatedAt"],
+            "weekNumber": plan["weekNumber"],
+        })
+        for old in plans_col.where("status", "==", "active").stream():
+            if old.id != plan_id:
+                batch.update(old.reference, {"status": "inactive"})
+        batch.commit()
 
         # Step 4: Return the plan ID so Flutter knows what to read
         return {
@@ -97,6 +112,9 @@ class RegeneratePlanRequest(BaseModel):
     equipment: list[str]
     session_duration: str
     focus_areas: list[str]
+    # The user's local date ("YYYY-MM-DD"), used to work out which days of
+    # the current week are already logged. Optional for older app builds.
+    client_date: Optional[str] = None
 
 @router.post("/regenerate-plan")
 async def regenerate_plan_endpoint(request: RegeneratePlanRequest):
@@ -108,7 +126,7 @@ async def regenerate_plan_endpoint(request: RegeneratePlanRequest):
         days_ref = plan_ref.collection("days")
 
         # Step 1: find which weekdays are already locked (logged this week)
-        logged_days = get_logged_day_numbers_this_week(db, request.uid)
+        logged_days = get_logged_day_numbers_this_week(db, request.uid, request.client_date)
 
         # Step 2: fetch all day docs, split into locked vs eligible
         all_days_snap = days_ref.get()

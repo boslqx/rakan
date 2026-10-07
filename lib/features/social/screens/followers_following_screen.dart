@@ -6,6 +6,7 @@ import '../services/follow_service.dart';
 import '../widgets/follow_button.dart';
 import '../widgets/user_list_tile.dart';
 import 'user_profile_screen.dart';
+import '../../../shared/widgets/pressable.dart';
 
 /// Followers/Following list for [uid], with a switchable tab bar. When
 /// [uid] is the signed-in user's own uid, a third "Requests" tab shows
@@ -94,7 +95,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
               child: Row(
                 children: [
-                  GestureDetector(
+                  Pressable(
                     onTap: () => Navigator.pop(context),
                     child: Container(
                       width: 36,
@@ -185,7 +186,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              GestureDetector(
+              Pressable(
                 onTap: () => _accept(uid),
                 child: Container(
                   width: 32,
@@ -195,7 +196,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen>
                 ),
               ),
               const SizedBox(width: 8),
-              GestureDetector(
+              Pressable(
                 onTap: () => _decline(uid),
                 child: Container(
                   width: 32,

@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../onboarding/models/onboarding_data.dart';
 import '../../onboarding/screens/onboarding_shell.dart';
 import '../../onboarding/screens/plan_generation_screen.dart';
+import '../../../shared/widgets/pressable.dart';
 
 /// Shared "reset/regenerate workout plan" flow: confirm, let the user
 /// choose whether to keep their existing goals or walk onboarding again,
@@ -120,7 +121,7 @@ class PlanResetFlow {
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -172,18 +173,11 @@ class PlanResetFlow {
     if (uid == null) return;
     final db = FirebaseFirestore.instance;
     try {
-      // Mark all active plans as inactive
-      final plansSnap = await db
-          .collection('users')
-          .doc(uid)
-          .collection('workoutPlans')
-          .get();
-
-      for (final doc in plansSnap.docs) {
-        if (doc.data()['status'] == 'active') {
-          await doc.reference.update({'status': 'inactive'});
-        }
-      }
+      // The old plan is deliberately NOT deactivated here. The backend's
+      // /generate-plan retires it in the same batch that publishes the new
+      // plan, so if generation fails (e.g. a Render cold-start timeout) or
+      // the user backs out of onboarding, they keep their current plan
+      // instead of being left with none.
 
       // Rebuild from the already-saved profile instead of starting blank
       // — a bare OnboardingData() here would send empty
@@ -207,6 +201,13 @@ class PlanResetFlow {
       );
     } catch (e) {
       debugPrint('Reset plan error: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't start the plan reset. Please try again."),
+          ),
+        );
+      }
     }
   }
 }

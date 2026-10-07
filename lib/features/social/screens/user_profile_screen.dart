@@ -9,6 +9,7 @@ import '../services/follow_service.dart';
 import '../widgets/activity_log_card.dart';
 import '../widgets/follow_button.dart';
 import 'followers_following_screen.dart';
+import '../../../shared/widgets/pressable.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String uid;
@@ -123,7 +124,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   Widget _buildBackButton() {
-    return GestureDetector(
+    return Pressable(
       onTap: () => Navigator.pop(context),
       child: Container(
         width: 36,
@@ -279,7 +280,7 @@ class _StatColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Column(
         children: [

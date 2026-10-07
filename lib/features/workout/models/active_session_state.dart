@@ -23,6 +23,11 @@ class ExerciseSessionState {
   final List<SetSessionState> sets;
   final Set<int> completedSets = {};
   int rpe = 5;
+
+  /// True once the user has actually set or confirmed this exercise's RPE.
+  /// Unrated exercises are left out of the session's average/max RPE (the
+  /// fatigue model's main input) instead of silently counting as RPE 5.
+  bool rpeRated = false;
   bool weightManuallySet = false;
 
   /// Manually toggled; auto-set true once the exercise is fully complete

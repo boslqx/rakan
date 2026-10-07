@@ -8,6 +8,7 @@ import 'workout_day_detail_screen.dart';
 import 'exercise_library_screen.dart';
 import '../data/exercise_data.dart';
 import '../../onboarding/services/user_profile_service.dart';
+import '../../../shared/widgets/pressable.dart';
 
 bool equipmentMatches(
   String exerciseEquipment,
@@ -164,7 +165,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               ),
               // Edit-mode toggle — only meaningful on the Schedule segment.
               if (_segmentIndex == 0 && _plan != null)
-                GestureDetector(
+                Pressable(
                   onTap: () => setState(() => _isEditMode = !_isEditMode),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -262,7 +263,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   Widget _buildSegmentPill(String label, int index) {
     final isSelected = _segmentIndex == index;
-    return GestureDetector(
+    return Pressable(
       onTap: () => setState(() => _segmentIndex = index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -502,7 +503,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        GestureDetector(
+        Pressable(
           onTap: onTap,
           child: Container(
             padding: const EdgeInsets.all(20),
@@ -729,7 +730,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: GestureDetector(
+            child: Pressable(
               behavior: HitTestBehavior.opaque,
               onTap: enabled ? () => _pickDayReminderTime(day) : null,
               child: Padding(
@@ -870,12 +871,26 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       );
 
       if (enabled) {
-        await NotificationService().scheduleDayReminder(
+        final nextAt = await NotificationService().scheduleDayReminder(
           dayNumber: dayNumber,
           workoutName: workoutName,
           hour: resolvedHour,
           minute: resolvedMinute,
         );
+        // Tell the user exactly when it will fire. This reminder repeats on
+        // THIS card's weekday only, so a card for another day won't fire
+        // today — showing the date makes that obvious.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Next reminder: ${NotificationService.describe(nextAt)}',
+                style: GoogleFonts.manrope(color: AppColors.onSurface),
+              ),
+              backgroundColor: AppColors.surfaceContainerHigh,
+            ),
+          );
+        }
       } else {
         await NotificationService().cancelDayReminder(dayNumber);
       }
@@ -986,7 +1001,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     required VoidCallback onTap,
     Color iconColor = AppColors.primary,
   }) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -1110,7 +1125,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                   final isRestDay = other['dayType'] == 'rest';
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
-                    child: GestureDetector(
+                    child: Pressable(
                       onTap: () {
                         Navigator.pop(sheetContext);
                         _confirmSwap(day, other);

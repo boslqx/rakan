@@ -9,6 +9,7 @@ import '../../../../shared/widgets/user_avatar.dart';
 import '../services/profile_picture_service.dart';
 import '../../onboarding/services/user_profile_service.dart';
 import '../../social/services/public_profile_service.dart';
+import '../../../shared/widgets/pressable.dart';
 
 enum _UsernameStatus { idle, checking, available, taken, invalid, unchanged }
 
@@ -347,7 +348,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   // Back button + title
                   Row(
                     children: [
-                      GestureDetector(
+                      Pressable(
                         onTap: () => Navigator.pop(context),
                         child: Container(
                           width: 36,
@@ -377,7 +378,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
                   // Avatar — tap to change/remove photo
                   Center(
-                    child: GestureDetector(
+                    child: Pressable(
                       onTap: _isUpdatingPhoto ? null : _showPhotoOptions,
                       child: Stack(
                         clipBehavior: Clip.none,

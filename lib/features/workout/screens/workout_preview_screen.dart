@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import 'workout_active_screen.dart';
+import '../../../shared/widgets/pressable.dart';
 
 class WorkoutPreviewScreen extends StatelessWidget {
   final Map<String, dynamic> day;
@@ -34,7 +35,7 @@ class WorkoutPreviewScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
               child: Row(
                 children: [
-                  GestureDetector(
+                  Pressable(
                     onTap: () => Navigator.of(context).pop(),
                     child: Container(
                       width: 36,
@@ -178,7 +179,7 @@ class WorkoutPreviewScreen extends StatelessWidget {
                                 height: 40,
                                 decoration: BoxDecoration(
                                   color: AppColors.primary
-                                      .withOpacity(0.1),
+                                      .withValues(alpha: 0.1),
                                   borderRadius:
                                       BorderRadius.circular(12),
                                 ),
@@ -290,7 +291,7 @@ class WorkoutPreviewScreen extends StatelessWidget {
                       fontSize: 10,
                       letterSpacing: 2,
                       color: AppColors.onSurfaceVariant
-                          .withOpacity(0.5),
+                          .withValues(alpha: 0.5),
                     ),
                   ),
                 ],

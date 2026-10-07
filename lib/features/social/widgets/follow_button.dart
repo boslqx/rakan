@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_colors.dart';
 import '../services/follow_service.dart';
+import '../../../shared/widgets/pressable.dart';
 
 /// Follow/unfollow/request button — shared by FindUsersScreen's result
 /// rows, UserProfileScreen's header, and FollowersFollowingScreen's rows.
@@ -104,7 +105,7 @@ class _FollowButtonState extends State<FollowButton> {
             ),
           );
 
-    return GestureDetector(
+    return Pressable(
       onTap: _isBusy ? null : _handleTap,
       child: Container(
         width: widget.compact ? null : double.infinity,

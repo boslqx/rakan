@@ -1,9 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/widgets/progress_photo.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import 'activity_actions_row.dart';
+import '../../../shared/widgets/pressable.dart';
 
 /// Renders a single completed-workout card — shared by Home's own activity
 /// feed (full `workoutLogs` data, tappable into WorkoutLogDetailScreen) and
@@ -43,10 +44,9 @@ class ActivityLogCard extends StatelessWidget {
     final durationMins = log['totalDurationMins'] as int? ?? 0;
     final totalSets = log['totalSetsCompleted'] as int?;
     final prReached = log['prReached'] as bool? ?? false;
-    final photoBase64 = log['progressPhotoBase64'] as String?;
     final logId = log['logId'] as String?;
 
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(20),
@@ -148,18 +148,9 @@ class ActivityLogCard extends StatelessWidget {
               ),
             ],
 
-            if (photoBase64 != null && photoBase64.isNotEmpty) ...[
+            if (ProgressPhoto.hasPhoto(log)) ...[
               const SizedBox(height: 20),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.memory(
-                  base64Decode(photoBase64),
-                  width: double.infinity,
-                  height: 160,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                ),
-              ),
+              ProgressPhoto(log: log, ownerUid: ownerUid),
             ],
 
             if (ownerUid != null && logId != null)

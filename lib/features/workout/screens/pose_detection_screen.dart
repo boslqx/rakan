@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../services/pose_service.dart';
 import '../services/angle_calculator.dart';
 import '../widgets/pose_countdown_overlay.dart';
+import '../../../shared/widgets/pressable.dart';
 
 class PoseDetectionScreen extends StatefulWidget {
   final String exerciseName;
@@ -67,7 +68,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
         _startDetection();
       }
     } catch (e) {
-      print('Permission error: $e');
+      debugPrint('Permission error: $e');
       // Fallback — try anyway
       setState(() {
         _permissionGranted = true;
@@ -114,7 +115,13 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
           return;
         }
 
-        final result = _analyser.analyse(landmarks);
+        // Analyse in pixel space (equal units on both axes) — the overlay
+        // keeps using the normalized `landmarks`, which its painter expects.
+        final result = _analyser.analyse(AngleCalculator.toPixelSpace(
+          landmarks,
+          frameWidth: (data['frameWidth'] as int?) ?? 640,
+          frameHeight: (data['frameHeight'] as int?) ?? 480,
+        ));
 
         setState(() {
           _poseDetected = true;
@@ -133,7 +140,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
         });
       },
       onError: (error) {
-        print('Pose stream error: $error');
+        debugPrint('Pose stream error: $error');
       },
     );
   }
@@ -252,7 +259,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
               child: ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(_repCount),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.surfaceContainerLow.withOpacity(0.9),
+                  backgroundColor: AppColors.surfaceContainerLow.withValues(alpha: 0.9),
                   foregroundColor: AppColors.onSurface,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -287,7 +294,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
       ),
       child: Row(
         children: [
-          GestureDetector(
+          Pressable(
             onTap: () => Navigator.of(context).pop(_repCount),
             child: Container(
               padding: const EdgeInsets.all(8),
@@ -316,8 +323,8 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: _poseDetected
-                  ? Colors.green.withOpacity(0.3)
-                  : Colors.red.withOpacity(0.3),
+                  ? Colors.green.withValues(alpha: 0.3)
+                  : Colors.red.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Row(
@@ -391,8 +398,8 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         color: isCorrect
-            ? Colors.green.withOpacity(0.85)
-            : AppColors.error.withOpacity(0.85),
+            ? Colors.green.withValues(alpha: 0.85)
+            : AppColors.error.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -503,7 +510,7 @@ class SkeletonPainter extends CustomPainter {
         isCorrect ? Colors.greenAccent : Colors.redAccent;
 
     final bonePaint = Paint()
-      ..color = activeColor.withOpacity(0.9)
+      ..color = activeColor.withValues(alpha: 0.9)
       ..strokeWidth = 3.0
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;

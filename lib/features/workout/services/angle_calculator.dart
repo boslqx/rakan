@@ -44,6 +44,32 @@ class PoseLandmarkIndex {
 }
 
 class AngleCalculator {
+  /// Converts MediaPipe's normalized landmarks into pixel space.
+  ///
+  /// MediaPipe returns x as a fraction of the frame WIDTH and y as a fraction
+  /// of the frame HEIGHT. On a non-square frame (e.g. 640x480) those two axes
+  /// use different units, so measuring an angle directly on normalized
+  /// coordinates skews it — by up to ~16 degrees around 90 degrees on a 4:3
+  /// frame. Multiplying back by the frame size puts both axes in the same
+  /// unit (pixels), which is what the angle maths assumes. A rigid rotation of
+  /// the frame doesn't change angles, so the frame's rotation is irrelevant
+  /// here. Must be applied before any analyser sees the landmarks.
+  static List<Landmark> toPixelSpace(
+    List<Landmark> landmarks, {
+    required int frameWidth,
+    required int frameHeight,
+  }) {
+    if (frameWidth <= 0 || frameHeight <= 0) return landmarks;
+    return landmarks
+        .map((l) => Landmark(
+              x: l.x * frameWidth,
+              y: l.y * frameHeight,
+              z: l.z,
+              visibility: l.visibility,
+            ))
+        .toList();
+  }
+
   // Calculate the angle at point B, formed by points A-B-C
   // The angle between two vectors = arccos(dot(BA, BC) / (|BA| * |BC|))
   static double calculateAngle(Landmark a, Landmark b, Landmark c) {
@@ -141,18 +167,31 @@ class SquatAnalyser implements PostureAnalyser {
     final rightKnee = landmarks[PoseLandmarkIndex.rightKnee];
     final rightAnkle = landmarks[PoseLandmarkIndex.rightAnkle];
 
-    // Use average of both knees for robustness
     final leftKneeAngle = AngleCalculator.calculateAngle(leftHip, leftKnee, leftAnkle);
     final rightKneeAngle = AngleCalculator.calculateAngle(rightHip, rightKnee, rightAnkle);
-    final kneeAngle = (leftKneeAngle + rightKneeAngle) / 2;
 
-    // Check visibility — if knee landmarks not visible, can't analyse
-    if (leftKnee.visibility < 0.5 || rightKnee.visibility < 0.5) {
+    // Front-on: both legs visible, average them for robustness. Side-on (the
+    // better view for judging depth in 2D): the far leg is usually occluded,
+    // so fall back to whichever single leg is fully visible instead of
+    // refusing to analyse.
+    bool legVisible(Landmark hip, Landmark knee, Landmark ankle) =>
+        hip.visibility >= 0.5 && knee.visibility >= 0.5 && ankle.visibility >= 0.5;
+    final leftOk = legVisible(leftHip, leftKnee, leftAnkle);
+    final rightOk = legVisible(rightHip, rightKnee, rightAnkle);
+
+    final double kneeAngle;
+    if (leftOk && rightOk) {
+      kneeAngle = (leftKneeAngle + rightKneeAngle) / 2;
+    } else if (leftOk) {
+      kneeAngle = leftKneeAngle;
+    } else if (rightOk) {
+      kneeAngle = rightKneeAngle;
+    } else {
       return PostureResult(
         isCorrect: false,
         feedback: 'Step back — full legs must be visible',
         phase: _phase,
-        keyAngle: kneeAngle,
+        keyAngle: (leftKneeAngle + rightKneeAngle) / 2,
       );
     }
 

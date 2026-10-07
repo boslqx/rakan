@@ -16,6 +16,7 @@ class WorkoutTransitionScreen extends StatefulWidget {
   final double completionRate;
   final List<Map<String, dynamic>> exerciseLogs;
   final String logId;
+  final List<String> prExerciseNames;
 
   const WorkoutTransitionScreen({
     super.key,
@@ -29,6 +30,7 @@ class WorkoutTransitionScreen extends StatefulWidget {
     required this.completionRate,
     required this.exerciseLogs,
     required this.logId,
+    this.prExerciseNames = const [],
   });
 
   @override
@@ -168,6 +170,7 @@ class _WorkoutTransitionScreenState extends State<WorkoutTransitionScreen>
           completionRate: widget.completionRate,
           exerciseLogs: widget.exerciseLogs,
           logId: widget.logId,
+          prExerciseNames: widget.prExerciseNames,
         ),
         // Fade + slide up transition into complete screen
         transitionsBuilder: (_, animation, __, child) {

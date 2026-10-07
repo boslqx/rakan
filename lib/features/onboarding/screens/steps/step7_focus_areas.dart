@@ -3,6 +3,7 @@ import 'package:flutter_body_heatmap/flutter_body_heatmap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../models/onboarding_data.dart';
+import '../../../../shared/widgets/pressable.dart';
 
 class Step7FocusAreas extends StatefulWidget {
   final OnboardingData data;
@@ -204,7 +205,7 @@ class _Step7FocusAreasState extends State<Step7FocusAreas> {
                                   : BodyGender.male,
                           data: _heatmapData,
                           colors: [
-                            AppColors.primary.withOpacity(0.4),
+                            AppColors.primary.withValues(alpha: 0.4),
                             AppColors.primary,
                           ],
                           bodyColor: AppColors.surfaceContainerHigh,
@@ -239,7 +240,7 @@ class _Step7FocusAreasState extends State<Step7FocusAreas> {
                         ...FocusArea.values.map((area) {
                           final isSelected =
                               widget.data.focusAreas.contains(area);
-                          return GestureDetector(
+                          return Pressable(
                             onTap: () => _toggleFocusArea(area),
                             child: AnimatedContainer(
                               duration:
@@ -251,7 +252,7 @@ class _Step7FocusAreasState extends State<Step7FocusAreas> {
                               ),
                               decoration: BoxDecoration(
                                 color: isSelected
-                                    ? AppColors.primary.withOpacity(0.15)
+                                    ? AppColors.primary.withValues(alpha: 0.15)
                                     : AppColors.surfaceContainerLow,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
@@ -337,7 +338,7 @@ class _SmallToggleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),

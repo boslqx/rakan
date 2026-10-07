@@ -8,6 +8,7 @@ import '../services/public_profile_service.dart';
 import '../widgets/follow_button.dart';
 import '../widgets/user_list_tile.dart';
 import 'user_profile_screen.dart';
+import '../../../shared/widgets/pressable.dart';
 
 class FindUsersScreen extends StatefulWidget {
   const FindUsersScreen({super.key});
@@ -102,7 +103,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
             children: [
               Row(
                 children: [
-                  GestureDetector(
+                  Pressable(
                     onTap: () => Navigator.pop(context),
                     child: Container(
                       width: 36,
@@ -187,7 +188,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                GestureDetector(
+                Pressable(
                   onTap: () => _accept(profile['uid'] as String),
                   child: Container(
                     width: 32,
@@ -197,7 +198,7 @@ class _FindUsersScreenState extends State<FindUsersScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                GestureDetector(
+                Pressable(
                   onTap: () => _decline(profile['uid'] as String),
                   child: Container(
                     width: 32,

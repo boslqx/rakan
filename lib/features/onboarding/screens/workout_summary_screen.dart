@@ -228,12 +228,12 @@ class _DayCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isRest
-            ? AppColors.surfaceContainerLow.withOpacity(0.5)
+            ? AppColors.surfaceContainerLow.withValues(alpha: 0.5)
             : AppColors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isRest
-              ? AppColors.outlineVariant.withOpacity(0.5)
+              ? AppColors.outlineVariant.withValues(alpha: 0.5)
               : AppColors.outlineVariant,
         ),
       ),
@@ -262,12 +262,12 @@ class _DayCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: isRest
                       ? AppColors.surfaceContainerHigh
-                      : AppColors.primary.withOpacity(0.15),
+                      : AppColors.primary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(48),
                   border: Border.all(
                     color: isRest
                         ? AppColors.outlineVariant
-                        : AppColors.primary.withOpacity(0.4),
+                        : AppColors.primary.withValues(alpha: 0.4),
                   ),
                 ),
                 child: Text(
@@ -368,12 +368,12 @@ class _DayCard extends StatelessWidget {
                               ),
                               decoration: BoxDecoration(
                                 color: AppColors.primary
-                                    .withOpacity(0.08),
+                                    .withValues(alpha: 0.08),
                                 borderRadius:
                                     BorderRadius.circular(48),
                                 border: Border.all(
                                   color: AppColors.primary
-                                      .withOpacity(0.2),
+                                      .withValues(alpha: 0.2),
                                 ),
                               ),
                               child: Text(

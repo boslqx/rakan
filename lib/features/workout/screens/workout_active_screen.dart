@@ -10,6 +10,9 @@ import '../services/workout_log_service.dart';
 import 'auto_log_screen.dart';
 import 'pose_detection_screen.dart';
 import 'workout_transition_screen.dart';
+import '../../../shared/widgets/pressable.dart';
+import '../widgets/elapsed_time_text.dart';
+import '../widgets/rest_timer_bar.dart';
 
 /// The Manual workout screen: a scrollable list of every exercise in the day's plan
 class WorkoutActiveScreen extends StatefulWidget {
@@ -25,6 +28,27 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
   late List<ExerciseSessionState> _exerciseStates;
   final DateTime _startedAt = DateTime.now();
   bool _isSaving = false;
+
+  // Rest timer (Manual mode). Non-null while a rest countdown is showing;
+  // _restId changes per rest so a new set restarts the countdown.
+  int? _restSeconds;
+  String _restExerciseName = '';
+  int _restId = 0;
+
+  void _startRest(ExerciseSessionState ex) {
+    // No rest after the very last set of the workout.
+    if (_allExercisesDone || ex.restSeconds <= 0) {
+      _restSeconds = null;
+      return;
+    }
+    _restId++;
+    _restSeconds = ex.restSeconds;
+    _restExerciseName = ex.exerciseName;
+  }
+
+  void _endRest() {
+    if (mounted && _restSeconds != null) setState(() => _restSeconds = null);
+  }
 
   @override
   void initState() {
@@ -56,25 +80,36 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
     _loadRecommendedWeights();
   }
 
-  /// Prefills each exercise's sets with the user's last logged weight
+  /// Prefills each exercise's sets with the user's last logged weight.
+  /// One history pass for the whole workout (see
+  /// WorkoutLogService.getWeightHistory) instead of a full scan per
+  /// exercise.
   Future<void> _loadRecommendedWeights() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null || _exerciseStates.isEmpty) return;
 
-    for (final ex in _exerciseStates) {
-      final lastWeight = await WorkoutLogService().getLastWeightForExercise(
+    final Map<String, ExerciseWeightHistory> history;
+    try {
+      history = await WorkoutLogService().getWeightHistory(
         uid: uid,
-        exerciseName: ex.exerciseName,
+        exerciseNames: _exerciseStates.map((ex) => ex.exerciseName),
+        scanLimit: 15,
       );
-      if (lastWeight == null) continue; // No history — leave blank for user to fill in
-      if (!mounted) return;
-      if (ex.weightManuallySet) continue;
-      setState(() {
+    } catch (e) {
+      debugPrint('Weight prefill failed: $e');
+      return; // prefill is a convenience — leave weights blank
+    }
+    if (!mounted) return;
+
+    setState(() {
+      for (final ex in _exerciseStates) {
+        final lastWeight = history[ex.exerciseName]?.lastWeight;
+        if (lastWeight == null || ex.weightManuallySet) continue;
         for (final set in ex.sets) {
           set.weightKg = lastWeight;
         }
-      });
-    }
+      }
+    });
   }
 
   double get _totalVolume {
@@ -92,8 +127,59 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
   bool get _allExercisesDone =>
       _exerciseStates.every((ex) => ex.isFullyComplete);
 
+  int get _completedSetCount =>
+      _exerciseStates.fold(0, (sum, ex) => sum + ex.completedSets.length);
+
+  int get _plannedSetCount =>
+      _exerciseStates.fold(0, (sum, ex) => sum + ex.sets.length);
+
+  /// Finishing is allowed once at least one set is done — not only when
+  /// every set is. Requiring 100% meant completion_rate (a fatigue-model
+  /// input) was always 1.0, so the model never saw a cut-short session.
+  bool get _canFinish => _completedSetCount > 0;
+
+  /// Asks for confirmation before finishing with sets still left.
+  Future<void> _onFinishPressed() async {
+    if (_isSaving) return;
+    if (!_allExercisesDone) {
+      final done = _completedSetCount;
+      final planned = _plannedSetCount;
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: AppColors.surfaceContainerLow,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Finish early?',
+              style: GoogleFonts.spaceGrotesk(
+                  color: AppColors.onSurface, fontWeight: FontWeight.w600)),
+          content: Text(
+              "You've completed $done of $planned sets. Your session will be "
+              'saved as it is, and your plan will adapt to it.',
+              style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text('Keep Going',
+                  style: GoogleFonts.manrope(color: AppColors.primary)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text('Finish',
+                  style: GoogleFonts.manrope(
+                      color: AppColors.primary, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true || !mounted) return;
+    }
+    await _completeWorkout();
+  }
+
   /// Launches the full-screen Auto-Log 
   Future<void> _openAutoLog() async {
+    _endRest(); // Guided mode runs its own rest timer
     final finished = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => AutoLogScreen(
@@ -104,132 +190,221 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
     );
     if (!mounted) return;
     if (finished == true && _allExercisesDone) {
-      _completeWorkout();
+      await _completeWorkout();
     } else {
       setState(() {}); // reflect whatever partial progress was made
     }
   }
 
+  /// Generated once per screen so a retried save reuses the same log id
+  /// (a retry overwrites the same documents instead of duplicating them).
+  final String _logId = const Uuid().v4();
+
   Future<void> _completeWorkout() async {
     if (_isSaving) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || !_canFinish) return;
+
     setState(() => _isSaving = true);
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    try {
+      final completedAt = DateTime.now();
+      final durationMins = completedAt.difference(_startedAt).inMinutes;
+      const uuid = Uuid();
 
-    final completedAt = DateTime.now();
-    final durationMins = completedAt.difference(_startedAt).inMinutes;
-    const uuid = Uuid();
+      final exerciseLogs = _exerciseStates.map((ex) {
+        return {
+          'exerciseLogId': uuid.v4(),
+          'exerciseName': ex.exerciseName,
+          'muscleGroup': ex.muscleGroup,
+          'setsCompleted': ex.completedSets.length,
+          'repsCompleted': ex.sets
+              .asMap()
+              .entries
+              .where((e) => ex.completedSets.contains(e.key))
+              .map((e) => e.value.reps)
+              .fold(0, (a, b) => a + b),
+          'weightKg': ex.sets.isNotEmpty ? ex.sets[0].weightKg : 0,
+          'rpeScale': ex.rpe,
+          'rpeRated': ex.rpeRated,
+          'setDetails': ex.sets
+              .asMap()
+              .entries
+              .map((e) => {
+                    'setNumber': e.key + 1,
+                    'reps': e.value.reps,
+                    'weightKg': e.value.weightKg,
+                    'completed': ex.completedSets.contains(e.key),
+                  })
+              .toList(),
+        };
+      }).toList();
 
-    final exerciseLogs = _exerciseStates.map((ex) {
-      return {
-        'exerciseLogId': uuid.v4(),
-        'exerciseName': ex.exerciseName,
-        'muscleGroup': ex.muscleGroup,
-        'setsCompleted': ex.completedSets.length,
-        'repsCompleted': ex.sets
-            .asMap()
-            .entries
-            .where((e) => ex.completedSets.contains(e.key))
-            .map((e) => e.value.reps)
-            .fold(0, (a, b) => a + b),
-        'weightKg': ex.sets.isNotEmpty ? ex.sets[0].weightKg : 0,
-        'rpeScale': ex.rpe,
-        'setDetails': ex.sets
-            .asMap()
-            .entries
-            .map((e) => {
-                  'setNumber': e.key + 1,
-                  'reps': e.value.reps,
-                  'weightKg': e.value.weightKg,
-                  'completed': ex.completedSets.contains(e.key),
-                })
-            .toList(),
-      };
-    }).toList();
+      // Stored on the top-level log doc too — the activity feed reads that
+      // doc directly and shouldn't need a subcollection fetch for a count.
+      final totalSets = _plannedSetCount;
+      final completedSets = _completedSetCount;
+      final completionRate = totalSets > 0 ? completedSets / totalSets : 1.0;
 
-    // Computed here (rather than only later, for the transition screen) so
-    // it can also be stored on the top-level log doc — the activity feed
-    // reads that doc directly and shouldn't need a subcollection fetch
-    // just to show a set count.
-    final totalSets =
-        _exerciseStates.map((ex) => ex.sets.length).reduce((a, b) => a + b);
-    final completedSets = _exerciseStates
-        .map((ex) => ex.completedSets.length)
-        .reduce((a, b) => a + b);
-    final completionRate = totalSets > 0 ? completedSets / totalSets : 1.0;
+      // Exercises the user actually did at least one set of. Only these
+      // feed RPE, exercise count and adaptation proposals — an untouched
+      // exercise wasn't trained, so it shouldn't adapt that muscle group.
+      final performed =
+          _exerciseStates.where((ex) => ex.completedSets.isNotEmpty).toList();
 
-    // PR detection: for each exercise
-    final prExerciseNames = <String>[];
-    for (final ex in _exerciseStates) {
-      final completedWeights = ex.sets
-          .asMap()
-          .entries
-          .where((e) => ex.completedSets.contains(e.key))
-          .map((e) => e.value.weightKg)
-          .where((w) => w > 0)
-          .toList();
-      if (completedWeights.isEmpty) continue;
-
-      final sessionMax = completedWeights.reduce((a, b) => a > b ? a : b);
-      final historicalMax = await WorkoutLogService().getMaxWeightForExercise(
-        uid: uid,
-        exerciseName: ex.exerciseName,
-      );
-
-      if (historicalMax != null && sessionMax > historicalMax) {
-        prExerciseNames.add(ex.exerciseName);
-      }
-    }
-
-    final log = {
-      'logId': uuid.v4(),
-      'planId': widget.day['planId'] ?? '',
-      'dayPlanId': widget.day['dayPlanId'] ?? '',
-      'workoutName': widget.day['workoutName'] ?? '',
-      'startedAt': _startedAt.toIso8601String(),
-      'completedAt': completedAt.toIso8601String(),
-      'totalDurationMins': durationMins,
-      'totalVolume': _totalVolume,
-      'totalSetsCompleted': completedSets,
-      'prReached': prExerciseNames.isNotEmpty,
-      'prExerciseNames': prExerciseNames,
-      'isCompleted': true,
-      'exerciseLogs': exerciseLogs,
-    };
-
-    await WorkoutLogService().saveWorkoutLog(uid: uid, log: log);
-
-    if (!mounted) return;
-
-    final rpeValues = _exerciseStates.map((ex) => ex.rpe.toDouble()).toList();
-    final avgRpe = rpeValues.reduce((a, b) => a + b) / rpeValues.length;
-    final maxRpe = rpeValues.reduce((a, b) => a > b ? a : b);
-
-    if (!mounted) return;
-
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => WorkoutTransitionScreen(
-          workoutName: widget.day['workoutName'] as String? ?? '',
-          durationMins: durationMins,
-          totalVolume: _totalVolume,
-          exerciseCount: _exerciseStates.length,
+      // PR detection: one history pass for all exercises. Best-effort — if
+      // history can't be read (e.g. offline), the session still saves.
+      final prExerciseNames = <String>[];
+      try {
+        final history = await WorkoutLogService().getWeightHistory(
           uid: uid,
-          avgRpe: avgRpe,
-          maxRpe: maxRpe,
-          completionRate: completionRate,
-          exerciseLogs: exerciseLogs,
-          logId: log['logId'] as String,
+          exerciseNames: performed.map((ex) => ex.exerciseName),
+        );
+        for (final ex in performed) {
+          final completedWeights = ex.sets
+              .asMap()
+              .entries
+              .where((e) => ex.completedSets.contains(e.key))
+              .map((e) => e.value.weightKg)
+              .where((w) => w > 0)
+              .toList();
+          if (completedWeights.isEmpty) continue;
+
+          final sessionMax = completedWeights.reduce((a, b) => a > b ? a : b);
+          final historicalMax = history[ex.exerciseName]?.maxWeight;
+          if (historicalMax != null && sessionMax > historicalMax) {
+            prExerciseNames.add(ex.exerciseName);
+          }
+        }
+      } catch (e) {
+        debugPrint('PR detection skipped: $e');
+      }
+
+      final log = {
+        'logId': _logId,
+        'planId': widget.day['planId'] ?? '',
+        'dayPlanId': widget.day['dayPlanId'] ?? '',
+        'workoutName': widget.day['workoutName'] ?? '',
+        'startedAt': _startedAt.toIso8601String(),
+        'completedAt': completedAt.toIso8601String(),
+        'totalDurationMins': durationMins,
+        'totalVolume': _totalVolume,
+        'totalSetsCompleted': completedSets,
+        'totalSetsPlanned': totalSets,
+        'completionRate': completionRate,
+        'prReached': prExerciseNames.isNotEmpty,
+        'prExerciseNames': prExerciseNames,
+        'isCompleted': true,
+        'exerciseLogs': exerciseLogs,
+      };
+
+      final synced =
+          await WorkoutLogService().saveWorkoutLog(uid: uid, log: log);
+      if (!mounted) return;
+
+      if (!synced) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "You're offline — your workout is saved on this phone and "
+              'will sync automatically.',
+              style: GoogleFonts.manrope(color: AppColors.onSurface),
+            ),
+            backgroundColor: AppColors.surfaceContainerHigh,
+          ),
+        );
+      }
+
+      // RPE: rated exercises only (an untouched slider isn't a rating);
+      // falls back to the neutral default if nothing was rated.
+      final rated = performed.where((ex) => ex.rpeRated).toList();
+      final rpeSource = rated.isNotEmpty ? rated : performed;
+      final rpeValues = rpeSource.map((ex) => ex.rpe.toDouble()).toList();
+      final avgRpe = rpeValues.isEmpty
+          ? 5.0
+          : rpeValues.reduce((a, b) => a + b) / rpeValues.length;
+      final maxRpe =
+          rpeValues.isEmpty ? 5.0 : rpeValues.reduce((a, b) => a > b ? a : b);
+
+      final performedNames = performed.map((ex) => ex.exerciseName).toSet();
+      final performedLogs = exerciseLogs
+          .where((l) => performedNames.contains(l['exerciseName']))
+          .toList();
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => WorkoutTransitionScreen(
+            workoutName: widget.day['workoutName'] as String? ?? '',
+            durationMins: durationMins,
+            totalVolume: _totalVolume,
+            exerciseCount: performed.length,
+            uid: uid,
+            avgRpe: avgRpe,
+            maxRpe: maxRpe,
+            completionRate: completionRate,
+            exerciseLogs: performedLogs,
+            logId: _logId,
+            prExerciseNames: prExerciseNames,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('Workout save failed: $e');
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Couldn't save your workout. Your progress is still here — "
+            'try again.',
+            style: GoogleFonts.manrope(color: AppColors.onSurface),
+          ),
+          backgroundColor: AppColors.surfaceContainerHigh,
+          action: SnackBarAction(
+            label: 'RETRY',
+            textColor: AppColors.primary,
+            onPressed: _completeWorkout,
+          ),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Intercepts the Android back button / back gesture: leaving used to
+    // silently discard the whole session. Now it asks first (same dialog as
+    // the X button). Navigator.pop() from the dialog still works, since
+    // PopScope only gates system back and maybePop().
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || _isSaving) return;
+        _showQuitDialog();
+      },
+      child: _buildScaffold(),
+    );
+  }
+
+  Widget _buildScaffold() {
     return Scaffold(
       backgroundColor: AppColors.surface,
+      bottomNavigationBar: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        transitionBuilder: (child, animation) => SizeTransition(
+          sizeFactor: animation,
+          axisAlignment: -1,
+          child: FadeTransition(opacity: animation, child: child),
+        ),
+        child: _restSeconds == null
+            ? const SizedBox.shrink()
+            : RestTimerBar(
+                key: ValueKey(_restId),
+                seconds: _restSeconds!,
+                exerciseName: _restExerciseName,
+                onFinished: _endRest,
+              ),
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -267,7 +442,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
         children: [
           Row(
             children: [
-              GestureDetector(
+              Pressable(
                 onTap: () => _showQuitDialog(),
                 child: Container(
                   width: 36,
@@ -284,6 +459,18 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                 ),
               ),
               const Spacer(),
+              const Icon(Icons.schedule_rounded,
+                  size: 14, color: AppColors.onSurfaceVariant),
+              const SizedBox(width: 4),
+              ElapsedTimeText(
+                startedAt: _startedAt,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              const SizedBox(width: 14),
               Text(
                 '$doneCount / $exerciseCount DONE',
                 style: GoogleFonts.manrope(
@@ -353,7 +540,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
               ),
             ),
             Expanded(
-              child: GestureDetector(
+              child: Pressable(
                 onTap: _openAutoLog,
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 10),
@@ -419,7 +606,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                           ),
                           if (ex.data != null) ...[
                             const SizedBox(width: 6),
-                            GestureDetector(
+                            Pressable(
                               onTap: () => _openInfoSheet(ex),
                               child: const Icon(
                                 Icons.info_outline_rounded,
@@ -455,7 +642,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                   ),
                 ),
                 if (canDetectPosture)
-                  GestureDetector(
+                  Pressable(
                     onTap: () async {
                       final repsCompleted = await Navigator.of(context).push<int>(
                         MaterialPageRoute(
@@ -470,6 +657,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                           final firstIncomplete = ex.currentSetIndex;
                           if (firstIncomplete < ex.sets.length) {
                             ex.completedSets.add(firstIncomplete);
+                            _startRest(ex);
                           }
                         });
                       }
@@ -501,7 +689,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                   ),
                 if (ex.isFullyComplete) ...[
                   const SizedBox(width: 8),
-                  GestureDetector(
+                  Pressable(
                     onTap: () => setState(() => ex.collapsed = !ex.collapsed),
                     child: Container(
                       width: 32,
@@ -598,7 +786,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
         ? '${ex.sets.length} SETS · ${totalVolume.toStringAsFixed(0)} KG VOLUME · RPE ${ex.rpe}'
         : '${ex.sets.length} SETS COMPLETE · RPE ${ex.rpe}';
 
-    return GestureDetector(
+    return Pressable(
       onTap: () => setState(() => ex.collapsed = false),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
@@ -644,7 +832,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
   }
 
   Widget _weightStepButton({required IconData icon, required VoidCallback onTap}) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: SizedBox(
         width: 26,
@@ -667,7 +855,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
             onTap: () => _bumpWeight(ex, setIndex, -_weightIncrement),
           ),
           Expanded(
-            child: GestureDetector(
+            child: Pressable(
               onTap: () => _editWeight(ex, setIndex),
               child: Text(
                 setData.weightKg == 0
@@ -727,7 +915,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
             ),
           ),
           Expanded(
-            child: GestureDetector(
+            child: Pressable(
               onTap: () => _editValue(
                 label: 'Reps',
                 current: setData.reps,
@@ -758,7 +946,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
             Expanded(child: _buildWeightCell(ex, setIndex, setData)),
           ],
           const SizedBox(width: 8),
-          GestureDetector(
+          Pressable(
             onTap: () {
               setState(() {
                 if (isCompleted) {
@@ -767,6 +955,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                 } else {
                   ex.completedSets.add(setIndex);
                   HapticFeedback.lightImpact();
+                  _startRest(ex);
                   // Don't auto-collapse here — the RPE slider (below) needs
                   // to stay visible so the user can actually set it; collapse
                   // is triggered instead once they finish dragging the slider
@@ -844,8 +1033,10 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
               min: 1,
               max: 10,
               divisions: 9,
-              onChanged: (val) =>
-                  setState(() => ex.rpe = val.round()),
+              onChanged: (val) => setState(() {
+                ex.rpe = val.round();
+                ex.rpeRated = true;
+              }),
               onChangeEnd: (val) {
                 if (!ex.isFullyComplete) return;
                 Future.delayed(const Duration(milliseconds: 350), () {
@@ -876,36 +1067,45 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
   }
 
   Widget _buildCompleteButton() {
+    final allDone = _allExercisesDone;
+    final canFinish = _canFinish;
+    final String label;
+    if (allDone) {
+      label = 'COMPLETE WORKOUT →';
+    } else if (canFinish) {
+      label = 'FINISH WORKOUT ($_completedSetCount/$_plannedSetCount SETS)';
+    } else {
+      label = 'COMPLETE A SET TO FINISH';
+    }
+
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 32),
       child: ElevatedButton(
-        onPressed: _allExercisesDone && !_isSaving
-            ? _completeWorkout
-            : null,
+        onPressed: canFinish && !_isSaving ? _onFinishPressed : null,
         style: ElevatedButton.styleFrom(
-          backgroundColor: _allExercisesDone
-              ? AppColors.primary
-              : AppColors.surfaceContainerHigh,
+          backgroundColor:
+              allDone ? AppColors.primary : AppColors.surfaceContainerHigh,
           disabledBackgroundColor: AppColors.surfaceContainerHigh,
         ),
         child: _isSaving
-            ? const SizedBox(
+            ? SizedBox(
                 height: 20,
                 width: 20,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: AppColors.onPrimary),
+                    strokeWidth: 2,
+                    color: allDone ? AppColors.onPrimary : AppColors.primary),
               )
             : Text(
-                _allExercisesDone
-                    ? 'COMPLETE WORKOUT →'
-                    : 'COMPLETE ALL SETS TO FINISH',
+                label,
                 style: GoogleFonts.spaceGrotesk(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1,
-                  color: _allExercisesDone
+                  color: allDone
                       ? AppColors.onPrimary
-                      : AppColors.onSurfaceVariant,
+                      : canFinish
+                          ? AppColors.onSurface
+                          : AppColors.onSurfaceVariant,
                 ),
               ),
       ),
@@ -1042,7 +1242,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
               ),
               if (ex.sets.length > 1) ...[
                 const SizedBox(height: 12),
-                GestureDetector(
+                Pressable(
                   onTap: () => setSheetState(() => applyToAll = !applyToAll),
                   child: Row(
                     children: [

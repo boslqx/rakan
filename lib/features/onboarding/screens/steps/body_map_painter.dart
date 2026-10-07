@@ -385,8 +385,8 @@ class BodyMapPainter extends CustomPainter {
 
     final paint = Paint()
       ..color = isActive
-          ? AppColors.error.withOpacity(0.35)
-          : AppColors.primary.withOpacity(0.15)
+          ? AppColors.error.withValues(alpha: 0.35)
+          : AppColors.primary.withValues(alpha: 0.15)
       ..style = PaintingStyle.fill;
 
     canvas.drawRRect(
@@ -396,7 +396,7 @@ class BodyMapPainter extends CustomPainter {
 
     if (isActive) {
       final borderPaint = Paint()
-        ..color = AppColors.error.withOpacity(0.7)
+        ..color = AppColors.error.withValues(alpha: 0.7)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
       canvas.drawRRect(
@@ -419,7 +419,7 @@ class BodyMapPainter extends CustomPainter {
       final dotPaint = Paint()
         ..color = highlightedRegions.contains(zone.region)
             ? AppColors.error
-            : AppColors.outlineVariant.withOpacity(0.5)
+            : AppColors.outlineVariant.withValues(alpha: 0.5)
         ..style = PaintingStyle.fill;
 
       canvas.drawCircle(Offset(centerX, centerY), 3, dotPaint);

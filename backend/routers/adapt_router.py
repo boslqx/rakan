@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import joblib
 import numpy as np
 import os
@@ -21,12 +21,14 @@ except FileNotFoundError:
 
 # Request schema
 class AdaptRequest(BaseModel):
-    avg_rpe: float           
-    max_rpe: float           
-    session_duration: float  
-    exercises_count: int     
-    completion_rate: float   
-    experience_level: int   
+    # Range-checked so a malformed request gets a clear 422 instead of a
+    # nonsense prediction (e.g. RPE 50 or a negative duration).
+    avg_rpe: float = Field(ge=1, le=10)
+    max_rpe: float = Field(ge=1, le=10)
+    session_duration: float = Field(ge=0, le=600)   # minutes
+    exercises_count: int = Field(ge=0, le=50)
+    completion_rate: float = Field(ge=0, le=1)
+    experience_level: int = Field(ge=0, le=2)        # 0 beginner .. 2 advanced
 
 
 # Response schema

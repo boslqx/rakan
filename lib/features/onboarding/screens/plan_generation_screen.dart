@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_colors.dart';
 import '../models/onboarding_data.dart';
 import '../services/plan_service.dart';
-import '../../home/screens/home_screen.dart';
 import '../../../shared/widgets/main_shell.dart';
 
 class PlanGenerationScreen extends StatefulWidget {
@@ -146,14 +145,18 @@ class _PlanGenerationScreenState extends State<PlanGenerationScreen>
         );
       }
 
-      // Always navigate to MainShell regardless of API success/failure
-      Navigator.of(context).pushReplacement(
+      // Always navigate to MainShell regardless of API success/failure.
+      // Clear the whole stack: when this screen is reached from the Coach
+      // tab's plan reset, the old MainShell is still underneath, and a plain
+      // pushReplacement would leave two MainShells stacked.
+      Navigator.of(context).pushAndRemoveUntil(
         PageRouteBuilder(
           pageBuilder: (_, animation, __) => const MainShell(),
           transitionsBuilder: (_, animation, __, child) =>
               FadeTransition(opacity: animation, child: child),
           transitionDuration: const Duration(milliseconds: 600),
         ),
+        (_) => false,
       );
     });
   }
@@ -183,7 +186,7 @@ class _PlanGenerationScreenState extends State<PlanGenerationScreen>
                     color: AppColors.surfaceContainerLow,
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(0.15),
+                        color: AppColors.primary.withValues(alpha: 0.15),
                         blurRadius: 40,
                         spreadRadius: 10,
                       ),
@@ -234,14 +237,14 @@ class _PlanGenerationScreenState extends State<PlanGenerationScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: isCompleted
-                          ? AppColors.primary.withOpacity(0.15)
+                          ? AppColors.primary.withValues(alpha: 0.15)
                           : isCurrent
                               ? AppColors.surfaceContainerHigh
                               : AppColors.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(48),
                       border: Border.all(
                         color: isCompleted
-                            ? AppColors.primary.withOpacity(0.5)
+                            ? AppColors.primary.withValues(alpha: 0.5)
                             : isCurrent
                                 ? AppColors.outlineVariant
                                 : Colors.transparent,

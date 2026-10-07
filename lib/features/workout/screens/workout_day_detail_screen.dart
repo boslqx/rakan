@@ -8,6 +8,7 @@ import '../services/workout_log_service.dart';
 import '../services/workout_plan_service.dart';
 import 'workout_active_screen.dart';
 import 'workout_log_detail_screen.dart';
+import '../../../shared/widgets/pressable.dart';
 
 /// Editable version of the "workout preview" layout, opened from the
 /// Schedule tab when a day is tapped (replacing the old bottom sheet).
@@ -325,7 +326,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
   Widget _buildDetailMedia(ExerciseData data) {
     // Case 1: GIF — full-size, tappable, opens the same full-screen GIF viewer
     if (data.localGifAsset != null) {
-      return GestureDetector(
+      return Pressable(
         onTap: () => _openGifFullscreen(data.localGifAsset!, data.name),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
@@ -342,7 +343,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
 
     // Case 2: no GIF, real YouTube ID — existing thumbnail + play icon
     if (data.youtubeId.isNotEmpty) {
-      return GestureDetector(
+      return Pressable(
         onTap: () => _openVideo(data.youtubeId, data.name),
         child: Container(
           height: 180,
@@ -514,7 +515,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
               child: Row(
                 children: [
-                  GestureDetector(
+                  Pressable(
                     onTap: () => Navigator.of(context).pop(),
                     child: Container(
                       width: 36,
@@ -596,7 +597,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                             style: GoogleFonts.manrope(
                                 fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 2, color: AppColors.onSurfaceVariant)),
                         const Spacer(),
-                        GestureDetector(
+                        Pressable(
                           onTap: _openAddExercisePicker,
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -632,7 +633,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                         return Padding(
                           key: ValueKey(ex['docId'] ?? '$name-$index'),
                           padding: const EdgeInsets.only(bottom: 12),
-                          child: GestureDetector(
+                          child: Pressable(
                             onTap: () => _openExerciseDetail(name),
                             child: Container(
                               padding: const EdgeInsets.all(20),
@@ -681,7 +682,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                                     ],
                                   ),
                                   const SizedBox(width: 8),
-                                  GestureDetector(
+                                  Pressable(
                                     onTap: () => _confirmRemove(index),
                                     child: const Padding(
                                       padding: EdgeInsets.only(left: 4, right: 4),
@@ -771,7 +772,7 @@ class _ExercisePickerScreenState extends State<_ExercisePickerScreen> {
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
               child: Row(
                 children: [
-                  GestureDetector(
+                  Pressable(
                     onTap: () => Navigator.of(context).pop(),
                     child: Container(
                       width: 36,
@@ -819,7 +820,7 @@ class _ExercisePickerScreenState extends State<_ExercisePickerScreen> {
                   final isSelected = group == _muscleFilter;
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
+                    child: Pressable(
                       onTap: () => setState(() => _muscleFilter = group),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -853,7 +854,7 @@ class _ExercisePickerScreenState extends State<_ExercisePickerScreen> {
                   final ex = filtered[index];
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
-                    child: GestureDetector(
+                    child: Pressable(
                       onTap: () => Navigator.of(context).pop(ex),
                       child: Container(
                         padding: const EdgeInsets.all(14),
