@@ -97,6 +97,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Bodyweight',
     youtubeId: 'pQUsUHvyoI0',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 10–12 reps',
     steps: [
       'Place hands wider than shoulder-width, fingers pointing outward slightly.',
@@ -115,6 +116,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Intermediate',
     equipment: 'Bodyweight',
     youtubeId: 'XtU2VQVuLYs',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 8–12 reps',
     steps: [
       'Form a diamond shape with your index fingers and thumbs, placing hands directly under your chest.',
@@ -206,6 +208,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Bodyweight, Bench',
     youtubeId: '0JUrOH--Kdk',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 12–15 reps',
     steps: [
       'Place hands on a raised surface (bench, step) wider than shoulder-width.',
@@ -224,6 +227,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Intermediate',
     equipment: 'Bodyweight, Bench',
     youtubeId: 'DBz85WuXqMk',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 10–12 reps',
     steps: [
       'Place feet on an elevated surface (bench), hands on the floor shoulder-width apart.',
@@ -394,6 +398,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Intermediate',
     equipment: 'Bodyweight',
     youtubeId: '2cdIRe5tcqI',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 10–15 reps',
     steps: [
       'Place hands directly under your shoulders or slightly closer together.',
@@ -575,6 +580,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Intermediate',
     equipment: 'Barbell',
     youtubeId: 'CV1m2CKumhw',
+    hasPoseDetection: true,
     setsRepsGuide: '3–4 sets × 8–10 reps',
     steps: [
       'Stand holding a barbell at hip height, feet hip-width apart.',
@@ -802,6 +808,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Intermediate',
     equipment: 'Barbell',
     youtubeId: '5yWaNOvgFCM',
+    hasPoseDetection: true,
     setsRepsGuide: '3–4 sets × 5–8 reps',
     steps: [
       'Stand with feet shoulder-width apart, grip the bar at shoulder width.',
@@ -890,6 +897,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Dumbbells, Bench',
     youtubeId: 'RgkzQ008m3I',
+    hasPoseDetection: true,
     setsRepsGuide: '3–4 sets × 8–12 reps',
     steps: [
       'Sit on a bench with back support, dumbbells at shoulder height.',
@@ -1066,6 +1074,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Dumbbells',
     youtubeId: 'CFBZ4jN1CMI',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 10–12 reps',
     steps: [
       'Hold dumbbells at your sides with a neutral grip (thumbs up).',
@@ -1100,6 +1109,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Barbell',
     youtubeId: '0hZboUNuogA',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 8–10 reps',
     steps: [
       'Stand holding a barbell with an underhand grip, shoulder-width apart.',
@@ -1117,6 +1127,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Resistance Band',
     youtubeId: '0hZboUNuogA',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 12–15 reps',
     steps: [
       'Stand on the center of a resistance band, hold one end in each hand.',
@@ -1254,6 +1265,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Cable Machine',
     youtubeId: 'h9DPY5pCaGA',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 12–15 reps',
     steps: [
       'Stand at a low cable pulley with a bar or rope attachment.',
@@ -1363,6 +1375,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Dumbbell',
     youtubeId: 'nfX7IFK9UNI',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 10–12 reps',
     steps: [
       'Hold a dumbbell vertically at chest level with both hands.',
@@ -1380,6 +1393,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Dumbbells',
     youtubeId: 'aa57T45iFSE',
+    hasPoseDetection: true,
     setsRepsGuide: '3–4 sets × 10–12 reps',
     steps: [
       'Stand holding dumbbells in front of your thighs.',
@@ -1471,6 +1485,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Bodyweight',
     youtubeId: 'hXpGSa5HYqY',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 10–12 reps each leg',
     steps: [
       'Stand in a staggered stance, both feet on the floor.',
@@ -1488,6 +1503,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Intermediate',
     equipment: 'Bodyweight / Dumbbells, Bench',
     youtubeId: 'hbw7hdyOpq0',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 8–12 reps each leg',
     steps: [
       'Place rear foot on a bench, front foot forward.',
@@ -1557,6 +1573,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Intermediate',
     equipment: 'Dumbbells, Bench',
     youtubeId: 'Fmjj7wFJWRE',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 8–10 reps each leg',
     steps: [
       'Hold dumbbells at your sides, rear foot on bench.',
@@ -1574,6 +1591,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Advanced',
     equipment: 'Barbell',
     youtubeId: 'uYumuL_G_V0',
+    hasPoseDetection: true,
     setsRepsGuide: '3–4 sets × 5–8 reps',
     steps: [
       'Hold bar in front rack position, elbows high.',
@@ -1591,6 +1609,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Advanced',
     equipment: 'Barbell',
     youtubeId: 'Z6i2IQqTuU0',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 8–10 reps each leg',
     steps: [
       'Hold a barbell across your traps like a back squat.',
@@ -1659,6 +1678,7 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Beginner',
     equipment: 'Resistance Band',
     youtubeId: 'Eaqr79zvqIw',
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 15–20 reps',
     steps: [
       'Stand on the band, hold ends at shoulder height.',

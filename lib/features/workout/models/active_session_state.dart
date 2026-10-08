@@ -30,9 +30,6 @@ class ExerciseSessionState {
   bool rpeRated = false;
   bool weightManuallySet = false;
 
-  /// Manually toggled; auto-set true once the exercise is fully complete
-  bool collapsed = false;
-
   // Guided-mode timer/camera state (used by AutoLogScreen)
   SetPhase phase = SetPhase.idle;
   int timerSecondsLeft = 0;

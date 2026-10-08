@@ -40,13 +40,6 @@ class AdaptResponse(BaseModel):
 
 
 def _apply_adaptation_rules(fatigue_score: float) -> tuple[str, float, str]:
-    """
-    Maps a fatigue_score (0-1) to (fatigue_level, intensity_adjustment, message).
-
-    This is the single source of truth for the adaptation thresholds — both the
-    ML-predicted path and the RPE-only fallback path call this, so the
-    adaptation behavior stays consistent regardless of which path is used.
-    """
     if fatigue_score > 0.7:
         fatigue_level = "high"
         # Bell et al. (2025) Strength & Conditioning Journal: reactive deload

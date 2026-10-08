@@ -135,19 +135,6 @@ def generate_plan(
     session_duration: str,     # "thirtyMin", "fortyFiveMin", "sixtyMin", "ninetyPlusMin"
     focus_areas: list[str],
 ) -> dict:
-    """
-    Main plan generation function.
-    Returns a structured plan dict ready to be saved to Firestore.
-
-    The logic flow:
-    1. Filter exercise pool by equipment + difficulty
-    2. Determine the split based on number of workout days
-    3. For each workout day, pick exercises spread across that day's
-       muscles (focus muscles and goal-priority muscles first), then size
-       the session to the user's chosen session length
-    4. Apply the goal's rep/rest prescription
-    5. Rest days are marked as rest
-    """
 
     available = filter_by_difficulty(get_exercises_for_equipment(equipment), experience)
     split_names = DAY_SPLITS.get(len(workout_days), ["Full Body"])

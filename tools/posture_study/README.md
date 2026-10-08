@@ -30,7 +30,7 @@ The app logs what it **predicted** (`true`/`false`). Accuracy means comparing th
 | Command | Meaning |
 |---|---|
 | `c` | Next set is CORRECT form |
-| `i <fault>` | Next set is INCORRECT form. Suggested tags: squat `shallow` / `too_deep`; push-up `shallow` / `hips_sag` / `hips_pike`; deadlift `no_hinge` / `no_lockout` |
+| `i <fault>` | Next set is INCORRECT form. Suggested tags: squat `shallow` / `forward_lean`; push-up `shallow` / `hips_sag` / `hips_pike`; deadlift `no_hinge` / `no_lockout`; RDL `knees_bent` / `shallow`; lunge `shallow` / `forward_lean`; press `no_lockout` / `uneven`; curl `half_rep` / `swing`. (`too_deep` was removed in Phase 29: deep squats are now correct — see `docs/POSTURE_THRESHOLDS.md`) |
 | `n` | New set with the same label |
 | `x` / `x 4` | Tester didn't do what was intended, so flip the ground truth of the last rep (or rep 4) |
 | `m` | You saw a rep the app **didn't count**. Logged separately as the rep-detection rate |
@@ -63,6 +63,24 @@ Outputs in `tools/posture_study/results/`:
 - *Precision* = share of flagged reps that were genuinely bad
 - *Specificity* = share of good reps correctly left alone
 - *Rep detection rate* = reps counted ÷ (counted + observer-logged misses). Missed reps have no prediction, so they are excluded from accuracy and reported separately.
+
+## VALIDATION line format (Phase 29)
+
+`VALIDATION|exercise|rep|primary|secondary|isCorrect`. Only `deadlift` still logs the old 5-field form.
+
+| exercise tag | primary (`min_angle` column) | secondary (`min_body_line` column) |
+|---|---|---|
+| `squat` | deepest knee angle | worst trunk lean (NEW — squat lines now have 6 fields) |
+| `pushup` | deepest elbow angle | lowest body line |
+| `pike_pushup` | deepest elbow angle | highest hip angle |
+| `bench` | deepest elbow angle | — |
+| `deadlift` | deepest hip angle | — |
+| `rdl` | deepest hip angle | lowest knee angle |
+| `lunge` | deepest front-knee angle | worst trunk lean |
+| `press` | **highest** elbow angle (lockout) | largest left-right gap |
+| `curl` | smallest elbow angle | largest upper-arm swing |
+
+Variants log under their family tag (a goblet squat logs `squat`), so for the Objective 2 study keep to Bodyweight Squat, Push-Up and Barbell Deadlift, or add a `note` naming the variant. **Squat and push-up data logged before Phase 29 used the old depth rules — re-run them.**
 
 ## CSV columns
 

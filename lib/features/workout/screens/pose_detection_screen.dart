@@ -121,6 +121,10 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
           landmarks,
           frameWidth: (data['frameWidth'] as int?) ?? 640,
           frameHeight: (data['frameHeight'] as int?) ?? 480,
+          // Rotate upright so gravity-referenced checks (trunk lean, shin
+          // angle) work. 270 = front camera in portrait, the same
+          // orientation SkeletonPainter assumes.
+          rotationDegrees: (data['frameRotation'] as int?) ?? 270,
         ));
 
         setState(() {

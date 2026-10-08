@@ -357,6 +357,48 @@ committing.**
   too large to do safely without compiling; do them as a dedicated pass.
 - Fonts are still fetched at runtime (`assets/fonts/` is empty).
 
+## Phase 29: Posture Detection — Research-Backed Thresholds + Variants
+
+**Uncommitted. Dart was NOT compiled** (no Flutter SDK in the session).
+Run `flutter analyze` and `flutter test` before committing.
+Full evidence and references: `docs/POSTURE_THRESHOLDS.md`.
+
+### What changed
+- **31 exercises now have pose detection (was 10).** New: Resistance Band /
+  Goblet / Front squat; Barbell lunge, Split squat, Bulgarian split squat
+  (bodyweight + dumbbell); Barbell + Dumbbell Romanian deadlift; Wide,
+  Diamond, Close-grip, Incline, Decline push-up; Seated dumbbell + Barbell
+  overhead press; Hammer, Barbell, Band, Cable curl.
+- **New `RomanianDeadliftAnalyser`** (hip hinge + knee-bend fault).
+- **Every analyser now has 1–2 form faults** (trunk lean, body line, pike
+  hips, lockout, left-right asymmetry, curl swing) and separate
+  counting vs. correctness thresholds, so shallow reps are counted *and
+  flagged* instead of vanishing.
+- All thresholds live in one `FormThresholds` class with their sources.
+- Shared `_RepTracker` replaces six copies of the hysteresis logic.
+- `ExerciseAnalyserFactory` now routes by exact name first (a test checks
+  every `hasPoseDetection` exercise is mapped).
+- `toPixelSpace()` takes `rotationDegrees` and returns upright coordinates;
+  both camera screens pass `frameRotation` (default 270).
+
+### Bugs fixed in existing analysers
+1. **Squat depth was the half-squat band.** 80–100° was "good" and < 80°
+   "too deep", so a proper parallel squat (≈60–70°, Rojas-Jaramillo et al.,
+   2024) was marked wrong. Now correct = ≤ 80°, no "too deep" fault.
+2. **Push-up depth was never judged** (any counted rep passed). Now ≤ 100°.
+3. **Pike push-up and bench press** used the straight-plank check, which
+   they always fail by design.
+4. **Bulgarian-style split squats could never count a rep** (rear knee
+   picked as the front knee). Front leg = more vertical shin.
+5. **Curls were analysed front-on**, where the forearm is foreshortened.
+   Now side-on.
+6. **Push-up and deadlift required both sides visible** in a side-on view.
+7. "Leg Curl" / "Leg Press" would have routed to curl / press analysers.
+
+**Squat and push-up accuracy data logged before Phase 29 must be re-run.**
+
+---
+
 ## Key Academic Citations (for dissertation)
 
 *(Unchanged from Phase 25/26 — see prior document version for the full
@@ -412,6 +454,21 @@ full text. New decisions below, Phase 27.)*
     remaining FYP timeline, following the same "document rather than
     silently accept" discipline applied to Signal #7's client-clock
     dependency.
+61. **Posture thresholds follow one explicit rule: published reference
+    value + 10° MediaPipe tolerance (20° near full extension)**
+    *(Phase 29)* — makes every number traceable and the tolerance testable
+    in the accuracy study; values without a published source (RDL depth,
+    pike hip) are labelled engineering estimates rather than presented as
+    evidence.
+62. **Separate counting and correctness thresholds** *(Phase 29)* — a rep
+    that only counts when it is correct can never be scored as incorrect,
+    which made the Objective 2 confusion matrix structurally one-sided.
+63. **Gravity-referenced measures (trunk lean, shin angle) require the
+    frame rotated upright; joint angles do not** *(Phase 29)* — rotation is
+    applied once in `toPixelSpace()` instead of inside each analyser.
+64. **Exercises whose movement can't be seen reliably in 2D were left out
+    rather than given unreliable feedback** *(Phase 29)* — Arnold press,
+    walking lunge, jump squat, archer push-up, incline/concentration curl.
 
 ---
 
