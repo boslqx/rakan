@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Empty icon for the Android 12+ system splash: the Flutter splash screen
+     brings the logo in itself, so the system one is just a dark field. -->
+<color xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@android:color/transparent" />

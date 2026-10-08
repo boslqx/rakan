@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AppColors.surface. The native launch screen and the window behind
+         Flutter use it so there's no white flash before the first frame. -->
+    <color name="splash_background">#0C0E10</color>
+</resources>
