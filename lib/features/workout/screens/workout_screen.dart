@@ -1,55 +1,22 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../services/workout_plan_service.dart';
+import '../services/workout_log_service.dart';
+import '../services/schedule_matcher.dart';
 import '../services/notification_service.dart';
+import '../widgets/exercise_media.dart';
 import 'workout_day_detail_screen.dart';
 import 'exercise_library_screen.dart';
 import '../data/exercise_data.dart';
 import '../../onboarding/services/user_profile_service.dart';
 import '../../../shared/widgets/pressable.dart';
 
-bool equipmentMatches(
-  String exerciseEquipment,
-  List<String> userEquipment,
-  Map<String, String> equipmentTagToEnum,
-) {
-  final userSet = userEquipment.toSet();
-  if (userSet.contains('fullGym')) return true;
-
-  final alternatives = exerciseEquipment
-      .split('/')
-      .map((value) => value.trim())
-      .where((value) => value.isNotEmpty);
-
-  for (final alternative in alternatives) {
-    final tags = alternative
-        .split(',')
-        .map((tag) => tag.trim().toLowerCase())
-        .where((tag) => tag.isNotEmpty)
-        .toList();
-
-    if (tags.isEmpty) return true;
-
-    var alternativeMatches = true;
-    for (final tag in tags) {
-      final mapped = equipmentTagToEnum[tag];
-      if (mapped == null) {
-        alternativeMatches = false;
-        break;
-      }
-      if (mapped != 'noEquipment' && !userSet.contains(mapped)) {
-        alternativeMatches = false;
-        break;
-      }
-    }
-
-    if (alternativeMatches) return true;
-  }
-
-  return false;
-}
+export '../data/exercise_data.dart' show equipmentMatches;
 
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
@@ -73,10 +40,25 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   bool _isEditMode = false;
   bool _isMutating = false; // true while a swap/cancel write is in flight
 
+  /// Recent logs, to mark each day DONE / MISSED for this week.
+  List<Map<String, dynamic>> _recentLogs = [];
+
+  final ScrollController _scheduleScroll = ScrollController();
+  final GlobalKey _scheduleListKey = GlobalKey();
+  Timer? _autoScrollTimer;
+  double? _dragPointerY;
+
   @override
   void initState() {
     super.initState();
     _loadPlan();
+  }
+
+  @override
+  void dispose() {
+    _autoScrollTimer?.cancel();
+    _scheduleScroll.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPlan() async {
@@ -85,9 +67,17 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
     try {
       final plan = await WorkoutPlanService().getActivePlan(uid);
+      // Best-effort: without logs the cards just don't show DONE/MISSED.
+      var logs = _recentLogs;
+      try {
+        logs = await WorkoutLogService().getRecentLogs(uid, limit: 14);
+      } catch (e) {
+        debugPrint('Schedule: recent logs load failed: $e');
+      }
       if (mounted) {
         setState(() {
           _plan = plan;
+          _recentLogs = logs;
           _isLoading = false;
         });
       }
@@ -245,7 +235,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Tap a workout day to replace or cancel it. Tap a rest day to convert it.',
+                      'Hold and drag a day onto another to swap them. Tap a day for more options.',
                       style: GoogleFonts.manrope(
                         fontSize: 12,
                         color: AppColors.primary,
@@ -388,63 +378,45 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   Widget _buildPlan() {
     final days = (_plan!['days'] as List).cast<Map<String, dynamic>>();
-    final planName = _plan!['planName'] as String? ?? '7-Day Plan';
 
     return RefreshIndicator(
       onRefresh: _loadPlan,
       color: AppColors.primary,
       backgroundColor: AppColors.surfaceContainerLow,
       child: CustomScrollView(
+        key: _scheduleListKey,
+        controller: _scheduleScroll,
         slivers: [
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'CURRENT CYCLE',
-                    style: GoogleFonts.manrope(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 2,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    planName,
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
-                      height: 1.1,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      _buildQuickStat(
-                        '${days.where((d) => d['dayType'] == 'workout').length}',
-                        'WORKOUT DAYS',
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _isMutating
+                  ? const Padding(
+                      padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
+                      child: LinearProgressIndicator(
+                        minHeight: 2,
+                        color: AppColors.primary,
+                        backgroundColor: AppColors.surfaceContainerHigh,
                       ),
-                      const SizedBox(width: 24),
-                      _buildQuickStat(
-                        '${days.where((d) => d['dayType'] == 'rest').length}',
-                        'REST DAYS',
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                    )
+                  : const SizedBox(height: 10),
             ),
           ),
+          // The overview is for reading the week; edit mode trades it for
+          // compact rows so the whole week fits for drag-and-drop.
+          if (!_isEditMode)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                child: _buildPlanOverview(days),
+              ),
+            ),
           SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final day = days[index];
               return Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                child: _buildDayCard(day),
+                padding: EdgeInsets.fromLTRB(24, 0, 24, _isEditMode ? 8 : 12),
+                child: _isEditMode ? _buildEditDayRow(day) : _buildDayCard(day),
               );
             }, childCount: days.length),
           ),
@@ -454,30 +426,274 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
   }
 
-  Widget _buildQuickStat(String value, String label) {
+  // ── This week, against the plan ───────────────────────────────────────
+
+  DateTime get _today {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  /// This week's calendar date for a plan day (dayNumber 1 = Monday).
+  DateTime _dateThisWeek(int dayNumber) {
+    final t = _today;
+    return DateTime(t.year, t.month, t.day - t.weekday + dayNumber);
+  }
+
+  bool _isDoneThisWeek(Map<String, dynamic> day) =>
+      ScheduleMatcher.logForDate(
+        _recentLogs,
+        _dateThisWeek(day['dayNumber'] as int),
+      ) !=
+      null;
+
+  static List<Map<String, dynamic>> _exercisesOf(Map<String, dynamic> day) =>
+      (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+  static int _setsOf(Map<String, dynamic> day) => _exercisesOf(
+    day,
+  ).fold<int>(0, (sum, ex) => sum + ((ex['sets'] as num?)?.toInt() ?? 0));
+
+  // ── Plan overview ─────────────────────────────────────────────────────
+
+  /// The week at a glance — how the load is spread across days, and how
+  /// many sets each muscle group gets. The second is what to check when
+  /// adjusting the plan: it shows at once if a muscle is over- or
+  /// under-served.
+  Widget _buildPlanOverview(List<Map<String, dynamic>> days) {
+    final planName = _plan!['planName'] as String? ?? '7-Day Plan';
+    final weekNumber = _plan!['weekNumber'] as int?;
+    final workoutDays = days.where((d) => d['dayType'] == 'workout').toList();
+    final totalMinutes = workoutDays.fold<int>(
+      0,
+      (sum, d) => sum + ((d['durationMinutes'] as num?)?.toInt() ?? 0),
+    );
+    final totalSets = workoutDays.fold<int>(0, (sum, d) => sum + _setsOf(d));
+
+    final setsByMuscle = <String, int>{};
+    for (final day in workoutDays) {
+      for (final ex in _exercisesOf(day)) {
+        final name = ex['exerciseName'] as String? ?? '';
+        final group = (ex['muscleGroup'] as String?)?.isNotEmpty == true
+            ? ex['muscleGroup'] as String
+            : findExerciseByName(name)?.muscleGroup ?? 'Other';
+        setsByMuscle[group] =
+            (setsByMuscle[group] ?? 0) + ((ex['sets'] as num?)?.toInt() ?? 0);
+      }
+    }
+    final muscleRows = setsByMuscle.entries.where((e) => e.value > 0).toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final maxMuscleSets = muscleRows.isEmpty ? 1 : muscleRows.first.value;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            weekNumber != null
+                ? 'CURRENT CYCLE · WEEK $weekNumber'
+                : 'CURRENT CYCLE',
+            style: _label(),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            planName,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+              height: 1.15,
+            ),
+          ),
+          const SizedBox(height: 18),
+          _buildWeekLoadChart(days),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildOverviewStat(
+                  '${workoutDays.length}',
+                  'TRAINING DAYS',
+                ),
+              ),
+              Expanded(
+                child: _buildOverviewStat('$totalMinutes', 'MIN / WEEK'),
+              ),
+              Expanded(child: _buildOverviewStat('$totalSets', 'SETS / WEEK')),
+            ],
+          ),
+          if (muscleRows.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            const Divider(height: 1, color: AppColors.outlineVariant),
+            const SizedBox(height: 14),
+            Text('WEEKLY SETS BY MUSCLE', style: _label()),
+            const SizedBox(height: 10),
+            for (final row in muscleRows.take(6))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 84,
+                      child: Text(
+                        row.key,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.manrope(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: Container(
+                          height: 6,
+                          color: AppColors.surfaceContainerHigh,
+                          alignment: Alignment.centerLeft,
+                          child: FractionallySizedBox(
+                            widthFactor: row.value / maxMuscleSets,
+                            heightFactor: 1,
+                            child: const ColoredBox(color: AppColors.primary),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 32,
+                      child: Text(
+                        '${row.value}',
+                        textAlign: TextAlign.right,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// One bar per weekday, height = session length. Done this week is solid,
+  /// missed is tinted red, still to come is muted; rest days are a dot.
+  Widget _buildWeekLoadChart(List<Map<String, dynamic>> days) {
+    const maxBar = 44.0;
+    final byNumber = {for (final d in days) d['dayNumber'] as int: d};
+    final longest = days.fold<int>(
+      1,
+      (m, d) => math.max(m, (d['durationMinutes'] as num?)?.toInt() ?? 0),
+    );
+    final today = _today;
+
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (int n = 1; n <= 7; n++) ...[
+          if (n > 1) const SizedBox(width: 8),
+          Expanded(
+            child: Builder(
+              builder: (context) {
+                final day = byNumber[n];
+                final isWorkout = day != null && day['dayType'] == 'workout';
+                final date = _dateThisWeek(n);
+                final isToday = date == today;
+                final done = isWorkout && _isDoneThisWeek(day);
+                final missed = isWorkout && !done && date.isBefore(today);
+                final minutes = (day?['durationMinutes'] as num?)?.toInt() ?? 0;
+
+                final Widget bar = isWorkout
+                    ? AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        height: 10 + (maxBar - 10) * (minutes / longest),
+                        decoration: BoxDecoration(
+                          color: done
+                              ? AppColors.primary
+                              : missed
+                              ? AppColors.error.withValues(alpha: 0.35)
+                              : AppColors.surfaceBright,
+                          borderRadius: BorderRadius.circular(5),
+                          border: isToday && !done
+                              ? Border.all(color: AppColors.primary, width: 1.5)
+                              : null,
+                        ),
+                      )
+                    : Center(
+                        child: Container(
+                          width: 6,
+                          height: 6,
+                          margin: const EdgeInsets.only(bottom: 2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.onSurfaceVariant.withValues(
+                              alpha: 0.3,
+                            ),
+                          ),
+                        ),
+                      );
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: maxBar,
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: bar,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'MTWTFSS'[n - 1],
+                      style: GoogleFonts.manrope(
+                        fontSize: 10,
+                        fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                        color: isToday
+                            ? AppColors.onSurface
+                            : AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildOverviewStat(String value, String label) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           value,
           style: GoogleFonts.spaceGrotesk(
             fontSize: 22,
             fontWeight: FontWeight.w700,
-            color: AppColors.primary,
+            color: AppColors.onSurface,
+            height: 1.1,
           ),
         ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: GoogleFonts.manrope(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.5,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
+        const SizedBox(height: 2),
+        Text(label, style: _label(fontSize: 9, letterSpacing: 1.3)),
       ],
     );
   }
+
+  // ── Day cards ─────────────────────────────────────────────────────────
 
   Widget _buildDayCard(Map<String, dynamic> day) {
     final isRest = day['dayType'] == 'rest';
@@ -486,204 +702,482 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final workoutName = day['workoutName'] as String;
     final focusDescription = day['focusDescription'] as String? ?? '';
     final durationMinutes = day['durationMinutes'] as int? ?? 0;
-    final exercises =
-        (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final exercises = _exercisesOf(day);
+    final sets = _setsOf(day);
 
-    // In edit mode, workout days open the manage sheet (replace/cancel).
-    // Rest days now also open a manage sheet — but with a single option:
-    // convert them into a workout day.
-    // Outside edit mode, rest days stay null — untouched, matches your
-    // existing "view-only unless editing" pattern.
-    final VoidCallback? onTap = isRest
-        ? (_isEditMode ? () => _showManageRestDaySheet(day) : null)
-        : (_isEditMode
-              ? () => _showManageDaySheet(day)
-              : () => _openDayDetail(day));
+    final date = _dateThisWeek(dayNumber);
+    final isToday = date == _today;
+    final isDone = !isRest && _isDoneThisWeek(day);
+    final isMissed = !isRest && !isDone && date.isBefore(_today);
+
+    final card = Pressable(
+      onTap: isRest ? null : () => _openDayDetail(day),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+        decoration: BoxDecoration(
+          color: isRest
+              ? AppColors.surfaceContainerLowest
+              : AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(20),
+            topRight: const Radius.circular(20),
+            bottomLeft: Radius.circular(isRest ? 20 : 6),
+            bottomRight: Radius.circular(isRest ? 20 : 6),
+          ),
+          border: Border.all(
+            color: isToday
+                ? AppColors.primary.withValues(alpha: 0.45)
+                : isRest
+                ? AppColors.outlineVariant.withValues(alpha: 0.6)
+                : Colors.transparent,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${dayName.toUpperCase()} • DAY ${dayNumber.toString().padLeft(2, '0')}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _label(
+                      color: isRest
+                          ? AppColors.onSurfaceVariant.withValues(alpha: 0.6)
+                          : AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                if (isToday) ...[
+                  _statusChip('TODAY', filled: true),
+                  const SizedBox(width: 6),
+                ],
+                if (isDone)
+                  _statusChip('DONE', icon: Icons.check_rounded)
+                else if (isMissed)
+                  _statusChip('MISSED', color: AppColors.error)
+                else if (isRest)
+                  _statusChip('REST', color: AppColors.onSurfaceVariant),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isRest ? 'REST DAY' : workoutName.toUpperCase(),
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: isRest
+                    ? AppColors.onSurfaceVariant.withValues(alpha: 0.5)
+                    : AppColors.onSurface,
+                height: 1.1,
+              ),
+            ),
+            if (isRest || focusDescription.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                isRest ? 'Recovery — muscles rebuild today.' : focusDescription,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.manrope(
+                  fontSize: 13,
+                  color: isRest
+                      ? AppColors.onSurfaceVariant.withValues(alpha: 0.45)
+                      : AppColors.onSurfaceVariant,
+                ),
+              ),
+            ],
+            if (!isRest) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 14,
+                runSpacing: 6,
+                children: [
+                  _metaItem(Icons.timer_outlined, '$durationMinutes MIN'),
+                  _metaItem(
+                    Icons.fitness_center_rounded,
+                    '${exercises.length} EXERCISE${exercises.length == 1 ? '' : 'S'}',
+                  ),
+                  if (sets > 0) ...[
+                    _metaItem(Icons.repeat_rounded, '$sets SETS'),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: exercises.isEmpty
+                        ? Text(
+                            'No exercises yet — tap to add some.',
+                            style: GoogleFonts.manrope(
+                              fontSize: 12,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          )
+                        : ExerciseThumbStrip(
+                            exerciseNames: [
+                              for (final ex in exercises)
+                                ex['exerciseName'] as String? ?? '',
+                            ],
+                            size: 40,
+                            overflowColor: AppColors.surfaceContainerHigh,
+                          ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.onSurfaceVariant,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Pressable(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: isRest
-                  ? AppColors.surfaceContainerLowest
-                  : AppColors.surfaceContainerLow,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(20),
-                topRight: const Radius.circular(20),
-                bottomLeft: Radius.circular(isRest ? 20 : 6),
-                bottomRight: Radius.circular(isRest ? 20 : 6),
-              ),
-              border: Border(
-                left: BorderSide(
-                  color: isRest
-                      ? Colors.transparent
-                      : (_isEditMode
-                            ? AppColors.primary
-                            : AppColors.primary.withValues(alpha: 0.6)),
-                  width: _isEditMode && !isRest ? 4 : 3,
-                ),
-              ),
+      children: [card, if (!isRest) _buildDayReminderRow(day)],
+    );
+  }
+
+  Widget _statusChip(
+    String label, {
+    IconData? icon,
+    Color? color,
+    bool filled = false,
+  }) {
+    final fg = filled ? AppColors.onPrimary : (color ?? AppColors.primary);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: filled ? AppColors.primary : fg.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(48),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 11, color: fg),
+            const SizedBox(width: 3),
+          ],
+          Text(
+            label,
+            style: GoogleFonts.manrope(
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+              color: fg,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${dayName.toUpperCase()} • DAY ${dayNumber.toString().padLeft(2, '0')}',
-                        style: GoogleFonts.manrope(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.5,
-                          color: isRest
-                              ? AppColors.onSurfaceVariant.withValues(
-                                  alpha: 0.5,
-                                )
-                              : AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    if (_isEditMode && !isRest)
-                      const Padding(
-                        padding: EdgeInsets.only(right: 8),
-                        child: Icon(
-                          Icons.edit_rounded,
-                          size: 14,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isRest
-                            ? AppColors.surfaceContainerLow
-                            : AppColors.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(48),
-                      ),
-                      child: Text(
-                        isRest ? 'REST DAY' : 'WORKOUT',
-                        style: GoogleFonts.manrope(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.5,
-                          color: isRest
-                              ? AppColors.onSurfaceVariant.withValues(
-                                  alpha: 0.5,
-                                )
-                              : AppColors.primary,
-                        ),
-                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _metaItem(IconData icon, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: AppColors.onSurfaceVariant),
+        const SizedBox(width: 4),
+        Text(label, style: _label(fontSize: 11, letterSpacing: 1)),
+      ],
+    );
+  }
+
+  TextStyle _label({
+    double fontSize = 10,
+    double letterSpacing = 1.5,
+    Color color = AppColors.onSurfaceVariant,
+  }) {
+    return GoogleFonts.manrope(
+      fontSize: fontSize,
+      fontWeight: FontWeight.w700,
+      letterSpacing: letterSpacing,
+      color: color,
+    );
+  }
+
+  // ── Edit mode: compact, draggable rows ────────────────────────────────
+
+  /// Hold a row and drop it on another day to swap them; tap for the rest
+  /// of the day's options. Rows are compact so the week fits on screen
+  /// while dragging (with edge auto-scroll for the rest).
+  Widget _buildEditDayRow(Map<String, dynamic> day) {
+    final isRest = day['dayType'] == 'rest';
+
+    return DragTarget<Map<String, dynamic>>(
+      onWillAcceptWithDetails: (details) => details.data['id'] != day['id'],
+      onAcceptWithDetails: (details) => _swapDays(details.data, day),
+      builder: (context, candidates, _) {
+        final row = _editRowContent(day, highlighted: candidates.isNotEmpty);
+        return LongPressDraggable<Map<String, dynamic>>(
+          data: day,
+          hapticFeedbackOnStart: true,
+          onDragStarted: _startDragAutoScroll,
+          onDragUpdate: (details) => _dragPointerY = details.globalPosition.dy,
+          onDragEnd: (_) => _stopDragAutoScroll(),
+          onDraggableCanceled: (_, _) => _stopDragAutoScroll(),
+          feedback: Material(
+            color: Colors.transparent,
+            child: SizedBox(
+              width: MediaQuery.sizeOf(context).width - 48,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      blurRadius: 24,
+                      offset: const Offset(0, 10),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                child: _editRowContent(day, lifted: true),
+              ),
+            ),
+          ),
+          childWhenDragging: Opacity(opacity: 0.3, child: row),
+          child: Pressable(
+            onTap: () => isRest
+                ? _showManageRestDaySheet(day)
+                : _showManageDaySheet(day),
+            child: row,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _editRowContent(
+    Map<String, dynamic> day, {
+    bool highlighted = false,
+    bool lifted = false,
+  }) {
+    final isRest = day['dayType'] == 'rest';
+    final dayName = day['dayName'] as String? ?? '';
+    final exercises = _exercisesOf(day);
+    final minutes = day['durationMinutes'] as int? ?? 0;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      padding: const EdgeInsets.fromLTRB(6, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: highlighted
+            ? AppColors.primary.withValues(alpha: 0.14)
+            : lifted
+            ? AppColors.surfaceContainerHigh
+            : isRest
+            ? AppColors.surfaceContainerLowest
+            : AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: highlighted
+              ? AppColors.primary
+              : AppColors.outlineVariant.withValues(alpha: lifted ? 1 : 0.6),
+          width: highlighted ? 1.5 : 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.drag_indicator_rounded,
+            size: 20,
+            color: AppColors.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 38,
+            child: Text(
+              dayName.length >= 3
+                  ? dayName.substring(0, 3).toUpperCase()
+                  : dayName.toUpperCase(),
+              style: _label(
+                fontSize: 11,
+                letterSpacing: 1.2,
+                color: AppColors.onSurface,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Text(
-                  workoutName.toUpperCase(),
+                  isRest
+                      ? 'Rest day'
+                      : day['workoutName'] as String? ?? 'Workout',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.spaceGrotesk(
-                    fontSize: 20,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: isRest
-                        ? AppColors.onSurfaceVariant.withValues(alpha: 0.4)
+                        ? AppColors.onSurfaceVariant.withValues(alpha: 0.6)
                         : AppColors.onSurface,
-                    height: 1.1,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
-                  focusDescription,
+                  highlighted
+                      ? 'Drop to swap'
+                      : isRest
+                      ? 'Recovery'
+                      : '${exercises.length} exercise${exercises.length == 1 ? '' : 's'} · $minutes min',
                   style: GoogleFonts.manrope(
-                    fontSize: 13,
-                    color: isRest
-                        ? AppColors.onSurfaceVariant.withValues(alpha: 0.3)
+                    fontSize: 12,
+                    color: highlighted
+                        ? AppColors.primary
                         : AppColors.onSurfaceVariant,
                   ),
                 ),
-                if (!isRest) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.timer_outlined,
-                        size: 14,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$durationMinutes MIN',
-                        style: GoogleFonts.manrope(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      const Icon(
-                        Icons.fitness_center_rounded,
-                        size: 14,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${exercises.length} EXERCISES',
-                        style: GoogleFonts.manrope(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (exercises.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        ...exercises
-                            .take(3)
-                            .map(
-                              (ex) => _buildExerciseChip(
-                                ex['exerciseName'] as String? ?? '',
-                              ),
-                            ),
-                        if (exercises.length > 3)
-                          _buildExerciseChip(
-                            '+${exercises.length - 3} MORE',
-                            isMore: true,
-                          ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-                  Text(
-                    _isEditMode
-                        ? 'TAP TO REPLACE OR CANCEL →'
-                        : 'TAP TO VIEW EXERCISES →',
-                    style: GoogleFonts.manrope(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.5,
-                      color: AppColors.primary.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
-        ),
-        if (!isRest) _buildDayReminderRow(day),
-      ],
+          const SizedBox(width: 8),
+          if (isRest && !lifted)
+            Pressable(
+              onTap: () => _promptWorkoutNameAndConvert(day),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(48),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.add_rounded,
+                      size: 14,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      'WORKOUT',
+                      style: _label(
+                        fontSize: 10,
+                        letterSpacing: 1,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            const Icon(
+              Icons.more_horiz_rounded,
+              color: AppColors.onSurfaceVariant,
+            ),
+        ],
+      ),
     );
+  }
+
+  // Edge auto-scroll while dragging a day. Driven by a timer rather than
+  // drag updates alone, so holding a row at the edge keeps scrolling.
+  void _startDragAutoScroll() {
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      final y = _dragPointerY;
+      final box =
+          _scheduleListKey.currentContext?.findRenderObject() as RenderBox?;
+      if (y == null || box == null || !_scheduleScroll.hasClients) return;
+
+      final top = box.localToGlobal(Offset.zero).dy;
+      final bottom = top + box.size.height;
+      const edge = 72.0;
+      double speed = 0;
+      if (y < top + edge) {
+        speed = -14 * (1 - ((y - top) / edge).clamp(0.0, 1.0));
+      } else if (y > bottom - edge) {
+        speed = 14 * (1 - ((bottom - y) / edge).clamp(0.0, 1.0));
+      }
+      if (speed == 0) return;
+
+      final position = _scheduleScroll.position;
+      _scheduleScroll.jumpTo(
+        (position.pixels + speed).clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        ),
+      );
+    });
+  }
+
+  void _stopDragAutoScroll() {
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = null;
+    _dragPointerY = null;
+  }
+
+  /// Swaps two days' content, at once on screen (then confirmed by the
+  /// reload) — with UNDO rather than a confirm dialog: a swap is fully
+  /// reversible, so asking first only slows it down.
+  Future<void> _swapDays(
+    Map<String, dynamic> dayA,
+    Map<String, dynamic> dayB, {
+    bool offerUndo = true,
+  }) async {
+    HapticFeedback.mediumImpact();
+
+    // Optimistic: mirror WorkoutPlanService.swapDays — content moves, the
+    // calendar slot (dayNumber/dayName/dayOfWeek, doc id) stays put.
+    const slotFields = {'id', 'dayNumber', 'dayName', 'dayOfWeek'};
+    final days = (_plan!['days'] as List).cast<Map<String, dynamic>>();
+    final ia = days.indexWhere((d) => d['id'] == dayA['id']);
+    final ib = days.indexWhere((d) => d['id'] == dayB['id']);
+    if (ia == -1 || ib == -1) return;
+    Map<String, dynamic> withContent(
+      Map<String, dynamic> slot,
+      Map<String, dynamic> content,
+    ) => {
+      for (final e in content.entries)
+        if (!slotFields.contains(e.key)) e.key: e.value,
+      for (final e in slot.entries)
+        if (slotFields.contains(e.key)) e.key: e.value,
+    };
+    final a = days[ia], b = days[ib];
+    setState(() {
+      days[ia] = withContent(a, b);
+      days[ib] = withContent(b, a);
+    });
+
+    final ok = await _runMutation(
+      () => WorkoutPlanService().swapDays(
+        uid: FirebaseAuth.instance.currentUser!.uid,
+        planId: _plan!['id'] as String,
+        dayIdA: dayA['id'] as String,
+        dayIdB: dayB['id'] as String,
+      ),
+    );
+    if (!mounted || !ok || !offerUndo) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            'Swapped ${dayA['dayName']} and ${dayB['dayName']}',
+            style: GoogleFonts.manrope(color: AppColors.onSurface),
+          ),
+          backgroundColor: AppColors.surfaceContainerHigh,
+          action: SnackBarAction(
+            label: 'UNDO',
+            textColor: AppColors.primary,
+            onPressed: () => _swapDays(dayA, dayB, offerUndo: false),
+          ),
+        ),
+      );
   }
 
   // ── Per-day "start workout at X" reminder row ─────────────────────────
@@ -911,25 +1405,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     }
   }
 
-  Widget _buildExerciseChip(String label, {bool isMore = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(48),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.manrope(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-          color: AppColors.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-
   // ── Edit mode: manage-day sheet (Replace / Cancel) ────────────────────
 
   void _showManageDaySheet(Map<String, dynamic> day) {
@@ -969,9 +1444,19 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             const SizedBox(height: 24),
 
             _manageOptionTile(
+              icon: Icons.tune_rounded,
+              title: 'Edit Exercises',
+              subtitle: 'Sets, reps, rest — add, swap or remove',
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _openDayDetail(day);
+              },
+            ),
+            const SizedBox(height: 10),
+            _manageOptionTile(
               icon: Icons.swap_horiz_rounded,
-              title: 'Replace Day',
-              subtitle: 'Swap with another day in this plan',
+              title: 'Move to Another Day',
+              subtitle: 'Swap with another day — or drag it there',
               onTap: () {
                 Navigator.pop(sheetContext);
                 _showReplaceDayPicker(day);
@@ -980,8 +1465,8 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             const SizedBox(height: 10),
             _manageOptionTile(
               icon: Icons.remove_circle_outline_rounded,
-              title: 'Cancel Day',
-              subtitle: 'Mark this day as rest instead',
+              title: 'Make It a Rest Day',
+              subtitle: 'Cancels this workout and its exercises',
               iconColor: AppColors.error,
               onTap: () {
                 Navigator.pop(sheetContext);
@@ -1128,7 +1613,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                     child: Pressable(
                       onTap: () {
                         Navigator.pop(sheetContext);
-                        _confirmSwap(day, other);
+                        _swapDays(day, other);
                       },
                       child: Container(
                         padding: const EdgeInsets.all(16),
@@ -1178,62 +1663,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Future<void> _confirmSwap(
-    Map<String, dynamic> dayA,
-    Map<String, dynamic> dayB,
-  ) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainerLow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Swap Days?',
-          style: GoogleFonts.spaceGrotesk(
-            color: AppColors.onSurface,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        content: Text(
-          '${dayA['dayName']} will become "${dayB['workoutName']}", and ${dayB['dayName']} will become "${dayA['workoutName']}".',
-          style: GoogleFonts.manrope(
-            color: AppColors.onSurfaceVariant,
-            height: 1.5,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(
-              'Swap',
-              style: GoogleFonts.manrope(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-    await _runMutation(
-      () => WorkoutPlanService().swapDays(
-        uid: FirebaseAuth.instance.currentUser!.uid,
-        planId: _plan!['id'] as String,
-        dayIdA: dayA['id'] as String,
-        dayIdB: dayB['id'] as String,
       ),
     );
   }
@@ -1334,6 +1763,16 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               onTap: () {
                 Navigator.pop(sheetContext);
                 _promptWorkoutNameAndConvert(day);
+              },
+            ),
+            const SizedBox(height: 10),
+            _manageOptionTile(
+              icon: Icons.swap_horiz_rounded,
+              title: 'Move a Workout Here',
+              subtitle: 'Swap with one of your training days',
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _showReplaceDayPicker(day);
               },
             ),
           ],
@@ -1563,51 +2002,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   // Template exercise helpers
-  static const Map<String, String> _kEquipmentTagToEnum = {
-    'bodyweight': 'noEquipment',
-    'dumbbell': 'dumbbell',
-    'dumbbells': 'dumbbell',
-    'barbell': 'barbell',
-    'bench': 'bench',
-    'cable machine': 'machines',
-    'machine': 'machines',
-    'resistance band': 'resistanceBand',
-    'pull-up bar': 'pullUpBar',
-    'kettlebell': 'kettlebell',
-    'bar': 'pullUpBar',
-  };
-
-  /// Maps an exercise's equipment string to whether the user can perform it
-  bool _equipmentMatches(String exerciseEquipment, List<String> userEquipment) {
-    final userSet = userEquipment.toSet();
-    if (userSet.contains('fullGym')) return true;
-
-    final alternatives = exerciseEquipment.split('/');
-
-    for (final alt in alternatives) {
-      final tags = alt
-          .split(',')
-          .map((t) => t.trim().toLowerCase())
-          .where((t) => t.isNotEmpty);
-
-      var altMatches = true;
-      for (final tag in tags) {
-        final mapped = _kEquipmentTagToEnum[tag];
-        if (mapped == null) {
-          altMatches = false;
-          break;
-        }
-        if (mapped != 'noEquipment' && !userSet.contains(mapped)) {
-          altMatches = false;
-          break;
-        }
-      }
-      if (altMatches) return true;
-    }
-
-    return false;
-  }
-
   static const Map<String, int> _kDifficultyRank = {
     'Beginner': 0,
     'Intermediate': 1,
@@ -1628,7 +2022,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   /// Template exercise pools per muscle group (exercise names from kExercises).
   /// Note: some exercise `equipment` strings in exercise_data.dart use '/'
   /// to mean "OR" between alternative setups (e.g. 'Bodyweight / Dumbbells, Bench').
-  /// See _equipmentMatches() for how this is parsed.
+  /// See equipmentMatches() for how this is parsed.
   static const Map<String, List<String>> _kMuscleGroupTemplatePools = {
     'Chest': [
       'Push-Up',
@@ -1730,7 +2124,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final resolved = pool
         .map((name) => findExerciseByName(name))
         .whereType<ExerciseData>()
-        .where((ex) => _equipmentMatches(ex.equipment, userEquipment))
+        .where((ex) => equipmentMatches(ex.equipment, userEquipment))
         .toList();
 
     resolved.sort(
@@ -1745,14 +2139,18 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   /// Runs a swap/cancel write, showing a lightweight loading state and
   /// reloading the plan from Firestore afterward so the UI reflects the
-  /// authoritative saved state rather than a locally-guessed one.
-  Future<void> _runMutation(Future<void> Function() action) async {
-    if (_isMutating) return;
+  /// authoritative saved state rather than a locally-guessed one. Returns
+  /// whether the write succeeded.
+  Future<bool> _runMutation(Future<void> Function() action) async {
+    if (_isMutating) return false;
     setState(() => _isMutating = true);
     try {
       await action();
       await _loadPlan();
+      return true;
     } catch (e) {
+      // Put back anything shown optimistically.
+      await _loadPlan();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1764,6 +2162,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           ),
         );
       }
+      return false;
     } finally {
       if (mounted) setState(() => _isMutating = false);
     }

@@ -44,6 +44,75 @@ extension ExerciseTracksWeight on ExerciseData {
   bool get tracksWeight => !kBodyweightOnlyEquipmentTags.contains(equipment);
 }
 
+/// Exercise equipment tags (lower-cased, as written in [ExerciseData.equipment])
+/// → the onboarding equipment ids stored on the user's profile. Tags with no
+/// onboarding equivalent (parallel bars, TRX, ab wheel) are left out, so
+/// those exercises only match a full-gym profile.
+const Map<String, String> kEquipmentTagToEnum = {
+  'bodyweight': 'noEquipment',
+  'dumbbell': 'dumbbell',
+  'dumbbells': 'dumbbell',
+  'light dumbbells': 'dumbbell',
+  'barbell': 'barbell',
+  'ez-bar': 'barbell',
+  'weight plate': 'barbell',
+  'bench': 'bench',
+  'incline bench': 'bench',
+  'box': 'bench',
+  'cable machine': 'machines',
+  'machine': 'machines',
+  'resistance band': 'resistanceBand',
+  'pull-up bar': 'pullUpBar',
+  'bar': 'pullUpBar',
+  'kettlebell': 'kettlebell',
+  'kettlebells': 'kettlebell',
+};
+
+/// Whether a user with [userEquipment] (onboarding ids) can do an exercise
+/// needing [exerciseEquipment]. In the equipment string '/' separates
+/// alternative setups (any one will do) and ',' joins items that are all
+/// needed, e.g. 'Bodyweight / Dumbbells, Bench'.
+bool equipmentMatches(
+  String exerciseEquipment,
+  List<String> userEquipment, [
+  Map<String, String> equipmentTagToEnum = kEquipmentTagToEnum,
+]) {
+  final userSet = userEquipment.toSet();
+  if (userSet.contains('fullGym')) return true;
+
+  final alternatives = exerciseEquipment
+      .split('/')
+      .map((value) => value.trim())
+      .where((value) => value.isNotEmpty);
+
+  for (final alternative in alternatives) {
+    final tags = alternative
+        .split(',')
+        .map((tag) => tag.trim().toLowerCase())
+        .where((tag) => tag.isNotEmpty)
+        .toList();
+
+    if (tags.isEmpty) return true;
+
+    var alternativeMatches = true;
+    for (final tag in tags) {
+      final mapped = equipmentTagToEnum[tag];
+      if (mapped == null) {
+        alternativeMatches = false;
+        break;
+      }
+      if (mapped != 'noEquipment' && !userSet.contains(mapped)) {
+        alternativeMatches = false;
+        break;
+      }
+    }
+
+    if (alternativeMatches) return true;
+  }
+
+  return false;
+}
+
 /// Looks up the full static exercise record by its display name.
 ExerciseData? findExerciseByName(String name) {
   for (final ex in kExercises) {

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../onboarding/services/user_profile_service.dart';
 import '../data/exercise_data.dart';
 import '../services/workout_log_service.dart';
 import '../services/workout_plan_service.dart';
+import '../widgets/exercise_media.dart';
 import 'workout_active_screen.dart';
 import 'workout_log_detail_screen.dart';
 import '../../../shared/widgets/pressable.dart';
@@ -61,6 +64,14 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
 
   bool get _isCompleted => _completedLog != null;
 
+  String get _dayId => widget.day['id'] as String;
+
+  Set<String> get _exerciseNames =>
+      {for (final ex in _exercises) ex['exerciseName'] as String? ?? ''};
+
+  int get _totalSets => _exercises.fold<int>(
+      0, (sum, ex) => sum + ((ex['sets'] as num?)?.toInt() ?? 0));
+
   @override
   void initState() {
     super.initState();
@@ -92,39 +103,17 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
     });
   }
 
-  // ── Duration estimate ──────────────────────────────────────────────
-
-  /// Rough estimate recomputed whenever exercises are added/removed —
-  /// reuses the same deterministic "reps × 3s (min 15s) working time,
-  /// plus rest between sets" formula already used for the Auto-Log guided
-  /// timer, for the same reason: a consistent, explainable formula rather
-  /// than a black-box guess, easy to justify in the dissertation.
-  int _estimateDurationMinutes(List<Map<String, dynamic>> exercises) {
-    const secondsPerRep = 3;
-    const minWorkSeconds = 15;
-    int totalSeconds = 0;
-
-    for (final ex in exercises) {
-      final sets = ex['sets'] as int? ?? 3;
-      final reps = ex['reps'] as int? ?? 10;
-      final restSeconds = ex['restSeconds'] as int? ?? 60;
-      final workSeconds = (reps * secondsPerRep) < minWorkSeconds
-          ? minWorkSeconds
-          : reps * secondsPerRep;
-      totalSeconds += sets * workSeconds + (sets - 1) * restSeconds;
-    }
-
-    final minutes = (totalSeconds / 60).round();
-    return minutes < 10 ? 10 : minutes;
-  }
-
   // ── Mutations ─────────────────────────────────────────────────────
+  // Each one recomputes the duration estimate (WorkoutPlanService
+  // .estimateDurationMinutes) from the edited list and saves it alongside.
 
-  Future<void> _runMutation(Future<void> Function() action) async {
-    if (_isMutating) return;
+  /// Runs a write; returns whether it succeeded.
+  Future<bool> _runMutation(Future<void> Function() action) async {
+    if (_isMutating) return false;
     setState(() => _isMutating = true);
     try {
       await action();
+      return true;
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -134,16 +123,29 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
           ),
         );
       }
+      return false;
     } finally {
       if (mounted) setState(() => _isMutating = false);
     }
+  }
+
+  void _showSnack(String message, {SnackBarAction? action}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message, style: GoogleFonts.manrope(color: AppColors.onSurface)),
+          backgroundColor: AppColors.surfaceContainerHigh,
+          action: action,
+        ),
+      );
   }
 
   Future<void> _addExercise(ExerciseData data) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    final newExercise = {
+    final newExercise = <String, dynamic>{
       'exerciseId': DateTime.now().millisecondsSinceEpoch.toString(),
       'exerciseName': data.name,
       'muscleGroup': data.muscleGroup,
@@ -153,15 +155,46 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
     };
 
     final updatedExercises = [..._exercises, newExercise];
-    final newDuration = _estimateDurationMinutes(updatedExercises);
+    final newDuration = WorkoutPlanService.estimateDurationMinutes(updatedExercises);
 
-    await _runMutation(() async {
-      await WorkoutPlanService().addExerciseToDay(
+    final ok = await _runMutation(() async {
+      final docId = await WorkoutPlanService().addExerciseToDay(
         uid: uid,
         planId: widget.planId,
-        dayId: widget.day['id'] as String,
+        dayId: _dayId,
         exercise: newExercise,
         order: _exercises.length,
+        newDurationMinutes: newDuration,
+      );
+      // Keep the new doc ID, so the exercise can be edited, removed or
+      // reordered straight away — without it those silently did nothing
+      // until the screen was reopened.
+      newExercise['docId'] = docId;
+      setState(() {
+        _exercises = updatedExercises;
+        _durationMinutes = newDuration;
+      });
+    });
+    if (ok && mounted) _showSnack('Added ${data.name}');
+  }
+
+  /// Removes at once, with UNDO instead of a confirm dialog.
+  Future<void> _removeExercise(int index) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final removed = _exercises[index];
+    final docId = removed['docId'] as String?;
+    if (docId == null) return; // safety: nothing to delete server-side
+
+    final updatedExercises = [..._exercises]..removeAt(index);
+    final newDuration = WorkoutPlanService.estimateDurationMinutes(updatedExercises);
+
+    final ok = await _runMutation(() async {
+      await WorkoutPlanService().removeExerciseFromDay(
+        uid: uid,
+        planId: widget.planId,
+        dayId: _dayId,
+        exerciseDocId: docId,
         newDurationMinutes: newDuration,
       );
       setState(() {
@@ -169,23 +202,76 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
         _durationMinutes = newDuration;
       });
     });
+    if (!ok || !mounted) return;
+
+    _showSnack(
+      'Removed ${removed['exerciseName'] ?? 'exercise'}',
+      action: SnackBarAction(
+        label: 'UNDO',
+        textColor: AppColors.primary,
+        onPressed: () => _restoreExercise(removed, index),
+      ),
+    );
   }
 
-  Future<void> _removeExercise(int index) async {
+  /// Puts a just-removed exercise back in its old position (as a new doc,
+  /// with the same sets/reps/rest), then renumbers the day's order.
+  Future<void> _restoreExercise(Map<String, dynamic> removed, int index) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    final docId = _exercises[index]['docId'] as String?;
-    if (docId == null) return; // safety: nothing to delete server-side
 
-    final updatedExercises = [..._exercises]..removeAt(index);
-    final newDuration = _estimateDurationMinutes(updatedExercises);
+    final exercise = <String, dynamic>{
+      for (final e in removed.entries)
+        if (e.key != 'docId' && e.key != 'order') e.key: e.value,
+    };
+    final at = index.clamp(0, _exercises.length);
+    final restored = [..._exercises]..insert(at, exercise);
+    final newDuration = WorkoutPlanService.estimateDurationMinutes(restored);
 
     await _runMutation(() async {
-      await WorkoutPlanService().removeExerciseFromDay(
+      final docId = await WorkoutPlanService().addExerciseToDay(
         uid: uid,
         planId: widget.planId,
-        dayId: widget.day['id'] as String,
+        dayId: _dayId,
+        exercise: exercise,
+        order: at,
+        newDurationMinutes: newDuration,
+      );
+      exercise['docId'] = docId;
+      final docIds = restored.map((e) => e['docId'] as String?).whereType<String>().toList();
+      if (docIds.length == restored.length) {
+        await WorkoutPlanService().reorderExercisesInDay(
+          uid: uid,
+          planId: widget.planId,
+          dayId: _dayId,
+          orderedExerciseDocIds: docIds,
+        );
+      }
+      setState(() {
+        _exercises = restored;
+        _durationMinutes = newDuration;
+      });
+    });
+  }
+
+  /// Saves edited fields on one exercise (sets/reps/rest, or a swap).
+  Future<bool> _updateExercise(int index, Map<String, dynamic> fields) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
+    final docId = _exercises[index]['docId'] as String?;
+    if (docId == null) return false;
+
+    final updatedExercises = [..._exercises];
+    updatedExercises[index] = {..._exercises[index], ...fields};
+    final newDuration = WorkoutPlanService.estimateDurationMinutes(updatedExercises);
+
+    return _runMutation(() async {
+      await WorkoutPlanService().updateExerciseInDay(
+        uid: uid,
+        planId: widget.planId,
+        dayId: _dayId,
         exerciseDocId: docId,
+        fields: fields,
         newDurationMinutes: newDuration,
       );
       setState(() {
@@ -212,36 +298,79 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
     await _runMutation(() => WorkoutPlanService().reorderExercisesInDay(
           uid: uid,
           planId: widget.planId,
-          dayId: widget.day['id'] as String,
+          dayId: _dayId,
           orderedExerciseDocIds: docIds,
         ));
   }
 
-  Future<void> _confirmRemove(int index) async {
-    final name = _exercises[index]['exerciseName'] as String? ?? 'this exercise';
-    final confirm = await showDialog<bool>(
+  /// Tap an exercise: adjust sets/reps/rest, swap it, read how to do it,
+  /// or remove it — everything for that exercise in one sheet.
+  Future<void> _openExerciseEditor(int index) async {
+    final ex = _exercises[index];
+    final result = await showModalBottomSheet<_EditResult>(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainerLow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Remove Exercise?',
-            style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface, fontWeight: FontWeight.w600)),
-        content: Text('$name will be removed from this workout.',
-            style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Remove',
-                style: GoogleFonts.manrope(color: AppColors.error, fontWeight: FontWeight.w700)),
-          ),
+      backgroundColor: AppColors.surfaceContainerLow,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _ExerciseEditSheet(
+        exercise: ex,
+        otherExercises: [
+          for (int i = 0; i < _exercises.length; i++)
+            if (i != index) _exercises[i],
         ],
       ),
     );
-    if (confirm == true) _removeExercise(index);
+    if (result == null || !mounted) return;
+
+    switch (result.action) {
+      case _EditAction.save:
+        final fields = {
+          'sets': result.sets,
+          'reps': result.reps,
+          'restSeconds': result.restSeconds,
+        };
+        final changed = fields.entries.any((e) => ex[e.key] != e.value);
+        if (changed && await _updateExercise(index, fields) && mounted) {
+          _showSnack('${ex['exerciseName']} · ${result.sets} × ${result.reps}, ${result.restSeconds}s rest');
+        }
+      case _EditAction.swap:
+        await _swapExercise(index);
+      case _EditAction.remove:
+        await _removeExercise(index);
+      case _EditAction.info:
+        _openExerciseDetail(ex['exerciseName'] as String? ?? '');
+    }
+  }
+
+  /// Replaces an exercise with another (same muscle group suggested first),
+  /// keeping its sets, reps, rest and position.
+  Future<void> _swapExercise(int index) async {
+    final current = _exercises[index];
+    final name = current['exerciseName'] as String? ?? '';
+    final muscle = (current['muscleGroup'] as String?)?.isNotEmpty == true
+        ? current['muscleGroup'] as String
+        : findExerciseByName(name)?.muscleGroup;
+
+    final picked = await Navigator.of(context).push<ExerciseData>(
+      MaterialPageRoute(
+        builder: (_) => _ExercisePickerScreen(
+          title: 'SWAP EXERCISE',
+          subtitle: 'Replacing $name — keeps its sets, reps and rest',
+          initialMuscle: muscle,
+          inWorkout: _exerciseNames,
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+
+    final ok = await _updateExercise(index, {
+      'exerciseId': DateTime.now().millisecondsSinceEpoch.toString(),
+      'exerciseName': picked.name,
+      'muscleGroup': picked.muscleGroup,
+    });
+    if (ok && mounted) _showSnack('Swapped $name for ${picked.name}');
   }
 
   /// The bottom CTA: "start" only when today's window is open and unused —
@@ -316,18 +445,11 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
     );
   }
 
-  void _openAddExercisePicker() async {
-    final picked = await Navigator.of(context).push<ExerciseData>(
-      MaterialPageRoute(builder: (_) => const _ExercisePickerScreen()),
-    );
-    if (picked != null) _addExercise(picked);
-  }
-
   Widget _buildDetailMedia(ExerciseData data) {
     // Case 1: GIF — full-size, tappable, opens the same full-screen GIF viewer
     if (data.localGifAsset != null) {
       return Pressable(
-        onTap: () => _openGifFullscreen(data.localGifAsset!, data.name),
+        onTap: () => showExerciseDemoFullscreen(context, gifAsset: data.localGifAsset!, title: data.name),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: AspectRatio(
@@ -371,23 +493,6 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
       ),
       child: const Center(
         child: Icon(Icons.fitness_center_rounded, size: 40, color: AppColors.onSurfaceVariant),
-      ),
-    );
-  }
-
-  void _openGifFullscreen(String gifAsset, String title) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
-            backgroundColor: Colors.black,
-            title: Text(title, style: const TextStyle(color: Colors.white)),
-          ),
-          body: Center(
-            child: Image.asset(gifAsset, fit: BoxFit.contain),
-          ),
-        ),
       ),
     );
   }
@@ -495,6 +600,15 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
     );
   }
 
+  void _openAddExercisePicker() async {
+    final picked = await Navigator.of(context).push<ExerciseData>(
+      MaterialPageRoute(
+        builder: (_) => _ExercisePickerScreen(inWorkout: _exerciseNames),
+      ),
+    );
+    if (picked != null) _addExercise(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final workoutName = widget.day['workoutName'] as String? ?? 'Workout';
@@ -529,7 +643,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                   ),
                   const Spacer(),
                   Text(
-                    'DRAG TO REORDER · TAP TO VIEW',
+                    'TAP TO EDIT · HOLD ≡ TO REORDER',
                     style: GoogleFonts.manrope(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
@@ -540,9 +654,22 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                 ],
               ),
             ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _isMutating
+                  ? const Padding(
+                      padding: EdgeInsets.fromLTRB(24, 12, 24, 0),
+                      child: LinearProgressIndicator(
+                        minHeight: 2,
+                        color: AppColors.primary,
+                        backgroundColor: AppColors.surfaceContainerHigh,
+                      ),
+                    )
+                  : const SizedBox(height: 14),
+            ),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -550,47 +677,41 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                         style: GoogleFonts.manrope(
                             fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 2, color: AppColors.onSurfaceVariant)),
                     const SizedBox(height: 8),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            workoutName.toUpperCase(),
-                            style: GoogleFonts.spaceGrotesk(
-                                fontSize: 36, fontWeight: FontWeight.w700, color: AppColors.onSurface, height: 1.0),
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text('$_durationMinutes',
-                                style: GoogleFonts.spaceGrotesk(
-                                    fontSize: 36, fontWeight: FontWeight.w700, color: AppColors.primary)),
-                            Text('EST. MIN',
-                                style: GoogleFonts.manrope(
-                                    fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.5, color: AppColors.onSurfaceVariant)),
-                          ],
-                        ),
-                      ],
+                    Text(
+                      workoutName.toUpperCase(),
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 34, fontWeight: FontWeight.w700, color: AppColors.onSurface, height: 1.0),
                     ),
                     const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: focusChips
-                          .map((chip) => Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceContainerLow,
-                                  borderRadius: BorderRadius.circular(48),
-                                ),
-                                child: Text(chip.toUpperCase(),
-                                    style: GoogleFonts.manrope(
-                                        fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 1.5, color: AppColors.onSurface)),
-                              ))
-                          .toList(),
+                    Row(
+                      children: [
+                        _buildHeaderStat('$_durationMinutes', 'EST. MIN'),
+                        const SizedBox(width: 10),
+                        _buildHeaderStat('${_exercises.length}', 'EXERCISES'),
+                        const SizedBox(width: 10),
+                        _buildHeaderStat('$_totalSets', 'SETS'),
+                      ],
                     ),
-                    const SizedBox(height: 32),
+                    if (focusChips.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: focusChips
+                            .map((chip) => Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceContainerLow,
+                                    borderRadius: BorderRadius.circular(48),
+                                  ),
+                                  child: Text(chip.toUpperCase(),
+                                      style: GoogleFonts.manrope(
+                                          fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 1.5, color: AppColors.onSurface)),
+                                ))
+                            .toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 28),
                     Row(
                       children: [
                         Text('EXERCISE MATRIX',
@@ -599,20 +720,27 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                         const Spacer(),
                         Pressable(
                           onTap: _openAddExercisePicker,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.add_rounded, size: 16, color: AppColors.primary),
-                              const SizedBox(width: 4),
-                              Text('ADD',
-                                  style: GoogleFonts.manrope(
-                                      fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1, color: AppColors.primary)),
-                            ],
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(48),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.add_rounded, size: 16, color: AppColors.primary),
+                                const SizedBox(width: 4),
+                                Text('ADD',
+                                    style: GoogleFonts.manrope(
+                                        fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1, color: AppColors.primary)),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
 
                     // Reorderable list nested inside the outer scroll view —
                     // shrinkWrap + no own scrolling so it behaves as part of
@@ -623,85 +751,12 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                       buildDefaultDragHandles: false,
                       onReorder: _reorder,
                       itemCount: _exercises.length,
-                      itemBuilder: (context, index) {
-                        final ex = _exercises[index];
-                        final name = ex['exerciseName'] as String? ?? '';
-                        final sets = ex['sets'] as int? ?? 0;
-                        final reps = ex['reps'] as int? ?? 0;
-                        final muscle = ex['muscleGroup'] as String? ?? '';
-
-                        return Padding(
-                          key: ValueKey(ex['docId'] ?? '$name-$index'),
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Pressable(
-                            onTap: () => _openExerciseDetail(name),
-                            child: Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceContainerLow,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Center(
-                                      child: Text('${index + 1}',
-                                          style: GoogleFonts.spaceGrotesk(
-                                              fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.primary)),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(name,
-                                            style: GoogleFonts.spaceGrotesk(
-                                                fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-                                        const SizedBox(height: 2),
-                                        Text(muscle.toUpperCase(),
-                                            style: GoogleFonts.manrope(
-                                                fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.5, color: AppColors.onSurfaceVariant)),
-                                      ],
-                                    ),
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text('$sets × $reps',
-                                          style: GoogleFonts.spaceGrotesk(
-                                              fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
-                                      Text('SETS × REPS',
-                                          style: GoogleFonts.manrope(fontSize: 9, letterSpacing: 1, color: AppColors.onSurfaceVariant)),
-                                    ],
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Pressable(
-                                    onTap: () => _confirmRemove(index),
-                                    child: const Padding(
-                                      padding: EdgeInsets.only(left: 4, right: 4),
-                                      child: Icon(Icons.close_rounded, size: 18, color: AppColors.onSurfaceVariant),
-                                    ),
-                                  ),
-                                  ReorderableDragStartListener(
-                                    index: index,
-                                    child: const Padding(
-                                      padding: EdgeInsets.only(left: 4),
-                                      child: Icon(Icons.drag_handle_rounded, size: 18, color: AppColors.onSurfaceVariant),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+                      itemBuilder: (context, index) => Padding(
+                        key: ValueKey(_exercises[index]['docId'] ??
+                            '${_exercises[index]['exerciseName']}-$index'),
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _buildExerciseRow(index),
+                      ),
                     ),
 
                     if (_exercises.isEmpty)
@@ -728,14 +783,404 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
       ),
     );
   }
+
+  Widget _buildHeaderStat(String value, String label) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(value,
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.onSurface, height: 1.1)),
+            const SizedBox(height: 2),
+            Text(label,
+                style: GoogleFonts.manrope(
+                    fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1.3, color: AppColors.onSurfaceVariant)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExerciseRow(int index) {
+    final ex = _exercises[index];
+    final name = ex['exerciseName'] as String? ?? '';
+    final sets = ex['sets'] as int? ?? 0;
+    final reps = ex['reps'] as int? ?? 0;
+    final rest = ex['restSeconds'] as int? ?? 60;
+    final data = findExerciseByName(name);
+    final muscle = (ex['muscleGroup'] as String?)?.isNotEmpty == true
+        ? ex['muscleGroup'] as String
+        : data?.muscleGroup ?? '';
+    final gif = data?.localGifAsset;
+
+    return Pressable(
+      onTap: () => _openExerciseEditor(index),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 10, 4, 10),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            // Thumbnail plays the demo; the badge is the exercise's order.
+            Pressable(
+              onTap: gif == null
+                  ? null
+                  : () => showExerciseDemoFullscreen(context, gifAsset: gif, title: name),
+              child: Stack(
+                children: [
+                  ExerciseThumb(asset: data?.thumbnailAsset, size: 52),
+                  Positioned(
+                    left: 4,
+                    top: 4,
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text('${index + 1}',
+                          style: GoogleFonts.spaceGrotesk(
+                              fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.onSurface, height: 1.15)),
+                  const SizedBox(height: 3),
+                  Text(
+                    [if (muscle.isNotEmpty) muscle.toUpperCase(), '${rest}S REST'].join(' · '),
+                    style: GoogleFonts.manrope(
+                        fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.2, color: AppColors.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('$sets × $reps',
+                    style: GoogleFonts.spaceGrotesk(
+                        fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+                Text('SETS × REPS',
+                    style: GoogleFonts.manrope(fontSize: 9, letterSpacing: 1, color: AppColors.onSurfaceVariant)),
+              ],
+            ),
+            ReorderableDragStartListener(
+              index: index,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                child: Icon(Icons.drag_handle_rounded, size: 20, color: AppColors.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-/// Minimal full-exercise-library picker used by "ADD" above. Built
-/// self-contained (rather than reusing exercise_library_screen.dart)
-/// since that screen's exact constructor/selection-callback shape hasn't
-/// been confirmed — safer not to guess and risk breaking it.
+// ── Exercise editor sheet ───────────────────────────────────────────────
+
+enum _EditAction { save, swap, remove, info }
+
+class _EditResult {
+  final _EditAction action;
+  final int sets;
+  final int reps;
+  final int restSeconds;
+
+  const _EditResult(this.action, {this.sets = 0, this.reps = 0, this.restSeconds = 0});
+}
+
+/// Steppers for sets / reps / rest with a live estimate of the workout's
+/// length, plus swap, how-to and remove — one place for everything about
+/// an exercise in this plan.
+class _ExerciseEditSheet extends StatefulWidget {
+  final Map<String, dynamic> exercise;
+
+  /// The rest of the day's exercises, for the live duration estimate.
+  final List<Map<String, dynamic>> otherExercises;
+
+  const _ExerciseEditSheet({required this.exercise, required this.otherExercises});
+
+  @override
+  State<_ExerciseEditSheet> createState() => _ExerciseEditSheetState();
+}
+
+class _ExerciseEditSheetState extends State<_ExerciseEditSheet> {
+  late int _sets = widget.exercise['sets'] as int? ?? 3;
+  late int _reps = widget.exercise['reps'] as int? ?? 10;
+  late int _rest = widget.exercise['restSeconds'] as int? ?? 60;
+
+  void _step(void Function() change) {
+    HapticFeedback.selectionClick();
+    setState(change);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = widget.exercise['exerciseName'] as String? ?? '';
+    final data = findExerciseByName(name);
+    final muscle = (widget.exercise['muscleGroup'] as String?)?.isNotEmpty == true
+        ? widget.exercise['muscleGroup'] as String
+        : data?.muscleGroup ?? '';
+    final workoutMinutes = WorkoutPlanService.estimateDurationMinutes([
+      ...widget.otherExercises,
+      {'sets': _sets, 'reps': _reps, 'restSeconds': _rest},
+    ]);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(24, 12, 24, MediaQuery.of(context).viewPadding.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              ExerciseThumb(asset: data?.thumbnailAsset, size: 52),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name,
+                        style: GoogleFonts.spaceGrotesk(
+                            fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface, height: 1.15)),
+                    const SizedBox(height: 3),
+                    Text(
+                      [if (muscle.isNotEmpty) muscle, ?data?.equipment].join(' · ').toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.manrope(
+                          fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: AppColors.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              if (data != null)
+                IconButton(
+                  tooltip: 'How to perform',
+                  onPressed: () => Navigator.pop(context, const _EditResult(_EditAction.info)),
+                  icon: const Icon(Icons.info_outline_rounded, color: AppColors.onSurfaceVariant),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _StepperRow(
+            label: 'SETS',
+            value: '$_sets',
+            onMinus: _sets > 1 ? () => _step(() => _sets--) : null,
+            onPlus: _sets < 10 ? () => _step(() => _sets++) : null,
+          ),
+          const SizedBox(height: 8),
+          _StepperRow(
+            label: 'REPS',
+            value: '$_reps',
+            onMinus: _reps > 1 ? () => _step(() => _reps--) : null,
+            onPlus: _reps < 50 ? () => _step(() => _reps++) : null,
+          ),
+          const SizedBox(height: 8),
+          _StepperRow(
+            label: 'REST',
+            value: '${_rest}s',
+            onMinus: _rest > 0 ? () => _step(() => _rest -= 15) : null,
+            onPlus: _rest < 300 ? () => _step(() => _rest += 15) : null,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'WORKOUT ≈ $workoutMinutes MIN',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.manrope(
+                fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5, color: AppColors.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(
+              context,
+              _EditResult(_EditAction.save, sets: _sets, reps: _reps, restSeconds: _rest),
+            ),
+            child: Text('SAVE CHANGES',
+                style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w700, letterSpacing: 1.5)),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _SheetAction(
+                  icon: Icons.swap_horiz_rounded,
+                  label: 'SWAP EXERCISE',
+                  onTap: () => Navigator.pop(context, const _EditResult(_EditAction.swap)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _SheetAction(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'REMOVE',
+                  color: AppColors.error,
+                  onTap: () => Navigator.pop(context, const _EditResult(_EditAction.remove)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepperRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback? onMinus;
+  final VoidCallback? onPlus;
+
+  const _StepperRow({required this.label, required this.value, this.onMinus, this.onPlus});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Text(label,
+              style: GoogleFonts.manrope(
+                  fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.5, color: AppColors.onSurfaceVariant)),
+          const Spacer(),
+          _stepButton(Icons.remove_rounded, onMinus),
+          SizedBox(
+            width: 64,
+            child: Text(
+              value,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: AppColors.onSurface,
+              ),
+            ),
+          ),
+          _stepButton(Icons.add_rounded, onPlus),
+        ],
+      ),
+    );
+  }
+
+  Widget _stepButton(IconData icon, VoidCallback? onTap) {
+    return Pressable(
+      onTap: onTap,
+      pressedScale: 0.9,
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: const BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon,
+            size: 18,
+            color: onTap == null
+                ? AppColors.onSurfaceVariant.withValues(alpha: 0.3)
+                : AppColors.onSurface),
+      ),
+    );
+  }
+}
+
+class _SheetAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color color;
+
+  const _SheetAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color = AppColors.onSurface,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(48),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(label,
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1, color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Exercise picker ─────────────────────────────────────────────────────
+
+/// Full-library picker for ADD and SWAP. Built self-contained (rather than
+/// reusing exercise_library_screen.dart) since picking needs a selection
+/// callback that browsing doesn't. Defaults to exercises the user's own
+/// equipment allows; exercises already in the workout are marked.
 class _ExercisePickerScreen extends StatefulWidget {
-  const _ExercisePickerScreen();
+  final String title;
+  final String? subtitle;
+  final String? initialMuscle;
+  final Set<String> inWorkout;
+
+  const _ExercisePickerScreen({
+    this.title = 'ADD EXERCISE',
+    this.subtitle,
+    this.initialMuscle,
+    this.inWorkout = const {},
+  });
 
   @override
   State<_ExercisePickerScreen> createState() => _ExercisePickerScreenState();
@@ -743,15 +1188,42 @@ class _ExercisePickerScreen extends StatefulWidget {
 
 class _ExercisePickerScreenState extends State<_ExercisePickerScreen> {
   String _query = '';
-  String _muscleFilter = 'All';
-
+  late String _muscleFilter;
   late final List<String> _muscleGroups;
+
+  /// The user's equipment (onboarding ids); null until loaded or if it
+  /// couldn't be — the MY EQUIPMENT filter only shows once it's known.
+  List<String>? _userEquipment;
+  bool _myEquipmentOnly = false;
+
+  bool get _canFilterEquipment =>
+      _userEquipment != null &&
+      _userEquipment!.isNotEmpty &&
+      !_userEquipment!.contains('fullGym');
 
   @override
   void initState() {
     super.initState();
     final groups = kExercises.map((e) => e.muscleGroup).toSet().toList()..sort();
     _muscleGroups = ['All', ...groups];
+    _muscleFilter = groups.contains(widget.initialMuscle) ? widget.initialMuscle! : 'All';
+    _loadEquipment();
+  }
+
+  Future<void> _loadEquipment() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final profile = await UserProfileService().getUserProfile(uid);
+      final equipment = (profile?['equipment'] as List?)?.cast<String>();
+      if (!mounted || equipment == null) return;
+      setState(() {
+        _userEquipment = equipment;
+        _myEquipmentOnly = _canFilterEquipment;
+      });
+    } catch (e) {
+      debugPrint('Exercise picker: equipment load failed: $e');
+    }
   }
 
   @override
@@ -759,8 +1231,17 @@ class _ExercisePickerScreenState extends State<_ExercisePickerScreen> {
     final filtered = kExercises.where((ex) {
       final matchesQuery = _query.isEmpty || ex.name.toLowerCase().contains(_query.toLowerCase());
       final matchesMuscle = _muscleFilter == 'All' || ex.muscleGroup == _muscleFilter;
-      return matchesQuery && matchesMuscle;
-    }).toList();
+      final matchesEquipment = !_myEquipmentOnly ||
+          !_canFilterEquipment ||
+          equipmentMatches(ex.equipment, _userEquipment!);
+      return matchesQuery && matchesMuscle && matchesEquipment;
+    }).toList()
+      // Already-added ones sink to the bottom.
+      ..sort((a, b) {
+        final ia = widget.inWorkout.contains(a.name) ? 1 : 0;
+        final ib = widget.inWorkout.contains(b.name) ? 1 : 0;
+        return ia.compareTo(ib);
+      });
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -785,8 +1266,21 @@ class _ExercisePickerScreenState extends State<_ExercisePickerScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Text('ADD EXERCISE',
-                      style: GoogleFonts.spaceGrotesk(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(widget.title,
+                            style: GoogleFonts.spaceGrotesk(
+                                fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+                        if (widget.subtitle != null)
+                          Text(widget.subtitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.manrope(fontSize: 12, color: AppColors.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -810,101 +1304,170 @@ class _ExercisePickerScreenState extends State<_ExercisePickerScreen> {
             ),
             const SizedBox(height: 12),
             SizedBox(
-              height: 40,
-              child: ListView.builder(
+              height: 36,
+              child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                itemCount: _muscleGroups.length,
-                itemBuilder: (_, i) {
-                  final group = _muscleGroups[i];
-                  final isSelected = group == _muscleFilter;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Pressable(
-                      onTap: () => setState(() => _muscleFilter = group),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppColors.primary : AppColors.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(48),
-                        ),
-                        child: Center(
-                          child: Text(
-                            group.toUpperCase(),
-                            style: GoogleFonts.manrope(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1,
-                              color: isSelected ? AppColors.onPrimary : AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ),
+                children: [
+                  if (_canFilterEquipment)
+                    _filterChip(
+                      label: 'MY EQUIPMENT',
+                      icon: Icons.fitness_center_rounded,
+                      selected: _myEquipmentOnly,
+                      outlined: true,
+                      onTap: () => setState(() => _myEquipmentOnly = !_myEquipmentOnly),
                     ),
-                  );
-                },
+                  for (final group in _muscleGroups)
+                    _filterChip(
+                      label: group.toUpperCase(),
+                      selected: group == _muscleFilter,
+                      onTap: () => setState(() => _muscleFilter = group),
+                    ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
+              child: Text(
+                '${filtered.length} EXERCISE${filtered.length == 1 ? '' : 'S'}',
+                style: GoogleFonts.manrope(
+                    fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5, color: AppColors.onSurfaceVariant),
+              ),
+            ),
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                itemCount: filtered.length,
-                itemBuilder: (_, index) {
-                  final ex = filtered[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Pressable(
-                      onTap: () => Navigator.of(context).pop(ex),
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: ex.thumbnailAsset != null
-                                  ? Image.asset(ex.thumbnailAsset!, width: 48, height: 48, fit: BoxFit.cover)
-                                  : Image.network(
-                                      'https://img.youtube.com/vi/${ex.youtubeId}/mqdefault.jpg',
-                                      width: 48,
-                                      height: 48,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Container(
-                                        width: 48,
-                                        height: 48,
-                                        color: AppColors.surfaceContainerHigh,
-                                      ),
-                                    ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(ex.name,
-                                      style: GoogleFonts.spaceGrotesk(
-                                          fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-                                  const SizedBox(height: 2),
-                                  Text(ex.muscleGroup.toUpperCase(),
-                                      style: GoogleFonts.manrope(
-                                          fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1, color: AppColors.onSurfaceVariant)),
-                                ],
-                              ),
-                            ),
-                            const Icon(Icons.add_circle_outline_rounded, color: AppColors.primary),
-                          ],
+              child: filtered.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Text(
+                          _myEquipmentOnly
+                              ? 'Nothing here matches your equipment — turn off MY EQUIPMENT to see everything.'
+                              : 'No exercises found.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.manrope(fontSize: 13, color: AppColors.onSurfaceVariant, height: 1.5),
                         ),
                       ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                      itemCount: filtered.length,
+                      itemBuilder: (_, index) => _buildOption(filtered[index]),
                     ),
-                  );
-                },
-              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOption(ExerciseData ex) {
+    final added = widget.inWorkout.contains(ex.name);
+    final gif = ex.localGifAsset;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Opacity(
+        opacity: added ? 0.5 : 1,
+        child: Pressable(
+          onTap: added ? null : () => Navigator.of(context).pop(ex),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                Pressable(
+                  onTap: gif == null
+                      ? null
+                      : () => showExerciseDemoFullscreen(context, gifAsset: gif, title: ex.name),
+                  child: ExerciseThumb(asset: ex.thumbnailAsset, size: 52),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(ex.name,
+                          style: GoogleFonts.spaceGrotesk(
+                              fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${ex.muscleGroup.toUpperCase()} · ${ex.equipment}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.manrope(
+                            fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (added)
+                  Text('IN WORKOUT',
+                      style: GoogleFonts.manrope(
+                          fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: AppColors.primary))
+                else
+                  Icon(
+                    widget.title == 'SWAP EXERCISE'
+                        ? Icons.swap_horiz_rounded
+                        : Icons.add_circle_outline_rounded,
+                    color: AppColors.primary,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _filterChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    IconData? icon,
+    bool outlined = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Pressable(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: selected
+                ? (outlined ? AppColors.primary.withValues(alpha: 0.15) : AppColors.primary)
+                : AppColors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(48),
+            border: outlined
+                ? Border.all(color: selected ? AppColors.primary : AppColors.outlineVariant)
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon,
+                    size: 13,
+                    color: selected ? AppColors.primary : AppColors.onSurfaceVariant),
+                const SizedBox(width: 5),
+              ],
+              Text(
+                label,
+                style: GoogleFonts.manrope(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1,
+                  color: selected
+                      ? (outlined ? AppColors.primary : AppColors.onPrimary)
+                      : AppColors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

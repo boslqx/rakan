@@ -6,6 +6,7 @@ import '../../onboarding/services/user_profile_service.dart';
 import '../../social/screens/find_users_screen.dart';
 import '../../social/services/public_profile_service.dart';
 import '../../social/widgets/activity_log_card.dart';
+import '../../workout/data/exercise_data.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../../workout/screens/workout_preview_screen.dart';
 import '../../workout/screens/workout_log_detail_screen.dart';
@@ -13,8 +14,10 @@ import '../../workout/services/workout_log_service.dart';
 import '../../workout/services/weekly_summary_service.dart';
 import '../../workout/services/schedule_matcher.dart';
 import '../../workout/services/adapt_service.dart';
+import '../../workout/widgets/exercise_media.dart';
 import '../widgets/plan_changes_dialog.dart';
 import '../widgets/missed_day_dialog.dart';
+import '../../../shared/utils/number_format.dart';
 import '../../../shared/widgets/pressable.dart';
 import '../../../shared/widgets/skeleton.dart';
 
@@ -477,14 +480,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Returns a greeting based on current hour
-  String get _greeting {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
-
   @override
   Widget build(BuildContext context) {
     final feedLogs = _allLogs.take(_feedDisplayLimit).toList();
@@ -507,7 +502,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   slivers: [
                     SliverToBoxAdapter(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                        padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -516,16 +511,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SizedBox(height: 16),
                               _buildLoadErrorCard(_loadError!),
                             ],
-                            const SizedBox(height: 24),
-                            if (_weekNumber != null) ...[
-                              _buildWeekIndicator(),
-                              const SizedBox(height: 12),
+                            const SizedBox(height: 20),
+                            if (_planDays.isNotEmpty) ...[
+                              _buildWeekStrip(),
+                              const SizedBox(height: 16),
                             ],
                             _buildHeroCard(),
-                            if (_planDays.isNotEmpty) ...[
-                              const SizedBox(height: 16),
-                              _buildWeekProgressCard(),
-                            ],
                             const SizedBox(height: 32),
                             _buildSectionLabel('ACTIVITY LOG'),
                             const SizedBox(height: 16),
@@ -606,42 +597,75 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Header: greeting + name 
+  DateTime get _today {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  // Header: one compact row — today's date and where you are in the plan
+  // (rather than a greeting that took two lines and said nothing new),
+  // the streak, and people search.
   Widget _buildHeader() {
-    final name = _profile?['name'] as String? ?? 'Athlete';
-    // Capitalize first letter only
-    final displayName =
-        name.isNotEmpty ? name[0].toUpperCase() + name.substring(1) : 'Athlete';
+    final today = _today;
+    final weekNumber = _weekNumber;
+    final isDeloadWeek = weekNumber != null && weekNumber % 4 == 0;
 
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                _greeting.toUpperCase(),
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 2,
-                  color: AppColors.onSurfaceVariant,
-                ),
+                '${_weekdayNames[today.weekday - 1]} · ${today.day} ${_monthLabels[today.month - 1]}'
+                    .toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _labelStyle(),
               ),
-              const SizedBox(height: 4),
-              Text(
-                displayName,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
-                  height: 1.1,
-                ),
+              const SizedBox(height: 3),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      weekNumber != null ? 'Week $weekNumber' : 'No plan yet',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
+                        height: 1.15,
+                      ),
+                    ),
+                  ),
+                  if (isDeloadWeek) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(100), // full roundedness, per design system
+                      ),
+                      child: Text(
+                        'DELOAD',
+                        style: GoogleFonts.manrope(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.5,
+                          color: AppColors.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
         ),
+        const SizedBox(width: 8),
+        _buildStreakChip(_workoutStreak(today)),
+        const SizedBox(width: 8),
         Pressable(
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const FindUsersScreen()),
@@ -649,7 +673,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Container(
             width: 40,
             height: 40,
-            margin: const EdgeInsets.only(top: 4),
             decoration: BoxDecoration(
               color: AppColors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(12),
@@ -662,46 +685,240 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Small mesocycle indicator — "WEEK N" label, with a DELOAD pill 
-  Widget _buildWeekIndicator() {
-    final weekNumber = _weekNumber!;
-    final isDeloadWeek = weekNumber % 4 == 0;
+  Widget _buildStreakChip(int streak) {
+    final active = streak > 0;
 
-    return Row(
-      children: [
-        Text(
-          'WEEK $weekNumber',
-          style: GoogleFonts.manrope(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 2,
-            color: AppColors.onSurfaceVariant,
+    return Pressable(
+      onTap: () => ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              active
+                  ? '$streak workout${streak == 1 ? '' : 's'} in a row. Rest days don\'t break your streak — missed workouts do.'
+                  : 'Complete a scheduled workout to start a streak. Rest days don\'t break it.',
+              style: GoogleFonts.manrope(color: AppColors.onSurface),
+            ),
+            backgroundColor: AppColors.surfaceContainerHigh,
           ),
         ),
-        if (isDeloadWeek) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppColors.error.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(100), // full roundedness, per design system
-            ),
-            child: Text(
-              'DELOAD',
-              style: GoogleFonts.manrope(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.5,
-                color: AppColors.error,
-              ),
+      child: Semantics(
+        label: '$streak workout streak',
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: active
+                  ? AppColors.primary.withValues(alpha: 0.25)
+                  : Colors.transparent,
             ),
           ),
-        ],
-      ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.local_fire_department_rounded,
+                size: 17,
+                color: active
+                    ? AppColors.primary
+                    : AppColors.onSurfaceVariant.withValues(alpha: 0.6),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '$streak',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: active ? AppColors.onSurface : AppColors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  // Hero Card: today's workout 
+  // ── This week ───────────────────────────────────────────────────────
+  /// Monday–Sunday at a glance: each day's status (done / missed / to do /
+  /// rest), and progress toward the week's workouts. Seeing progress toward
+  /// the week's target is a simple, well-evidenced adherence nudge —
+  /// relevant to Objective 3. Days are tappable, same as the old calendar.
+  Widget _buildWeekStrip() {
+    final today = _today;
+    // Built from calendar fields, not Duration arithmetic, so a DST change
+    // mid-week can't shift a day to 23:00 the day before.
+    final week = List.generate(
+        7, (i) => DateTime(today.year, today.month, today.day - today.weekday + 1 + i));
+    final monday = week.first;
+
+    final scheduled = <DateTime>{};
+    for (final date in week) {
+      final day = _resolvedDayForDate(date);
+      if (day != null && day['dayType'] != 'rest') scheduled.add(date);
+    }
+    final doneDates = week.where((d) => _logForDate(d) != null).toSet();
+    final doneScheduled = scheduled.where(doneDates.contains).length;
+
+    int minutes = 0;
+    for (final log in _allLogs) {
+      final at = DateTime.tryParse(log['completedAt'] as String? ?? '');
+      if (at != null && !at.isBefore(monday)) {
+        minutes += (log['totalDurationMins'] as num?)?.toInt() ?? 0;
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Row(
+              children: [
+                Text('THIS WEEK', style: _labelStyle(fontSize: 11, letterSpacing: 2)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(children: [
+                      TextSpan(
+                        text: '$doneScheduled',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' / ${scheduled.length} workouts'
+                            '${minutes > 0 ? '  ·  $minutes min' : ''}',
+                        style: GoogleFonts.manrope(
+                          fontSize: 12,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ]),
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              for (int i = 0; i < 7; i++) ...[
+                if (i > 0) const SizedBox(width: 5),
+                Expanded(
+                  child: _buildDayCell(
+                    week[i],
+                    isToday: week[i] == today,
+                    isPast: week[i].isBefore(today),
+                    isScheduled: scheduled.contains(week[i]),
+                    isDone: doneDates.contains(week[i]),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDayCell(
+    DateTime date, {
+    required bool isToday,
+    required bool isPast,
+    required bool isScheduled,
+    required bool isDone,
+  }) {
+    final fg = isToday ? AppColors.onPrimary : AppColors.onSurface;
+    final muted =
+        isToday ? AppColors.onPrimary.withValues(alpha: 0.7) : AppColors.onSurfaceVariant;
+
+    // Done ✓, missed ✕, still to do ○, rest —
+    final Widget mark;
+    if (isDone) {
+      mark = Icon(Icons.check_circle_rounded,
+          size: 13, color: isToday ? AppColors.onPrimary : AppColors.primary);
+    } else if (isScheduled && isPast) {
+      mark = Icon(Icons.close_rounded,
+          size: 13, color: AppColors.error.withValues(alpha: 0.8));
+    } else if (isScheduled) {
+      mark = Container(
+        width: 7,
+        height: 7,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: muted, width: 1.2),
+        ),
+      );
+    } else {
+      mark = Container(
+        width: 8,
+        height: 2,
+        decoration: BoxDecoration(
+          color: muted.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(1),
+        ),
+      );
+    }
+
+    return Pressable(
+      onTap: () => _onCalendarDayTap(date),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isToday
+              ? AppColors.primary
+              : isDone
+                  ? AppColors.primary.withValues(alpha: 0.08)
+                  : AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isToday ? AppColors.primary : AppColors.outlineVariant,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              _weekdayLabel(date.weekday)[0],
+              style: GoogleFonts.manrope(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: muted,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${date.day}',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: fg,
+              ),
+            ),
+            const SizedBox(height: 5),
+            SizedBox(height: 13, child: Center(child: mark)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Hero Card: today's workout
   Widget _buildHeroCard() {
     final goal = _goalLabel(_profile?['fitnessGoal'] as String?);
     final experience = _profile?['experienceLevel'] as String? ?? 'beginner';
@@ -711,13 +928,56 @@ class _HomeScreenState extends State<HomeScreen> {
       return _buildHeroNoPlan(goal, experience);
     }
 
-    final isRest = _todayDay!['dayType'] == 'rest';
-
-    if (isRest) {
+    if (_todayDay!['dayType'] == 'rest') {
       return _buildHeroRestDay(goal);
-    } else {
-      return _buildHeroWorkoutDay(goal, experience);
     }
+
+    final todayLog = _logForDate(DateTime.now());
+    return todayLog != null
+        ? _buildHeroDone(goal, todayLog)
+        : _buildHeroWorkoutDay(goal);
+  }
+
+  /// Photo card shared by the hero states. The photos are 5,000–9,000px
+  /// wide; decoding them full-size cost ~80–200 MB each, so they're decoded
+  /// at twice the screen width (enough to cover the card's height too).
+  Widget _buildHeroShell({required String image, required Widget child}) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final width = MediaQuery.sizeOf(context).width;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: ColoredBox(
+              color: AppColors.surfaceContainerLow,
+              child: Image.asset(
+                image,
+                fit: BoxFit.cover,
+                cacheWidth: (width * dpr * 2).round(),
+                opacity: const AlwaysStoppedAnimation(0.7),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.35),
+                    Colors.black.withValues(alpha: 0.8),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Padding(padding: const EdgeInsets.all(20), child: child),
+        ],
+      ),
+    );
   }
 
   // Hero: no plan yet
@@ -732,9 +992,19 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildWeeklyCalendar(),
-          const SizedBox(height: 16),
-          _buildDailyEvolutionChip(goal),
+          Row(
+            children: [
+              _buildHeroChip('GETTING STARTED', icon: Icons.auto_awesome_rounded, highlighted: true),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(goal.toUpperCase(),
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _labelStyle()),
+              ),
+            ],
+          ),
           const SizedBox(height: 20),
           Text('YOUR PLAN IS\nBEING PREPARED',
               style: GoogleFonts.spaceGrotesk(
@@ -760,92 +1030,55 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Hero: rest day
+  // Hero: rest day — and what's coming next, instead of sending the user
+  // off to the Schedule tab to find out.
   Widget _buildHeroRestDay(String goal) {
-    return Container(
-      width: double.infinity,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.7,
-              child: Image.asset(
-                'assets/images/rest_day.jpg',
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: ColoredBox(color: Colors.black.withValues(alpha: 0.5)),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
+    final next = _nextSessionAfter(_today);
+
+    return _buildHeroShell(
+      image: 'assets/images/rest_day.jpg',
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildWeeklyCalendar(),
-          const SizedBox(height: 16),
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.outlineVariant,
-                  borderRadius: BorderRadius.circular(48),
-                ),
-                child: Text('REST DAY',
-                    style: GoogleFonts.manrope(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.5,
-                        color: AppColors.onSurfaceVariant)),
+              _buildHeroChip('REST DAY', icon: Icons.bedtime_rounded),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(goal.toUpperCase(),
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _labelStyle()),
               ),
-              const Spacer(),
-              Text(goal.toUpperCase(),
-                  style: GoogleFonts.manrope(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.5,
-                      color: AppColors.onSurfaceVariant)),
             ],
           ),
-          const SizedBox(height: 20),
-          Text('RECOVERY\nPROTOCOL',
+          const SizedBox(height: 18),
+          Text('RECOVER &\nRECHARGE',
               style: GoogleFonts.spaceGrotesk(
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+                  color: AppColors.onSurface,
                   height: 1.15)),
           const SizedBox(height: 8),
           Text(
             'Your muscles grow during rest. Today is part of the plan — embrace recovery.',
             style: GoogleFonts.manrope(
-                fontSize: 13,
-                color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
-                height: 1.5),
+                fontSize: 13, color: AppColors.onSurfaceVariant, height: 1.5),
           ),
-          const SizedBox(height: 24),
-          // Show next workout day
-          Text('CHECK THE SCHEDULE TAB FOR YOUR NEXT SESSION',
-              style: GoogleFonts.manrope(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.5,
-                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.4))),
-        ],
-      ),
-          ),
+          const SizedBox(height: 20),
+          if (next != null)
+            _buildNextSessionCard(next)
+          else
+            Text('CHECK THE SCHEDULE TAB FOR YOUR NEXT SESSION',
+                style: _labelStyle(color: AppColors.onSurfaceVariant.withValues(alpha: 0.6))),
         ],
       ),
     );
   }
 
-  // Hero: workout day
-  Widget _buildHeroWorkoutDay(String goal, String experience) {
+  // Hero: workout day, not trained yet
+  Widget _buildHeroWorkoutDay(String goal) {
     final workoutName = _todayDay!['workoutName'] as String? ?? 'Workout';
     final focusDescription =
         _todayDay!['focusDescription'] as String? ?? '';
@@ -853,39 +1086,28 @@ class _HomeScreenState extends State<HomeScreen> {
     final exercises =
         (_todayDay!['exercises'] as List?)?.cast<Map<String, dynamic>>() ??
             [];
-    final isCompleted = _logForDate(DateTime.now()) != null;
+    final totalSets = exercises.fold<int>(
+        0, (sum, ex) => sum + ((ex['sets'] as num?)?.toInt() ?? 0));
 
-    return Container(
-      width: double.infinity,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Stack(
+    return _buildHeroShell(
+      image: 'assets/images/workout_day.jpg',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.7,
-              child: Image.asset(
-                'assets/images/workout_day.jpg',
-                fit: BoxFit.cover,
+          Row(
+            children: [
+              _buildHeroChip("TODAY'S SESSION", highlighted: true),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(goal.toUpperCase(),
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _labelStyle()),
               ),
-            ),
+            ],
           ),
-          Positioned.fill(
-            child: ColoredBox(color: Colors.black.withValues(alpha: 0.5)),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-          _buildWeeklyCalendar(),
-          const SizedBox(height: 16),
-          _buildDailyEvolutionChip(goal),
-          const SizedBox(height: 20),
-
-          // Workout name
+          const SizedBox(height: 18),
           Text(
             workoutName.toUpperCase(),
             style: GoogleFonts.spaceGrotesk(
@@ -894,61 +1116,298 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: AppColors.onSurface,
                 height: 1.15),
           ),
-
-          const SizedBox(height: 4),
-
-          Text(focusDescription,
-              style: GoogleFonts.manrope(
-                  fontSize: 13,
-                  color: AppColors.onSurfaceVariant,
-                  height: 1.5)),
-
-          const SizedBox(height: 16),
-
-          // Duration + exercise count
-          Row(
+          if (focusDescription.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(focusDescription,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.manrope(
+                    fontSize: 13,
+                    color: AppColors.onSurfaceVariant,
+                    height: 1.5)),
+          ],
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
-              Icon(Icons.timer_outlined,
-                  size: 14, color: AppColors.onSurfaceVariant),
-              const SizedBox(width: 4),
-              Text('$durationMins MIN',
-                  style: GoogleFonts.manrope(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1,
-                      color: AppColors.onSurfaceVariant)),
-              const SizedBox(width: 16),
-              Icon(Icons.fitness_center_rounded,
-                  size: 14, color: AppColors.onSurfaceVariant),
-              const SizedBox(width: 4),
-              Text('${exercises.length} EXERCISES',
-                  style: GoogleFonts.manrope(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1,
-                      color: AppColors.onSurfaceVariant)),
+              if (durationMins > 0)
+                _buildGlassChip(Icons.timer_outlined, '$durationMins MIN'),
+              _buildGlassChip(Icons.fitness_center_rounded,
+                  '${exercises.length} EXERCISE${exercises.length == 1 ? '' : 'S'}'),
+              if (totalSets > 0)
+                _buildGlassChip(Icons.repeat_rounded, '$totalSets SETS'),
             ],
           ),
-
-          const SizedBox(height: 24),
-
-          // Start Workout CTA — unclickable once today's session is logged
+          if (exercises.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            ExerciseThumbStrip(
+              exerciseNames: [
+                for (final ex in exercises) ex['exerciseName'] as String? ?? '',
+              ],
+            ),
+          ],
+          const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: isCompleted ? null : () => _startTodaysWorkout(),
-            style: isCompleted
-                ? ElevatedButton.styleFrom(
-                    disabledBackgroundColor: AppColors.surfaceContainerLowest,
-                    disabledForegroundColor: AppColors.onSurfaceVariant,
-                  )
-                : null,
-            child: Text(isCompleted ? 'COMPLETED ✓' : 'START WORKOUT →',
+            onPressed: _startTodaysWorkout,
+            child: Text('START WORKOUT →',
                 style: GoogleFonts.spaceGrotesk(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.5)),
           ),
+        ],
+      ),
+    );
+  }
+
+  // Hero: today's workout is already logged — show what was done (the old
+  // card just greyed out its button).
+  Widget _buildHeroDone(String goal, Map<String, dynamic> log) {
+    final workoutName = log['workoutName'] as String? ??
+        _todayDay!['workoutName'] as String? ??
+        'Workout';
+    final minutes = (log['totalDurationMins'] as num?)?.toInt() ?? 0;
+    final sets = (log['totalSetsCompleted'] as num?)?.toInt();
+    final volume = (log['totalVolume'] as num?)?.toDouble() ?? 0;
+    final prs = (log['prExerciseNames'] as List?)?.cast<String>() ?? const [];
+    final next = _nextSessionAfter(_today);
+
+    return _buildHeroShell(
+      image: 'assets/images/workout_day.jpg',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _buildHeroChip('DONE TODAY', icon: Icons.check_circle_rounded, highlighted: true),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(goal.toUpperCase(),
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _labelStyle()),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            workoutName.toUpperCase(),
+            style: GoogleFonts.spaceGrotesk(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+                height: 1.15),
+          ),
+          const SizedBox(height: 4),
+          Text('Session logged — recovery starts now.',
+              style: GoogleFonts.manrope(
+                  fontSize: 13, color: AppColors.onSurfaceVariant, height: 1.5)),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: _buildGlassStat('$minutes', 'MIN')),
+              const SizedBox(width: 8),
+              Expanded(child: _buildGlassStat(sets == null ? '—' : '$sets', 'SETS')),
+              if (volume > 0) ...[
+                const SizedBox(width: 8),
+                Expanded(child: _buildGlassStat(formatThousands(volume), 'KG VOLUME')),
               ],
+            ],
+          ),
+          if (prs.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _buildGlassChip(
+              Icons.emoji_events_rounded,
+              'NEW PR · ${prs.join(', ').toUpperCase()}',
+              highlighted: true,
             ),
+          ],
+          if (next != null) ...[
+            const SizedBox(height: 12),
+            _buildNextSessionCard(next),
+          ],
+          const SizedBox(height: 18),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => WorkoutLogDetailScreen(log: log)),
+            ),
+            child: Text('VIEW SUMMARY',
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.5)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The next scheduled workout after [from], looking up to two weeks ahead.
+  ({DateTime date, int daysAway, Map<String, dynamic> day})? _nextSessionAfter(
+      DateTime from) {
+    for (int i = 1; i <= 14; i++) {
+      final date = DateTime(from.year, from.month, from.day + i);
+      final day = _resolvedDayForDate(date);
+      if (day != null && day['dayType'] != 'rest') {
+        return (date: date, daysAway: i, day: day);
+      }
+    }
+    return null;
+  }
+
+  Widget _buildNextSessionCard(
+      ({DateTime date, int daysAway, Map<String, dynamic> day}) next) {
+    final exercises =
+        (next.day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final firstExercise = exercises.isEmpty
+        ? null
+        : findExerciseByName(exercises.first['exerciseName'] as String? ?? '');
+    final minutes = next.day['durationMinutes'] as int? ?? 0;
+    final when = next.daysAway == 1
+        ? 'TOMORROW'
+        : next.daysAway < 7
+            ? _weekdayNames[next.date.weekday - 1].toUpperCase()
+            : '${_weekdayLabel(next.date.weekday)} ${next.date.day} ${_monthLabels[next.date.month - 1]}'
+                .toUpperCase();
+
+    return Pressable(
+      onTap: () => _onCalendarDayTap(next.date),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        child: Row(
+          children: [
+            ExerciseThumb(asset: firstExercise?.thumbnailAsset, size: 44),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('NEXT SESSION · $when', style: _labelStyle(fontSize: 9)),
+                  const SizedBox(height: 3),
+                  Text(
+                    next.day['workoutName'] as String? ?? 'Workout',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    [
+                      '${exercises.length} exercise${exercises.length == 1 ? '' : 's'}',
+                      if (minutes > 0) '$minutes min',
+                    ].join(' · '),
+                    style: GoogleFonts.manrope(
+                        fontSize: 12, color: AppColors.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                color: AppColors.onSurfaceVariant, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroChip(String label, {IconData? icon, bool highlighted = false}) {
+    final color = highlighted ? AppColors.primary : AppColors.onSurfaceVariant;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: highlighted
+            ? AppColors.primary.withValues(alpha: 0.16)
+            : Colors.black.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(48),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 5),
+          ],
+          Text(label,
+              style: GoogleFonts.manrope(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                  color: color)),
+        ],
+      ),
+    );
+  }
+
+  /// Translucent chip that reads over the hero photo.
+  Widget _buildGlassChip(IconData icon, String label, {bool highlighted = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: highlighted
+              ? AppColors.primary.withValues(alpha: 0.35)
+              : Colors.white.withValues(alpha: 0.06),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon,
+              size: 13,
+              color: highlighted ? AppColors.primary : AppColors.onSurfaceVariant),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.manrope(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1,
+                color: AppColors.onSurface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGlassStat(String value, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value,
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(label, style: _labelStyle(fontSize: 9, letterSpacing: 1.4)),
           ),
         ],
       ),
@@ -982,34 +1441,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Shared chip
-  Widget _buildDailyEvolutionChip(String goal) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(48),
-          ),
-          child: Text('DAILY EVOLUTION',
-              style: GoogleFonts.manrope(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.5,
-                  color: AppColors.primary)),
-        ),
-        const Spacer(),
-        Text(goal.toUpperCase(),
-            style: GoogleFonts.manrope(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1.5,
-                color: AppColors.onSurfaceVariant)),
-      ],
-    );
-  }
-
   // Small stat block used inside hero card
   Widget _buildStat({required String label, required String value}) {
     return Column(
@@ -1038,20 +1469,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ── Loading skeleton ────────────────────────────────────────────────
-  /// Mirrors the real layout (header, hero card, progress card, feed) so
-  /// the page doesn't jump when data arrives — replaces a lone spinner.
+  /// Mirrors the real layout (header, week strip, hero card, feed) so the
+  /// page doesn't jump when data arrives — replaces a lone spinner.
   Widget _buildLoadingSkeleton() {
     return ListView(
       physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
       children: const [
-        SkeletonBox(width: 90, height: 10, radius: 4),
-        SizedBox(height: 10),
-        SkeletonBox(width: 180, height: 30, radius: 8),
-        SizedBox(height: 32),
-        SkeletonBox(height: 300, radius: 24),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SkeletonBox(width: 110, height: 9, radius: 4),
+                  SizedBox(height: 7),
+                  SkeletonBox(width: 80, height: 16, radius: 6),
+                ],
+              ),
+            ),
+            SkeletonBox(width: 52, height: 40, radius: 12),
+            SizedBox(width: 8),
+            SkeletonBox(width: 40, height: 40, radius: 12),
+          ],
+        ),
+        SizedBox(height: 20),
+        SkeletonBox(height: 116, radius: 20),
         SizedBox(height: 16),
-        SkeletonBox(height: 110, radius: 20),
+        SkeletonBox(height: 340, radius: 24),
         SizedBox(height: 32),
         SkeletonBox(width: 110, height: 10, radius: 4),
         SizedBox(height: 16),
@@ -1062,147 +1507,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── This week's progress ────────────────────────────────────────────
-  /// Monday-Sunday adherence at a glance: one segment per scheduled
-  /// workout (filled when logged), plus the current streak and minutes
-  /// trained. Seeing progress toward the week's target is a simple,
-  /// well-evidenced adherence nudge — relevant to Objective 3.
-  Widget _buildWeekProgressCard() {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final monday = today.subtract(Duration(days: today.weekday - 1));
-    final week = List.generate(7, (i) => monday.add(Duration(days: i)));
-
-    final scheduled = <DateTime>[];
-    for (final date in week) {
-      final day = _resolvedDayForDate(date);
-      if (day != null && day['dayType'] != 'rest') scheduled.add(date);
-    }
-    final doneDates = week.where((d) => _logForDate(d) != null).toSet();
-    final doneScheduled = scheduled.where(doneDates.contains).length;
-
-    int minutes = 0;
-    for (final log in _allLogs) {
-      final at = DateTime.tryParse(log['completedAt'] as String? ?? '');
-      if (at != null && !at.isBefore(monday)) {
-        minutes += (log['totalDurationMins'] as num?)?.toInt() ?? 0;
-      }
-    }
-
-    final streak = _workoutStreak(today);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'THIS WEEK',
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-              const Spacer(),
-              Text.rich(
-                TextSpan(children: [
-                  TextSpan(
-                    text: '$doneScheduled',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
-                    ),
-                  ),
-                  TextSpan(
-                    text: ' / ${scheduled.length} workouts',
-                    style: GoogleFonts.manrope(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                ]),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // One segment per weekday: filled = trained, outlined = scheduled
-          // but not yet done, faint = rest day. Today is marked underneath.
-          Row(
-            children: [
-              for (int i = 0; i < 7; i++) ...[
-                if (i > 0) const SizedBox(width: 6),
-                Expanded(
-                  child: Column(
-                    children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        height: 8,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(4),
-                          color: doneDates.contains(week[i])
-                              ? AppColors.primary
-                              : scheduled.contains(week[i])
-                                  ? AppColors.surfaceContainerHigh
-                                  : AppColors.surfaceContainerHigh
-                                      .withValues(alpha: 0.4),
-                          border: scheduled.contains(week[i]) &&
-                                  !doneDates.contains(week[i])
-                              ? Border.all(
-                                  color: AppColors.primary
-                                      .withValues(alpha: 0.35))
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'MTWTFSS'[i],
-                        style: GoogleFonts.manrope(
-                          fontSize: 10,
-                          fontWeight: week[i] == today
-                              ? FontWeight.w800
-                              : FontWeight.w500,
-                          color: week[i] == today
-                              ? AppColors.onSurface
-                              : AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _buildMiniStat(
-                icon: Icons.local_fire_department_rounded,
-                value: '$streak',
-                label: 'workout streak',
-              ),
-              const SizedBox(width: 24),
-              _buildMiniStat(
-                icon: Icons.timer_outlined,
-                value: '$minutes',
-                label: 'min this week',
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Consecutive scheduled workouts completed, counting back from today.
   /// Rest days don't break a streak; today only counts once it's logged
   /// (an unfinished today doesn't break it either). Bounded by the logs
@@ -1210,7 +1514,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _workoutStreak(DateTime today) {
     int streak = 0;
     for (int offset = 0; offset < 60; offset++) {
-      final date = today.subtract(Duration(days: offset));
+      final date = DateTime(today.year, today.month, today.day - offset);
       final day = _resolvedDayForDate(date);
       final logged = _logForDate(date) != null;
       final isWorkoutDay = day != null && day['dayType'] != 'rest';
@@ -1224,146 +1528,32 @@ class _HomeScreenState extends State<HomeScreen> {
     return streak;
   }
 
-  Widget _buildMiniStat({
-    required IconData icon,
-    required String value,
-    required String label,
-  }) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: AppColors.primary),
-        const SizedBox(width: 6),
-        Text(
-          value,
-          style: GoogleFonts.spaceGrotesk(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurface,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: GoogleFonts.manrope(
-            fontSize: 12,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
-  }
-
   // Section label
   Widget _buildSectionLabel(String text) {
-    return Text(
-      text,
-      style: GoogleFonts.manrope(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 2,
-        color: AppColors.onSurfaceVariant,
-      ),
+    return Text(text, style: _labelStyle(fontSize: 11, letterSpacing: 2));
+  }
+
+  TextStyle _labelStyle({
+    double fontSize = 10,
+    double letterSpacing = 1.5,
+    Color color = AppColors.onSurfaceVariant,
+  }) {
+    return GoogleFonts.manrope(
+      fontSize: fontSize,
+      fontWeight: FontWeight.w700,
+      letterSpacing: letterSpacing,
+      color: color,
     );
   }
 
-  // Weekly calendar
-  Widget _buildWeeklyCalendar() {
-    final today = DateTime.now();
-    final startDate = today.subtract(const Duration(days: 3));
-    final days = List.generate(7, (index) => startDate.add(Duration(days: index)));
+  static const _weekdayNames = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  ];
 
-    return SizedBox(
-      height: 80,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: days.map((date) {
-            final isToday = date.year == today.year &&
-                date.month == today.month &&
-                date.day == today.day;
-
-            final planDay = _resolvedDayForDate(date);
-            final isWorkoutDay = planDay != null && planDay['dayType'] != 'rest';
-            final isCompleted = isWorkoutDay && _logForDate(date) != null;
-
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Pressable(
-                onTap: () => _onCalendarDayTap(date),
-                child: Container(
-                  width: 44,
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                  decoration: BoxDecoration(
-                    color: isToday
-                        ? AppColors.primary
-                        : AppColors.surface,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: isToday
-                          ? AppColors.primary
-                          : AppColors.outlineVariant,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '${date.day}',
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: isToday ? AppColors.onPrimary : AppColors.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _weekdayLabel(date.weekday),
-                        style: GoogleFonts.manrope(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: isToday
-                              ? AppColors.onPrimary.withValues(alpha: 0.75)
-                              : AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      // Completion indicator — only meaningful for workout
-                      // days; rest days and days with no plan show nothing.
-                      SizedBox(
-                        height: 6,
-                        child: isWorkoutDay
-                            ? Container(
-                                width: 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isCompleted
-                                      ? (isToday ? AppColors.onPrimary : AppColors.primary)
-                                      : Colors.transparent,
-                                  border: isCompleted
-                                      ? null
-                                      : Border.all(
-                                          color: isToday
-                                              ? AppColors.onPrimary.withValues(alpha: 0.4)
-                                              : AppColors.outlineVariant,
-                                          width: 1,
-                                        ),
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
+  static const _monthLabels = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
 
   String _weekdayLabel(int weekday) {
     const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];

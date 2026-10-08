@@ -6,8 +6,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_body_heatmap/flutter_body_heatmap.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../workout/services/adapt_service.dart';
-import '../../workout/services/workout_log_service.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../services/injury_service.dart';
 import '../../workout/data/exercise_data.dart';
@@ -17,9 +15,11 @@ import '../models/workout_pr_record.dart';
 import '../services/weight_record_service.dart';
 import 'log_weight_screen.dart';
 import 'all_records_screen.dart';
-import '../services/plan_reset_flow.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../widgets/plan_changes_section.dart';
+import '../widgets/stats_report_tab.dart';
+import '../../workout/widgets/exercise_media.dart';
+import '../../../shared/utils/number_format.dart';
 import 'log_injury_screen.dart';
 import '../../../shared/widgets/pressable.dart';
 
@@ -38,25 +38,6 @@ const double kHeatmapHighFatigueThreshold = 0.7;
 const double kHeatmapLowFatigueThreshold = 0.4;
 const int kMuscleRecoveryStaleDays = 7;
 
-/// One bucket in the Training Trends carousel (a day or a week, depending
-/// on the selected range). `completedAt` on workoutLogs is the only date
-/// source we trust — see WorkoutLogService.saveWorkoutLog.
-class _TrendPoint {
-  final DateTime bucketStart;
-  final String label;
-  int workoutCount;
-  double totalVolume;
-  double totalDurationMins;
-
-  _TrendPoint({
-    required this.bucketStart,
-    required this.label,
-    this.workoutCount = 0,
-    this.totalVolume = 0.0,
-    this.totalDurationMins = 0.0,
-  });
-}
-
 const List<String> _kMonthAbbrev = [
   'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
   'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
@@ -66,41 +47,6 @@ const List<String> _kMonthFullNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
-
-/// Fixed axis order for the Muscle Focus radar chart. These are the app's
-/// existing 7 broad groups (ExerciseData.muscleGroup is already one of
-/// these strings directly — there is no granular Biceps/Triceps/Quads
-/// data to split out, so the radar deliberately uses 7 axes, not 10).
-const List<String> _kMuscleFocusGroups = [
-  MuscleGroups.chest,
-  MuscleGroups.back,
-  MuscleGroups.shoulders,
-  MuscleGroups.arms,
-  MuscleGroups.legs,
-  MuscleGroups.glutes,
-  MuscleGroups.core,
-];
-
-/// One radar axis's worth of data for the Muscle Focus section.
-class _MuscleFocusStat {
-  final String group;
-  final double volume;
-  final int sets;
-  final int exerciseCount;
-  final int timesTrained; // distinct sessions with a completed set for this group
-  final double percentOfTotal; // 0..1, share of this period's total volume
-  final double normalized; // 0..1, this group's volume / the max group's
-
-  _MuscleFocusStat({
-    required this.group,
-    required this.volume,
-    required this.sets,
-    required this.exerciseCount,
-    required this.timesTrained,
-    required this.percentOfTotal,
-    required this.normalized,
-  });
-}
 
 class CoachScreen extends StatefulWidget {
   const CoachScreen({super.key});
@@ -128,67 +74,6 @@ class _CoachScreenState extends State<CoachScreen> {
   final String? _uid = FirebaseAuth.instance.currentUser?.uid;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // Stats data
-  bool _statsLoading = true;
-  List<Map<String, dynamic>> _recentLogs = [];
-  int _workoutsThisWeek = 0;
-  int _plannedThisWeek = 0;
-
-  // Adherence — shared card, toggled between "this week" (built from
-  // _workoutsThisWeek/_plannedThisWeek, loaded by _loadStats) and "last 4
-  // weeks" (below, its own fetch since it needs a 28-day window _loadStats
-  // doesn't compute).
-  int _adherenceViewIndex = 0; // 0 = This Week, 1 = Last 4 Weeks
-  bool _adherenceLoading = true;
-  int _completedLast4Weeks = 0;
-  int _targetLast4Weeks = 0;
-
-  // Training Trends (Workout / Volume / Duration carousel)
-  bool _trendsLoading = true;
-  // Raw logs fetched once; covers up to 3 months so range-switching never
-  // re-hits Firestore, it just re-buckets this list in Dart.
-  List<Map<String, dynamic>> _trendLogs = [];
-  int _trendsRangeIndex = 1; // 0 = Week, 1 = Month (default), 2 = 3 Months
-  static const List<String> _trendsRangeLabels = ['WEEK', 'MONTH', '3 MONTHS'];
-  int _trendsCarouselPage = 0; // 0 = Workouts, 1 = Volume, 2 = Duration
-  final PageController _trendsPageController = PageController();
-  List<_TrendPoint> _trendPoints = [];
-
-  // Monthly Overview (streak + workout-total + calendar)
-  // Derived from _trendLogs — no separate Firestore fetch. Known
-  // limitation: since _trendLogs is capped at 500 docs, a user with more
-  // than ~500 lifetime logs could see an inaccurate total/calendar for
-  // very old months, or a streak longer than what's cached. Documented
-  // rather than silently patched, consistent with the Phase 13
-  // 30-log-scan limitation already accepted elsewhere in this app.
-  DateTime _displayedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
-  Set<DateTime> _workoutDates = {};
-  int _currentStreak = 0;
-  int _workoutsInDisplayedMonth = 0;
-
-  // Muscle Focus (radar chart) — reads the SAME _trendsRangeIndex filter
-  // as Trends, per spec. Requires a fresh exerciseLogs subcollection read
-  // per log every time the range changes (not cached), since _trendLogs
-  // only holds top-level log fields.
-  bool _muscleFocusLoading = true;
-  List<_MuscleFocusStat> _muscleFocusStats = [];
-  String? _selectedMuscleFocusGroup;
-
-  // Exercise progression
-  List<String> _loggedExerciseNames = [];
-  String? _selectedExercise;
-  bool _progressionLoading = false;
-  List<Map<String, dynamic>> _progressionData = []; // [{date, maxWeight, rpe}]
-  // Computed live off getRecentSessionMaxWeights + detectPlateau on every
-  // load — never persisted (design decision: on-demand only, no
-  // plateauFlags collection). False also covers "insufficient history".
-  bool _isPlateaued = false;
-
-  // 0 = 7 days, 1 = 30 days, 2 = 90 days, 3 = all time
-  int _progressionRangeIndex = 1; // default: 30 days
-  static const List<int?> _progressionRangeDays = [7, 30, 90, null];
-  static const List<String> _progressionRangeLabels = ['7D', '30D', '90D', 'ALL'];
-
   // Recovery / Injury data
   bool _recoveryLoading = true;
   List<Map<String, dynamic>> _injuries = [];
@@ -197,364 +82,15 @@ class _CoachScreenState extends State<CoachScreen> {
   // Gender read from profile
   BodyGender _bodyGender = BodyGender.male;
 
+  /// Injury whose status is being saved (its button shows a spinner).
+  String? _updatingInjuryId;
+
   @override
   void initState() {
     super.initState();
-    _loadStats();
     _loadRecovery();
-    _loadAdherence();
-    _loadLoggedExerciseNames();
-    _loadTrends();
     _loadBodyJourney();
     _loadWorkoutRecords();
-  }
-
-  @override
-  void dispose() {
-    _trendsPageController.dispose();
-    super.dispose();
-  }
-
-  // DATA LOADING
-  Future<void> _loadAdherence() async {
-    if (_uid == null) return;
-    setState(() => _adherenceLoading = true);
-
-    try {
-      final windowStart = DateTime.now().subtract(const Duration(days: 28));
-
-      // Count completed logs in the last 28 days
-      final logsSnap = await _db
-          .collection('users')
-          .doc(_uid)
-          .collection('workoutLogs')
-          .get();
-
-      int completed = 0;
-      for (final doc in logsSnap.docs) {
-        final data = doc.data();
-        final isCompleted = data['isCompleted'] as bool? ?? false;
-        if (!isCompleted) continue;
-        final completedStr = data['completedAt'] as String? ?? '';
-        final completedAt = DateTime.tryParse(completedStr);
-        if (completedAt == null) continue;
-        if (completedAt.isAfter(windowStart)) completed++;
-      }
-
-      // Target: current plan's workout-day count × 4
-      final plan = await WorkoutPlanService().getActivePlan(_uid);
-      int workoutDaysInPlan = 0;
-      if (plan != null) {
-        final days = plan['days'] as List<dynamic>? ?? [];
-        for (final day in days) {
-          final dayType = day['dayType'] as String? ?? '';
-          if (dayType == 'workout') workoutDaysInPlan++;
-        }
-      }
-
-      setState(() {
-        _completedLast4Weeks = completed;
-        _targetLast4Weeks = workoutDaysInPlan * 4;
-        _adherenceLoading = false;
-      });
-    } catch (e) {
-      debugPrint('CoachScreen adherence error: $e');
-      setState(() => _adherenceLoading = false);
-    }
-  }
-
-  Future<void> _loadLoggedExerciseNames() async {
-    if (_uid == null) return;
-
-    try {
-      final logsSnap = await _db
-          .collection('users')
-          .doc(_uid)
-          .collection('workoutLogs')
-          .get();
-
-      final Set<String> names = {};
-      for (final logDoc in logsSnap.docs) {
-        final exLogs = await logDoc.reference.collection('exerciseLogs').get();
-        for (final ex in exLogs.docs) {
-          final name = ex.data()['exerciseName'] as String?;
-          if (name != null && name.isNotEmpty) names.add(name);
-        }
-      }
-
-      final sortedNames = names.toList()..sort();
-      if (!mounted) return;
-      setState(() {
-        _loggedExerciseNames = sortedNames;
-        if (sortedNames.isNotEmpty) {
-          _selectedExercise = sortedNames.first;
-          _loadExerciseProgression(sortedNames.first);
-        }
-      });
-    } catch (e) {
-      debugPrint('CoachScreen exercise names error: $e');
-    }
-  }
-
-  Future<void> _loadExerciseProgression(String exerciseName) async {
-    if (_uid == null) return;
-    setState(() => _progressionLoading = true);
-
-    try {
-      final rangeDays = _progressionRangeDays[_progressionRangeIndex];
-      final windowStart = rangeDays != null
-          ? DateTime.now().subtract(Duration(days: rangeDays))
-          : null;
-
-      final logsSnap = await _db
-          .collection('users')
-          .doc(_uid)
-          .collection('workoutLogs')
-          .get();
-
-      final List<Map<String, dynamic>> points = [];
-
-      for (final logDoc in logsSnap.docs) {
-        final logData = logDoc.data();
-        final completedStr = logData['completedAt'] as String? ?? '';
-        final completedAt = DateTime.tryParse(completedStr);
-        if (completedAt == null) continue;
-
-        // Skip logs outside the selected window (all-time skips this check)
-        if (windowStart != null && completedAt.isBefore(windowStart)) continue;
-
-        final exLogs = await logDoc.reference
-            .collection('exerciseLogs')
-            .where('exerciseName', isEqualTo: exerciseName)
-            .get();
-
-        for (final ex in exLogs.docs) {
-          final data = ex.data();
-          final setDetails = data['setDetails'] as List<dynamic>? ?? [];
-          double maxWeight = 0.0;
-          for (final s in setDetails) {
-            final w = (s['weightKg'] as num?)?.toDouble() ?? 0.0;
-            if (w > maxWeight) maxWeight = w;
-          }
-          final rpe = (data['rpeScale'] as num?)?.toDouble() ?? 0.0;
-
-          points.add({
-            'date': completedAt,
-            'maxWeight': maxWeight,
-            'rpe': rpe,
-          });
-        }
-      }
-
-      points.sort((a, b) =>
-          (a['date'] as DateTime).compareTo(b['date'] as DateTime));
-
-      // Plateau check always runs over the full unwindowed session history
-      // for this exercise (not the range-limited `points` above) — the
-      // rule is "last 4 transitions", not "last 4 within the chart's
-      // selected window". Computed live, never cached/written anywhere.
-      final sessionMaxWeights = await WorkoutLogService()
-          .getRecentSessionMaxWeights(uid: _uid, exerciseName: exerciseName);
-      final isPlateaued =
-          AdaptService.detectPlateau(sessionMaxWeights: sessionMaxWeights);
-
-      if (!mounted) return;
-      setState(() {
-        _progressionData = points;
-        _isPlateaued = isPlateaued;
-        _progressionLoading = false;
-      });
-    } catch (e) {
-      debugPrint('CoachScreen progression error: $e');
-      setState(() => _progressionLoading = false);
-    }
-  }
-
-  void _onRangeChanged(int index) {
-    setState(() => _progressionRangeIndex = index);
-    if (_selectedExercise != null) {
-      _loadExerciseProgression(_selectedExercise!);
-    }
-  }
-
-  // TRAINING TRENDS (Workout / Volume / Duration carousel)
-
-  /// Fetches raw logs ONCE (covers up to 3 months). Range switching after
-  /// this never touches Firestore again — it just re-buckets in Dart.
-  Future<void> _loadTrends() async {
-    if (_uid == null) return;
-    setState(() => _trendsLoading = true);
-
-    try {
-      // 500 is generous headroom, not a magic number: even at 5 sessions/
-      // week, 3 months is ~65 logs.
-      final logs = await WorkoutLogService().getRecentLogs(_uid, limit: 500);
-      _trendLogs = logs;
-      _trendPoints = _buildTrendPoints(_trendLogs, _trendsRangeIndex);
-      _recomputeMonthlyOverview();
-      if (!mounted) return;
-      setState(() => _trendsLoading = false);
-      _loadMuscleFocus(); // separate loading state; doesn't block Trends UI
-    } catch (e) {
-      debugPrint('CoachScreen trends error: $e');
-      if (!mounted) return;
-      setState(() => _trendsLoading = false);
-    }
-  }
-
-  void _onTrendsRangeChanged(int index) {
-    setState(() {
-      _trendsRangeIndex = index;
-      _trendPoints = _buildTrendPoints(_trendLogs, _trendsRangeIndex);
-    });
-    _loadMuscleFocus(); // window changed → re-fetch exerciseLogs for it
-  }
-
-  /// Same window-start math as _buildTrendPoints's earliest bucket, kept
-  /// as its own small function rather than reusing _trendPoints directly
-  /// — Muscle Focus needs one window boundary, not a bucketed series, and
-  /// duplicating 3 lines of date math here avoids coupling two features
-  /// that only coincidentally share a filter control.
-  DateTime _muscleFocusWindowStart(int rangeIndex) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    if (rangeIndex == 0) {
-      return today.subtract(Duration(days: today.weekday - 1)); // this week
-    } else if (rangeIndex == 1) {
-      return today.subtract(const Duration(days: 29)); // last 30 days
-    } else {
-      final thisWeekStart = today.subtract(Duration(days: today.weekday - 1));
-      return thisWeekStart.subtract(const Duration(days: 7 * 12)); // 13 weeks
-    }
-  }
-
-  /// Fetches exerciseLogs subcollections for every workoutLog within the
-  /// selected window, sums volume/sets/exercise-count per PRIMARY
-  /// muscleGroup only (per your steer), using the identical per-set
-  /// volume formula already established in
-  /// WorkoutLogService.updateMuscleRecovery (weightKg > 0 ? reps * weightKg
-  /// : reps — bodyweight sets count reps only). Not reusing that method
-  /// directly since it writes a fixed 7-day Firestore doc; this needs an
-  /// arbitrary window computed in memory.
-  Future<void> _loadMuscleFocus() async {
-    if (_uid == null) return;
-    setState(() => _muscleFocusLoading = true);
-
-    try {
-      final windowStart = _muscleFocusWindowStart(_trendsRangeIndex);
-      final logsInWindow = _trendLogs.where((log) {
-        final completedAt =
-            DateTime.tryParse(log['completedAt'] as String? ?? '');
-        return completedAt != null && !completedAt.isBefore(windowStart);
-      }).toList();
-
-      final Map<String, double> volumeByGroup = {};
-      final Map<String, int> setsByGroup = {};
-      final Map<String, Set<String>> exercisesByGroup = {};
-      // Distinct log IDs per group — "how many sessions trained this group",
-      // folded in here from the old separate "Muscle Breakdown" card so
-      // that number respects the same range filter as everything else in
-      // this card instead of being hardcoded to "this week".
-      final Map<String, Set<String>> sessionsByGroup = {};
-
-      for (final log in logsInWindow) {
-        final logId = log['logId'] as String?;
-        if (logId == null) continue;
-
-        final exLogsSnap = await _db
-            .collection('users')
-            .doc(_uid)
-            .collection('workoutLogs')
-            .doc(logId)
-            .collection('exerciseLogs')
-            .get();
-
-        for (final exDoc in exLogsSnap.docs) {
-          final exData = exDoc.data();
-          final group = exData['muscleGroup'] as String?;
-          if (group == null || !_kMuscleFocusGroups.contains(group)) continue;
-
-          final exerciseName = exData['exerciseName'] as String? ?? '';
-          final setDetails =
-              (exData['setDetails'] as List?)?.cast<Map<String, dynamic>>() ??
-                  [];
-          final completedSets =
-              setDetails.where((s) => s['completed'] == true).toList();
-          if (completedSets.isEmpty) continue;
-
-          final volume = completedSets.fold<double>(0.0, (sum, s) {
-            final reps = (s['reps'] as num?)?.toDouble() ?? 0;
-            final weightKg = (s['weightKg'] as num?)?.toDouble() ?? 0;
-            return sum + (weightKg > 0 ? reps * weightKg : reps);
-          });
-
-          volumeByGroup[group] = (volumeByGroup[group] ?? 0) + volume;
-          setsByGroup[group] = (setsByGroup[group] ?? 0) + completedSets.length;
-          exercisesByGroup.putIfAbsent(group, () => {}).add(exerciseName);
-          sessionsByGroup.putIfAbsent(group, () => {}).add(logId);
-        }
-      }
-
-      final totalVolume = volumeByGroup.values.fold(0.0, (a, b) => a + b);
-      final maxVolume = volumeByGroup.values.isEmpty
-          ? 0.0
-          : volumeByGroup.values.reduce((a, b) => a > b ? a : b);
-
-      final stats = _kMuscleFocusGroups.map((group) {
-        final volume = volumeByGroup[group] ?? 0.0;
-        return _MuscleFocusStat(
-          group: group,
-          volume: volume,
-          sets: setsByGroup[group] ?? 0,
-          exerciseCount: exercisesByGroup[group]?.length ?? 0,
-          timesTrained: sessionsByGroup[group]?.length ?? 0,
-          percentOfTotal: totalVolume > 0 ? volume / totalVolume : 0.0,
-          normalized: maxVolume > 0 ? volume / maxVolume : 0.0,
-        );
-      }).toList();
-
-      // Default selection: the most-trained group, so the detail card
-      // isn't empty on first load. Null (no selection) only if nothing
-      // was trained at all — the empty state handles that case instead.
-      String? defaultSelection;
-      if (totalVolume > 0) {
-        defaultSelection =
-            (stats.reduce((a, b) => a.volume >= b.volume ? a : b)).group;
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _muscleFocusStats = stats;
-        _selectedMuscleFocusGroup = defaultSelection;
-        _muscleFocusLoading = false;
-      });
-    } catch (e) {
-      debugPrint('CoachScreen muscle focus error: $e');
-      if (!mounted) return;
-      setState(() => _muscleFocusLoading = false);
-    }
-  }
-
-  /// Rule-based, descriptive-only sentence — no health/medical claims,
-  /// per spec. Prefers flagging an under-trained group (more actionable)
-  /// over just naming the top two, if one clearly stands out.
-  String _muscleFocusInsight() {
-    final trained = _muscleFocusStats.where((s) => s.volume > 0).toList();
-    if (trained.isEmpty) return '';
-
-    final sorted = [..._muscleFocusStats]
-      ..sort((a, b) => a.volume.compareTo(b.volume));
-    final avg = trained.fold(0.0, (a, b) => a + b.volume) / trained.length;
-    final lowest = sorted.first;
-
-    if (lowest.volume == 0 || (avg > 0 && lowest.volume < avg * 0.3)) {
-      return 'Your ${lowest.group.toLowerCase()} received significantly '
-          'less training than other muscle groups this period.';
-    }
-
-    final topTwo =
-        sorted.reversed.take(2).map((s) => s.group).join(' and ');
-    return 'Your $topTwo received the most training this period.';
   }
 
   // RECORDS TAB — BODY JOURNEY
@@ -799,186 +335,6 @@ class _CoachScreenState extends State<CoachScreen> {
     }
   }
 
-  // MONTHLY OVERVIEW (streak + workout total + calendar)
-
-  /// Pure re-derivation from _trendLogs. Called after every fetch and on
-  /// every month-navigation tap — never touches Firestore itself.
-  void _recomputeMonthlyOverview() {
-    final Set<DateTime> dates = {};
-    for (final log in _trendLogs) {
-      final completedAt =
-          DateTime.tryParse(log['completedAt'] as String? ?? '');
-      if (completedAt == null) continue;
-      dates.add(DateTime(completedAt.year, completedAt.month, completedAt.day));
-    }
-
-    _workoutDates = dates;
-    _currentStreak = _computeStreak(dates);
-    _workoutsInDisplayedMonth = dates
-        .where((d) =>
-            d.year == _displayedMonth.year && d.month == _displayedMonth.month)
-        .length;
-  }
-
-  /// Consecutive-day streak ending at "today" (or "yesterday" if today's
-  /// workout just hasn't happened yet) — deliberately NOT derived from
-  /// _workoutsInDisplayedMonth, per the spec's explicit distinction.
-  int _computeStreak(Set<DateTime> dates) {
-    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-
-    DateTime cursor;
-    if (dates.contains(today)) {
-      cursor = today;
-    } else if (dates.contains(today.subtract(const Duration(days: 1)))) {
-      cursor = today.subtract(const Duration(days: 1));
-    } else {
-      return 0;
-    }
-
-    int streak = 0;
-    while (dates.contains(cursor)) {
-      streak++;
-      cursor = cursor.subtract(const Duration(days: 1));
-    }
-    return streak;
-  }
-
-  void _changeDisplayedMonth(int delta) {
-    setState(() {
-      _displayedMonth =
-          DateTime(_displayedMonth.year, _displayedMonth.month + delta, 1);
-      // Only _workoutsInDisplayedMonth actually changes here — streak is
-      // "today"-anchored and intentionally untouched by month navigation.
-      _workoutsInDisplayedMonth = _workoutDates
-          .where((d) =>
-              d.year == _displayedMonth.year &&
-              d.month == _displayedMonth.month)
-          .length;
-    });
-  }
-
-  /// Pure function: given raw logs + a range index, returns the bucketed
-  /// points for that range. No Firestore access — safe to call on every
-  /// filter tap.
-  List<_TrendPoint> _buildTrendPoints(
-      List<Map<String, dynamic>> logs, int rangeIndex) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    late List<_TrendPoint> buckets;
-    late int Function(DateTime logDate) bucketIndexOf;
-
-    if (rangeIndex == 0) {
-      // WEEK — 7 daily buckets, Monday-start (matches the old weekly card).
-      final weekStart = today.subtract(Duration(days: today.weekday - 1));
-      const dayLabels = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-      buckets = List.generate(
-        7,
-        (i) => _TrendPoint(
-          bucketStart: weekStart.add(Duration(days: i)),
-          label: dayLabels[i],
-        ),
-      );
-      bucketIndexOf = (logDate) => logDate.difference(weekStart).inDays;
-    } else if (rangeIndex == 1) {
-      // MONTH — 30 daily buckets, today back to 29 days ago.
-      final monthStart = today.subtract(const Duration(days: 29));
-      buckets = List.generate(30, (i) {
-        final day = monthStart.add(Duration(days: i));
-        return _TrendPoint(bucketStart: day, label: '${day.day}');
-      });
-      bucketIndexOf = (logDate) => logDate.difference(monthStart).inDays;
-    } else {
-      // 3 MONTHS — 13 weekly buckets, Monday-start weeks.
-      final thisWeekStart = today.subtract(Duration(days: today.weekday - 1));
-      final rangeStart = thisWeekStart.subtract(const Duration(days: 7 * 12));
-      buckets = List.generate(13, (i) {
-        final weekStart = rangeStart.add(Duration(days: 7 * i));
-        return _TrendPoint(
-          bucketStart: weekStart,
-          label: '${_kMonthAbbrev[weekStart.month - 1]} ${weekStart.day}',
-        );
-      });
-      bucketIndexOf =
-          (logDate) => logDate.difference(rangeStart).inDays ~/ 7;
-    }
-
-    for (final log in logs) {
-      final completedStr = log['completedAt'] as String? ?? '';
-      final completedAt = DateTime.tryParse(completedStr);
-      if (completedAt == null) continue;
-      final logDate =
-          DateTime(completedAt.year, completedAt.month, completedAt.day);
-
-      final index = bucketIndexOf(logDate);
-      if (index < 0 || index >= buckets.length) continue;
-
-      final bucket = buckets[index];
-      bucket.workoutCount += 1;
-      bucket.totalVolume += (log['totalVolume'] as num?)?.toDouble() ?? 0.0;
-      bucket.totalDurationMins +=
-          (log['totalDurationMins'] as num?)?.toDouble() ?? 0.0;
-    }
-
-    return buckets;
-  }
-
-  Future<void> _loadStats() async {
-    if (_uid == null) return;
-    setState(() => _statsLoading = true);
-
-    try {
-      // Get all recent logs
-      final logs = await WorkoutLogService().getRecentLogs(_uid, limit: 50);
-
-      // Get active plan to count planned workouts this week
-      final plan = await WorkoutPlanService().getActivePlan(_uid);
-
-      // Compute weekly volume 
-      final now = DateTime.now();
-      // Find start of current week (Monday)
-      final weekStart = now.subtract(Duration(days: now.weekday - 1));
-      final weekStartDate = DateTime(weekStart.year, weekStart.month, weekStart.day);
-
-      int workoutsThisWeek = 0;
-
-      for (final log in logs) {
-        final completedStr = log['completedAt'] as String? ?? '';
-        if (completedStr.isEmpty) continue;
-        final completedAt = DateTime.tryParse(completedStr);
-        if (completedAt == null) continue;
-
-        final logDate = DateTime(completedAt.year, completedAt.month, completedAt.day);
-
-        // Only count logs from this week
-        if (logDate.isAfter(weekStartDate.subtract(const Duration(days: 1)))) {
-          workoutsThisWeek++;
-        }
-      }
-
-      // Count planned workout days this week (non-rest days)
-      int plannedThisWeek = 0;
-      if (plan != null) {
-        final days = plan['days'] as List<dynamic>? ?? [];
-        for (final day in days) {
-          final dayType = day['dayType'] as String? ?? '';
-          if (dayType == 'workout') plannedThisWeek++;
-        }
-      }
-
-      setState(() {
-        _recentLogs = logs;
-        _workoutsThisWeek = workoutsThisWeek;
-        _plannedThisWeek = plannedThisWeek;
-        _statsLoading = false;
-      });
-    } catch (e, stack) {
-      debugPrint('CoachScreen recovery error: $e');
-      debugPrint('$stack');
-      setState(() => _recoveryLoading = false);
-    }
-  }
-
   Future<void> _loadRecovery() async {
     if (_uid == null) return;
     setState(() => _recoveryLoading = true);
@@ -1076,12 +432,17 @@ class _CoachScreenState extends State<CoachScreen> {
           children: [
             _buildHeader(),
             _buildSegmentedSwitch(),
+            // IndexedStack keeps each tab's state (and loaded data) while
+            // switching between them.
             Expanded(
-              child: _selectedTab == 0
-                  ? _buildStatsTab()
-                  : _selectedTab == 1
-                      ? _buildRecoveryTab()
-                      : _buildRecordsTab(),
+              child: IndexedStack(
+                index: _selectedTab,
+                children: [
+                  _uid == null ? const SizedBox.shrink() : StatsReportTab(uid: _uid),
+                  _buildRecoveryTab(),
+                  _buildRecordsTab(),
+                ],
+              ),
             ),
           ],
         ),
@@ -1089,10 +450,10 @@ class _CoachScreenState extends State<CoachScreen> {
     );
   }
 
-  // Header
+  // Header — one line; the old two-line 32pt title took ~90px.
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1105,14 +466,14 @@ class _CoachScreenState extends State<CoachScreen> {
               color: AppColors.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
-            'AI PERFORMANCE\nINSIGHTS',
+            'Performance Insights',
             style: GoogleFonts.spaceGrotesk(
-              fontSize: 32,
+              fontSize: 24,
               fontWeight: FontWeight.w700,
               color: AppColors.onSurface,
-              height: 1.05,
+              height: 1.15,
             ),
           ),
         ],
@@ -1120,10 +481,16 @@ class _CoachScreenState extends State<CoachScreen> {
     );
   }
 
+  static const _tabs = [
+    (Icons.insights_rounded, 'STATS'),
+    (Icons.healing_rounded, 'RECOVERY'),
+    (Icons.emoji_events_rounded, 'RECORDS'),
+  ];
+
   // Segmented switch
   Widget _buildSegmentedSwitch() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLow,
@@ -1132,17 +499,16 @@ class _CoachScreenState extends State<CoachScreen> {
         padding: const EdgeInsets.all(4),
         child: Row(
           children: [
-            _buildSegmentBtn('STATS REPORT', 0),
-            _buildSegmentBtn('RECOVERY MAP', 1),
-            _buildSegmentBtn('RECORDS', 2),
+            for (int i = 0; i < _tabs.length; i++) _buildSegmentBtn(_tabs[i].$1, _tabs[i].$2, i),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSegmentBtn(String label, int index) {
+  Widget _buildSegmentBtn(IconData icon, String label, int index) {
     final isSelected = _selectedTab == index;
+    final color = isSelected ? AppColors.onSurface : AppColors.onSurfaceVariant;
     return Expanded(
       child: Pressable(
         onTap: () {
@@ -1156,1555 +522,27 @@ class _CoachScreenState extends State<CoachScreen> {
             color: isSelected ? AppColors.surfaceContainerHigh : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.manrope(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.5,
-              color: isSelected ? AppColors.onSurface : AppColors.onSurfaceVariant,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // STATS TAB
-  Widget _buildStatsTab() {
-    if (_statsLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-      children: [
-        _buildTrendsCard(),
-        const SizedBox(height: 16),
-        _buildMuscleFocusCard(),
-        const SizedBox(height: 16),
-        _buildMonthlyOverviewCard(),
-        const SizedBox(height: 16),
-        _buildAdherenceCard(),
-        const SizedBox(height: 16),
-        _buildProgressionCard(),
-        const SizedBox(height: 24),
-        _buildResetPlanButton(),
-      ],
-    );
-  }
-
-  // Training Trends (redesigned Weekly Volume section)
-  Widget _buildTrendsCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Training Trends',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.onSurface,
-            ),
-          ),
-          Text(
-            'Workouts · Volume · Duration',
-            style: GoogleFonts.manrope(
-              fontSize: 10,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildTrendsRangeChips(),
-          const SizedBox(height: 20),
-          if (_trendsLoading)
-            const SizedBox(
-              height: 210,
-              child: Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
-              ),
-            )
-          else ...[
-            SizedBox(
-              height: 210,
-              child: PageView(
-                controller: _trendsPageController,
-                onPageChanged: (i) => setState(() => _trendsCarouselPage = i),
-                children: [
-                  _buildBarTrendPanel(
-                    title: 'WORKOUTS',
-                    unitLabel: 'SESSIONS',
-                    valueOf: (p) => p.workoutCount.toDouble(),
-                    formatTotal: (v) => v.toStringAsFixed(0),
-                  ),
-                  _buildBarTrendPanel(
-                    title: 'VOLUME',
-                    unitLabel: 'KG',
-                    valueOf: (p) => p.totalVolume,
-                    formatTotal: (v) => v.toStringAsFixed(0),
-                  ),
-                  _buildDurationTrendPanel(),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            _buildTrendsDots(),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTrendsRangeChips() {
-    return Row(
-      children: List.generate(_trendsRangeLabels.length, (i) {
-        final isSelected = _trendsRangeIndex == i;
-        return Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: Pressable(
-            onTap: () => _onTrendsRangeChanged(i),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                _trendsRangeLabels[i],
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                  color: isSelected
-                      ? AppColors.onPrimary
-                      : AppColors.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildTrendsDots() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(3, (i) {
-        final isActive = _trendsCarouselPage == i;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          width: isActive ? 18 : 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: isActive
-                ? AppColors.primary
-                : AppColors.onSurfaceVariant.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(3),
-          ),
-        );
-      }),
-    );
-  }
-
-  /// Pixel width reserved per data point before horizontal scrolling
-  /// kicks in. Week always fits on screen (7 points); Month and 3-Months
-  /// use a fixed width so they scroll once the point count exceeds it.
-  double _pxPerTrendPoint(double availableWidth) {
-    switch (_trendsRangeIndex) {
-      case 0:
-        return availableWidth / 7; // fills exactly, no scroll needed
-      case 1:
-        return 34.0; // 30 points → scrolls
-      default:
-        return 56.0; // 13 points, wider labels ("JUL 7") → scrolls sooner
-    }
-  }
-
-  /// Shared frame for the Workouts and Volume panels (both bar charts).
-  /// [valueOf] pulls the metric out of a _TrendPoint; kept generic so the
-  /// bucketing logic in _buildTrendPoints only has to run once.
-  Widget _buildBarTrendPanel({
-    required String title,
-    required String unitLabel,
-    required double Function(_TrendPoint) valueOf,
-    required String Function(double) formatTotal,
-  }) {
-    final values = _trendPoints.map(valueOf).toList();
-    final total = values.fold(0.0, (a, b) => a + b);
-    final maxValue = values.isEmpty
-        ? 1.0
-        : values.reduce((a, b) => a > b ? a : b).clamp(1.0, double.infinity);
-    final hasData = total > 0;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-            ),
-            Text(
-              '${formatTotal(total)} $unitLabel',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: !hasData
-              ? _buildTrendEmptyState()
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    final pxPerPoint = _pxPerTrendPoint(constraints.maxWidth);
-                    final contentWidth = math.max(
-                      constraints.maxWidth,
-                      _trendPoints.length * pxPerPoint,
-                    );
-                    return SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(
-                        width: contentWidth,
-                        child: BarChart(
-                          BarChartData(
-                            maxY: maxValue * 1.2,
-                            gridData: const FlGridData(show: false),
-                            borderData: FlBorderData(show: false),
-                            titlesData: FlTitlesData(
-                              leftTitles: const AxisTitles(
-                                sideTitles: SideTitles(showTitles: false),
-                              ),
-                              rightTitles: const AxisTitles(
-                                sideTitles: SideTitles(showTitles: false),
-                              ),
-                              topTitles: const AxisTitles(
-                                sideTitles: SideTitles(showTitles: false),
-                              ),
-                              bottomTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                  showTitles: true,
-                                  reservedSize: 22,
-                                  getTitlesWidget: (value, meta) {
-                                    final i = value.toInt();
-                                    if (i < 0 || i >= _trendPoints.length) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 6),
-                                      child: Text(
-                                        _trendPoints[i].label,
-                                        style: GoogleFonts.manrope(
-                                          fontSize: 9,
-                                          color: AppColors.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                            barTouchData: BarTouchData(
-                              touchTooltipData: BarTouchTooltipData(
-                                getTooltipColor: (_) =>
-                                    AppColors.surfaceContainerHigh,
-                                getTooltipItem: (group, gi, rod, ri) =>
-                                    BarTooltipItem(
-                                  rod.toY.toStringAsFixed(0),
-                                  GoogleFonts.manrope(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.onSurface,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            barGroups: List.generate(_trendPoints.length, (i) {
-                              final isLast = i == _trendPoints.length - 1;
-                              return BarChartGroupData(
-                                x: i,
-                                barRods: [
-                                  BarChartRodData(
-                                    toY: values[i],
-                                    width: pxPerPoint * 0.5,
-                                    borderRadius: BorderRadius.circular(4),
-                                    color: values[i] > 0
-                                        ? (isLast
-                                            ? AppColors.primary
-                                            : AppColors.primary
-                                                .withValues(alpha: 0.4))
-                                        : AppColors.surfaceContainerHigh,
-                                  ),
-                                ],
-                              );
-                            }),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDurationTrendPanel() {
-    final values =
-        _trendPoints.map((p) => p.totalDurationMins).toList();
-    final total = values.fold(0.0, (a, b) => a + b);
-    final maxValue = values.isEmpty
-        ? 1.0
-        : values.reduce((a, b) => a > b ? a : b).clamp(1.0, double.infinity);
-    final hasData = total > 0;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Text(
-                'DURATION',
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-            ),
-            Text(
-              '${total.toStringAsFixed(0)} MIN',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: !hasData
-              ? _buildTrendEmptyState()
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    final pxPerPoint = _pxPerTrendPoint(constraints.maxWidth);
-                    final contentWidth = math.max(
-                      constraints.maxWidth,
-                      _trendPoints.length * pxPerPoint,
-                    );
-                    return SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(
-                        width: contentWidth,
-                        child: LineChart(
-                          LineChartData(
-                            minY: 0,
-                            maxY: maxValue * 1.2,
-                            gridData: const FlGridData(show: false),
-                            borderData: FlBorderData(show: false),
-                            titlesData: FlTitlesData(
-                              leftTitles: const AxisTitles(
-                                sideTitles: SideTitles(showTitles: false),
-                              ),
-                              rightTitles: const AxisTitles(
-                                sideTitles: SideTitles(showTitles: false),
-                              ),
-                              topTitles: const AxisTitles(
-                                sideTitles: SideTitles(showTitles: false),
-                              ),
-                              bottomTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                  showTitles: true,
-                                  reservedSize: 22,
-                                  getTitlesWidget: (value, meta) {
-                                    final i = value.toInt();
-                                    if (i < 0 || i >= _trendPoints.length) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 6),
-                                      child: Text(
-                                        _trendPoints[i].label,
-                                        style: GoogleFonts.manrope(
-                                          fontSize: 9,
-                                          color: AppColors.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                            lineTouchData: LineTouchData(
-                              touchTooltipData: LineTouchTooltipData(
-                                getTooltipColor: (_) =>
-                                    AppColors.surfaceContainerHigh,
-                                getTooltipItems: (spots) => spots
-                                    .map((s) => LineTooltipItem(
-                                          '${s.y.toStringAsFixed(0)} min',
-                                          GoogleFonts.manrope(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.onSurface,
-                                          ),
-                                        ))
-                                    .toList(),
-                              ),
-                            ),
-                            lineBarsData: [
-                              LineChartBarData(
-                                spots: List.generate(
-                                  values.length,
-                                  (i) => FlSpot(i.toDouble(), values[i]),
-                                ),
-                                isCurved: true,
-                                color: AppColors.primary,
-                                barWidth: 3,
-                                dotData: const FlDotData(show: true),
-                                belowBarData: BarAreaData(
-                                  show: true,
-                                  color:
-                                      AppColors.primary.withValues(alpha: 0.08),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTrendEmptyState() {
-    return Center(
-      child: Text(
-        'No data yet for this period',
-        style: GoogleFonts.manrope(
-          fontSize: 12,
-          color: AppColors.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-
-  // Monthly Overview
-  Widget _buildMonthlyOverviewCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'MONTHLY OVERVIEW',
-            style: GoogleFonts.manrope(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _buildCompactStatChip(
-                  icon: Icons.local_fire_department_rounded,
-                  value: '$_currentStreak',
-                  label: 'Day Streak',
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildCompactStatChip(
-                  icon: Icons.fitness_center_rounded,
-                  value: '$_workoutsInDisplayedMonth',
-                  label: 'Workouts',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _buildMonthCalendar(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompactStatChip({
-    required IconData icon,
-    required String value,
-    required String label,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: AppColors.primary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.onSurface,
-                  ),
-                ),
+                Icon(icon, size: 15, color: color),
+                const SizedBox(width: 6),
                 Text(
                   label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.manrope(
-                    fontSize: 10,
-                    color: AppColors.onSurfaceVariant,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                    color: color,
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMonthCalendar() {
-    final year = _displayedMonth.year;
-    final month = _displayedMonth.month;
-    final daysInMonth = DateTime(year, month + 1, 0).day;
-    final firstOfMonth = DateTime(year, month, 1);
-    // DateTime.weekday: Monday = 1 .. Sunday = 7. Grid is Monday-start, so
-    // this is how many blank leading cells the grid needs.
-    final leadingBlanks = firstOfMonth.weekday - 1;
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
-
-    return Column(
-      children: [
-        // Month navigation header
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            IconButton(
-              onPressed: () => _changeDisplayedMonth(-1),
-              icon: const Icon(Icons.chevron_left_rounded,
-                  color: AppColors.onSurfaceVariant),
-              splashRadius: 20,
-            ),
-            Text(
-              '${_kMonthFullNames[month - 1]} $year',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: AppColors.onSurface,
-              ),
-            ),
-            IconButton(
-              onPressed: () => _changeDisplayedMonth(1),
-              icon: const Icon(Icons.chevron_right_rounded,
-                  color: AppColors.onSurfaceVariant),
-              splashRadius: 20,
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        // Weekday header (Monday-start, per spec)
-        Row(
-          children: ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-              .map((d) => Expanded(
-                    child: Center(
-                      child: Text(
-                        d,
-                        style: GoogleFonts.manrope(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ))
-              .toList(),
-        ),
-        const SizedBox(height: 6),
-        GridView.count(
-          crossAxisCount: 7,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          children: [
-            for (int i = 0; i < leadingBlanks; i++) const SizedBox.shrink(),
-            for (int day = 1; day <= daysInMonth; day++)
-              _buildCalendarDayCell(
-                date: DateTime(year, month, day),
-                day: day,
-                isToday: DateTime(year, month, day) == todayDate,
-                hasWorkout:
-                    _workoutDates.contains(DateTime(year, month, day)),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCalendarDayCell({
-    required DateTime date,
-    required int day,
-    required bool isToday,
-    required bool hasWorkout,
-  }) {
-    Color? fillColor;
-    Color textColor = AppColors.onSurface;
-    Border? border;
-
-    if (hasWorkout) {
-      fillColor = AppColors.primary;
-      textColor = AppColors.onPrimary;
-    }
-    if (isToday) {
-      border = Border.all(
-        color: AppColors.primary,
-        width: 1.5,
-      );
-      if (!hasWorkout) {
-        textColor = AppColors.primary;
-      }
-    }
-
-    return Padding(
-      padding: const EdgeInsets.all(3),
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: Container(
-          decoration: BoxDecoration(
-            color: fillColor,
-            border: border,
-            shape: BoxShape.circle,
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            '$day',
-            style: GoogleFonts.manrope(
-              fontSize: 11,
-              fontWeight:
-                  isToday || hasWorkout ? FontWeight.w700 : FontWeight.w400,
-              color: textColor,
-            ),
-          ),
         ),
       ),
-    );
-  }
-
-  // Consistency
-
-  Widget _buildMuscleFocusCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Muscle Focus',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.onSurface,
-                      ),
-                    ),
-                    Text(
-                      'Identify areas that need more focus',
-                      style: GoogleFonts.manrope(
-                        fontSize: 10,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Shares the Week/Month/3-Months filter from Training
-              // Trends above — this badge just makes that visible here
-              // too, without duplicating the chip row.
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  _trendsRangeLabels[_trendsRangeIndex],
-                  style: GoogleFonts.manrope(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (_muscleFocusLoading)
-            const SizedBox(
-              height: 260,
-              child: Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
-              ),
-            )
-          else if (_muscleFocusStats.every((s) => s.volume == 0))
-            _buildMuscleFocusEmptyState()
-          else ...[
-            SizedBox(
-              height: 260,
-              child: RadarChart(
-                RadarChartData(
-                  radarShape: RadarShape.polygon,
-                  radarBackgroundColor: Colors.transparent,
-                  radarBorderData: BorderSide(
-                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.15),
-                  ),
-                  gridBorderData: BorderSide(
-                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.1),
-                  ),
-                  tickBorderData: const BorderSide(color: Colors.transparent),
-                  tickCount: 4,
-                  ticksTextStyle: const TextStyle(
-                    color: Colors.transparent,
-                    fontSize: 0,
-                  ),
-                  titlePositionPercentageOffset: 0.18,
-                  titleTextStyle: GoogleFonts.manrope(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                  getTitle: (index, angle) => RadarChartTitle(
-                    text: _muscleFocusStats[index].group,
-                  ),
-                  dataSets: [
-                    RadarDataSet(
-                      dataEntries: _muscleFocusStats
-                          .map((s) => RadarEntry(value: s.normalized * 100))
-                          .toList(),
-                      fillColor: AppColors.primary.withValues(alpha: 0.15),
-                      borderColor: AppColors.primary,
-                      borderWidth: 2,
-                      entryRadius: 3,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            _buildMuscleFocusIllustrationRow(),
-            if (_selectedMuscleFocusGroup != null) ...[
-              const SizedBox(height: 16),
-              _buildMuscleFocusDetailCard(
-                _muscleFocusStats.firstWhere(
-                  (s) => s.group == _selectedMuscleFocusGroup,
-                ),
-              ),
-            ],
-            if (_muscleFocusInsight().isNotEmpty) ...[
-              const SizedBox(height: 14),
-              Text(
-                _muscleFocusInsight(),
-                style: GoogleFonts.manrope(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// Tappable illustrations — this is how axis selection actually happens
-  /// (see the note above _loadMuscleFocus: fl_chart's RadarTouchData only
-  /// reports dataset index, not entry/axis index, so it can't tell us
-  /// which muscle group was tapped on the chart itself).
-  Widget _buildMuscleFocusIllustrationRow() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: _muscleFocusStats.map((stat) {
-        final isSelected = _selectedMuscleFocusGroup == stat.group;
-        return Pressable(
-          onTap: () => setState(() => _selectedMuscleFocusGroup = stat.group),
-          child: Column(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isSelected
-                        ? AppColors.primary
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                padding: const EdgeInsets.all(2),
-                child: ClipOval(
-                  child: Image.asset(
-                    'assets/muscle_illustration/${stat.group.toLowerCase()}.png',
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: AppColors.surfaceContainerHigh,
-                      alignment: Alignment.center,
-                      child: Text(
-                        stat.group[0],
-                        style: GoogleFonts.manrope(
-                          fontSize: 12,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildMuscleFocusDetailCard(_MuscleFocusStat stat) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            stat.group,
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Text(
-                '${stat.volume.toStringAsFixed(0)} kg',
-                style: GoogleFonts.manrope(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.onSurface,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '· ${(stat.percentOfTotal * 100).toStringAsFixed(0)}% of total volume',
-                style: GoogleFonts.manrope(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            '${stat.sets} sets · ${stat.exerciseCount} '
-            '${stat.exerciseCount == 1 ? 'exercise' : 'exercises'} · '
-            'trained ${stat.timesTrained}×',
-            style: GoogleFonts.manrope(
-              fontSize: 12,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMuscleFocusEmptyState() {
-    return SizedBox(
-      height: 260,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.radar_rounded,
-              size: 32,
-              color: AppColors.onSurfaceVariant.withValues(alpha: 0.4),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'No workout data yet',
-              style: GoogleFonts.manrope(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.onSurface,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Log a workout to see your muscle focus.',
-              style: GoogleFonts.manrope(
-                fontSize: 11,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Adherence — merges what used to be two separate cards ("Consistency"
-  // and "4-Week Adherence") into one, toggled between windows. Both were
-  // the same ring+message shape measuring the same thing (completed vs
-  // planned sessions) at two different windows, stacked back to back.
-  Widget _buildAdherenceCard() {
-    final bool isWeekView = _adherenceViewIndex == 0;
-    final bool isLoading = isWeekView ? _statsLoading : _adherenceLoading;
-    final int completed = isWeekView ? _workoutsThisWeek : _completedLast4Weeks;
-    final int target = isWeekView ? _plannedThisWeek : _targetLast4Weeks;
-
-    final rate = target > 0 ? (completed / target).clamp(0.0, 1.0) : 0.0;
-    final pct = (rate * 100).round();
-
-    String message;
-    if (target == 0) {
-      message = isWeekView
-          ? 'No plan active this week.'
-          : 'No active plan to compare against.';
-    } else if (pct >= 90) {
-      message = 'Elite level precision.';
-    } else if (pct >= 70) {
-      message = 'Solid consistency. Keep pushing.';
-    } else if (pct >= 50) {
-      message = 'Good start. Build the habit.';
-    } else {
-      message = "Let's get moving. You've got this.";
-    }
-
-    final subtitle = target == 0
-        ? message
-        : isWeekView
-            ? "You've completed $completed of $target scheduled sessions this week. $message"
-            : '$completed of $target planned sessions completed over the last 28 days. $message';
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Adherence',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.onSurface,
-            ),
-          ),
-          Text(
-            'Consistency against your active plan',
-            style: GoogleFonts.manrope(
-              fontSize: 11,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildAdherenceViewToggle(),
-          const SizedBox(height: 24),
-          if (isLoading)
-            const SizedBox(
-              height: 120,
-              child: Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
-              ),
-            )
-          else
-            Column(
-              children: [
-                SizedBox(
-                  width: 120,
-                  height: 120,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 120,
-                        height: 120,
-                        child: CircularProgressIndicator(
-                          value: rate,
-                          strokeWidth: 10,
-                          backgroundColor: AppColors.surfaceContainerHigh,
-                          valueColor:
-                              const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                          strokeCap: StrokeCap.round,
-                        ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '$pct%',
-                            style: GoogleFonts.spaceGrotesk(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.onSurface,
-                            ),
-                          ),
-                          Text(
-                            'GOAL HIT',
-                            style: GoogleFonts.manrope(
-                              fontSize: 9,
-                              letterSpacing: 2,
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  subtitle,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.manrope(
-                    fontSize: 13,
-                    color: AppColors.onSurfaceVariant,
-                    height: 1.5,
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAdherenceViewToggle() {
-    const labels = ['THIS WEEK', '4 WEEKS'];
-    return Row(
-      children: List.generate(labels.length, (i) {
-        final isSelected = _adherenceViewIndex == i;
-        return Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: Pressable(
-            onTap: () => setState(() => _adherenceViewIndex = i),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                labels[i],
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                  color: isSelected
-                      ? AppColors.onPrimary
-                      : AppColors.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ),
-        );
-      }),
-    );
-  }
-
-  /// Tap target for exercise selection, styled like the rest of this
-  /// screen's pill/chip controls instead of a native DropdownButton (which
-  /// pops a system menu that breaks the app's own visual language).
-  Widget _buildExercisePickerField() {
-    return Pressable(
-      onTap: _showExercisePickerSheet,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _selectedExercise ?? '',
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.manrope(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.onSurface,
-                ),
-              ),
-            ),
-            const Icon(Icons.keyboard_arrow_down_rounded,
-                color: AppColors.onSurfaceVariant),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showExercisePickerSheet() async {
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppColors.surfaceContainerHigh,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(ctx).size.height * 0.6,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                child: Text(
-                  'SELECT EXERCISE',
-                  style: GoogleFonts.manrope(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.only(bottom: 8),
-                  itemCount: _loggedExerciseNames.length,
-                  itemBuilder: (context, i) {
-                    final name = _loggedExerciseNames[i];
-                    final isSelected = name == _selectedExercise;
-                    return ListTile(
-                      onTap: () => Navigator.of(ctx).pop(name),
-                      title: Text(
-                        name,
-                        style: GoogleFonts.manrope(
-                          fontSize: 14,
-                          fontWeight:
-                              isSelected ? FontWeight.w700 : FontWeight.w500,
-                          color: isSelected
-                              ? AppColors.primary
-                              : AppColors.onSurface,
-                        ),
-                      ),
-                      trailing: isSelected
-                          ? const Icon(Icons.check_rounded,
-                              color: AppColors.primary)
-                          : null,
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (selected != null && selected != _selectedExercise) {
-      setState(() => _selectedExercise = selected);
-      _loadExerciseProgression(selected);
-    }
-  }
-
-  // Exercise Progression Card
-  Widget _buildProgressionCard() {
-    if (_loggedExerciseNames.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Text(
-          'Log a few workouts to see your strength progression.',
-          style: GoogleFonts.manrope(
-            fontSize: 13,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Exercise Progression',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.onSurface,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Exercise picker
-          _buildExercisePickerField(),
-          const SizedBox(height: 14),
-
-          // Range chips
-          Row(
-            children: List.generate(_progressionRangeLabels.length, (i) {
-              final isSelected = _progressionRangeIndex == i;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Pressable(
-                  onTap: () => _onRangeChanged(i),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppColors.primary
-                          : AppColors.surfaceContainerHigh,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      _progressionRangeLabels[i],
-                      style: GoogleFonts.manrope(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                        color: isSelected
-                            ? AppColors.onPrimary
-                            : AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 20),
-
-          // Chart
-          SizedBox(
-            height: 200,
-            child: _progressionLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppColors.primary),
-                  )
-                : _progressionData.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No logs for this exercise in the selected range.',
-                          style: GoogleFonts.manrope(
-                            fontSize: 12,
-                            color: AppColors.onSurfaceVariant,
-                          ),
-                        ),
-                      )
-                    : _buildProgressionChart(),
-          ),
-          const SizedBox(height: 12),
-
-          // Legend
-          Row(
-            children: [
-              _buildLegendDot(AppColors.primary, 'Max Weight (kg)'),
-              const SizedBox(width: 16),
-              _buildLegendDot(const Color(0xFFE8A87C), 'RPE (1-10)'),
-            ],
-          ),
-          if (_isPlateaued) ...[
-            const SizedBox(height: 12),
-            _buildPlateauNotice(),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// Passive-only surfacing (no toast/popup) — visible purely by opening
-  /// this exercise's history on the Coach screen. See
-  /// AdaptService.detectPlateau for the underlying rule.
-  Widget _buildPlateauNotice() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.onSurfaceVariant.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.trending_flat, size: 16, color: AppColors.onSurfaceVariant),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              'Plateau: no session in the last 4 has beaten the one before it '
-              'by 2% or more.',
-              style: GoogleFonts.manrope(
-                fontSize: 12,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProgressionChart() {
-    final maxWeight = _progressionData
-        .map((p) => p['maxWeight'] as double)
-        .reduce((a, b) => a > b ? a : b);
-    final chartMaxY = maxWeight <= 0 ? 10.0 : maxWeight * 1.2;
-
-    final weightSpots = <FlSpot>[];
-    final rpeSpots = <FlSpot>[]; // RPE scaled onto the weight axis for display
-
-    for (int i = 0; i < _progressionData.length; i++) {
-      final point = _progressionData[i];
-      final weight = point['maxWeight'] as double;
-      final rpe = point['rpe'] as double;
-      weightSpots.add(FlSpot(i.toDouble(), weight));
-      rpeSpots.add(FlSpot(i.toDouble(), (rpe / 10) * chartMaxY));
-    }
-
-    return LineChart(
-      LineChartData(
-        minY: 0,
-        maxY: chartMaxY,
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: chartMaxY / 4,
-          getDrawingHorizontalLine: (_) => FlLine(
-            color: AppColors.outlineVariant.withValues(alpha: 0.15),
-            strokeWidth: 1,
-          ),
-        ),
-        titlesData: FlTitlesData(
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 34,
-              interval: chartMaxY / 4,
-              getTitlesWidget: (value, meta) => Text(
-                value.toStringAsFixed(0),
-                style: GoogleFonts.manrope(
-                  fontSize: 9,
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 24,
-              interval: (_progressionData.length / 4).clamp(1, double.infinity),
-              getTitlesWidget: (value, meta) {
-                final idx = value.toInt();
-                if (idx < 0 || idx >= _progressionData.length) {
-                  return const SizedBox.shrink();
-                }
-                final date = _progressionData[idx]['date'] as DateTime;
-                return Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    '${date.day}/${date.month}',
-                    style: GoogleFonts.manrope(
-                      fontSize: 9,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        lineTouchData: LineTouchData(
-          touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => AppColors.surfaceContainerHigh,
-            getTooltipItems: (spots) {
-              return spots.map((spot) {
-                final idx = spot.x.toInt();
-                if (idx < 0 || idx >= _progressionData.length) return null;
-                final point = _progressionData[idx];
-                final isWeightLine = spot.barIndex == 0;
-                return LineTooltipItem(
-                  isWeightLine
-                      ? '${point['maxWeight']} kg'
-                      : 'RPE ${point['rpe']}',
-                  GoogleFonts.manrope(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: isWeightLine ? AppColors.primary : const Color(0xFFE8A87C),
-                  ),
-                );
-              }).whereType<LineTooltipItem>().toList();
-            },
-          ),
-        ),
-        lineBarsData: [
-          LineChartBarData(
-            spots: weightSpots,
-            isCurved: true,
-            color: AppColors.primary,
-            barWidth: 2.5,
-            dotData: const FlDotData(show: true),
-            belowBarData: BarAreaData(
-              show: true,
-              color: AppColors.primary.withValues(alpha: 0.08),
-            ),
-          ),
-          LineChartBarData(
-            spots: rpeSpots,
-            isCurved: true,
-            color: const Color(0xFFE8A87C),
-            barWidth: 2,
-            dotData: const FlDotData(show: true),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Reset Plan
-  Widget _buildResetPlanButton() {
-    return Column(
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded,
-                color: AppColors.error, size: 18),
-            const SizedBox(width: 8),
-            Text(
-              'Protocol Reset',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.error,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'This will erase your current AI-adapted plan and its accumulated adjustments. Use this for a fresh start, or if your training goals have changed.',
-          style: GoogleFonts.manrope(
-            fontSize: 13,
-            color: AppColors.onSurfaceVariant,
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: () => PlanResetFlow.start(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error.withValues(alpha: 0.15),
-              foregroundColor: AppColors.error,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-            child: Text(
-              'RESET WORKOUT PLAN',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.5,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -2716,17 +554,22 @@ class _CoachScreenState extends State<CoachScreen> {
       );
     }
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-      children: [
-        _buildHeatmapCard(),
-        const SizedBox(height: 16),
-        _buildRecoveryStatusCard(),
-        const SizedBox(height: 16),
-        _buildInjuryActionButtons(),
-        const SizedBox(height: 16),
-        _buildCoachInsightCard(),
-      ],
+    return RefreshIndicator(
+      onRefresh: _loadRecovery,
+      color: AppColors.primary,
+      backgroundColor: AppColors.surfaceContainerLow,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        children: [
+          _buildReadinessCard(),
+          const SizedBox(height: 14),
+          _buildHeatmapCard(),
+          const SizedBox(height: 14),
+          _buildRecoveryStatusCard(),
+          const SizedBox(height: 14),
+          _buildCoachInsightCard(),
+        ],
+      ),
     );
   }
 
@@ -2739,7 +582,7 @@ class _CoachScreenState extends State<CoachScreen> {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
       children: [
         _buildBodyOverviewRow(),
         const SizedBox(height: 16),
@@ -2873,13 +716,19 @@ class _CoachScreenState extends State<CoachScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  'Weight Journey',
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.onSurface,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Weight Journey',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                    if (_weightRecords.length >= 2) _buildWeightChange(),
+                  ],
                 ),
               ),
               Pressable(
@@ -2926,10 +775,17 @@ class _CoachScreenState extends State<CoachScreen> {
 
                   return SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
+                    // Start at the newest entries — the latest weight is
+                    // the one that matters; older ones are a scroll back.
+                    reverse: true,
                     child: SizedBox(
                       width: contentWidth,
                       child: LineChart(
                         LineChartData(
+                          // Inset both ends so the edge dots and their
+                          // date labels aren't clipped.
+                          minX: -0.4,
+                          maxX: _weightRecords.length - 0.6,
                           minY: minY - yPad,
                           maxY: maxY + yPad,
                           gridData: const FlGridData(show: false),
@@ -2948,16 +804,25 @@ class _CoachScreenState extends State<CoachScreen> {
                               sideTitles: SideTitles(
                                 showTitles: true,
                                 reservedSize: 22,
+                                interval: 1,
                                 getTitlesWidget: (value, meta) {
                                   final i = value.toInt();
-                                  if (i < 0 || i >= _weightRecords.length) {
+                                  final n = _weightRecords.length;
+                                  // First, middle and last only — every
+                                  // date at once ran together.
+                                  if (i < 0 ||
+                                      i >= n ||
+                                      value != i ||
+                                      !(i == 0 || i == n - 1 || (n > 4 && i == n ~/ 2))) {
                                     return const SizedBox.shrink();
                                   }
                                   final d = _weightRecords[i].date;
-                                  return Padding(
-                                    padding: const EdgeInsets.only(top: 6),
+                                  return SideTitleWidget(
+                                    meta: meta,
+                                    space: 6,
+                                    fitInside: SideTitleFitInsideData.fromTitleMeta(meta),
                                     child: Text(
-                                      '${_kMonthAbbrev[d.month - 1]} ${d.day}',
+                                      '${d.day} ${_kMonthAbbrev[d.month - 1]}',
                                       style: GoogleFonts.manrope(
                                         fontSize: 9,
                                         color: AppColors.onSurfaceVariant,
@@ -3018,6 +883,26 @@ class _CoachScreenState extends State<CoachScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  /// "−2.4 kg since 3 JUL" — the whole journey in one line.
+  Widget _buildWeightChange() {
+    final first = _weightRecords.first;
+    final change = _weightRecords.last.weightKg - first.weightKg;
+    final text = change.abs() < 0.05
+        ? 'No change'
+        : '${change > 0 ? '+' : '−'}${change.abs().toStringAsFixed(1)} kg';
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Text(
+        '$text since ${first.date.day} ${_kMonthAbbrev[first.date.month - 1]}',
+        style: GoogleFonts.manrope(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: AppColors.onSurfaceVariant,
+        ),
       ),
     );
   }
@@ -3083,31 +968,42 @@ class _CoachScreenState extends State<CoachScreen> {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Row(
                     children: [
-                      Expanded(
-                        child: Text(
-                          r.exerciseName,
-                          style: GoogleFonts.manrope(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.onSurface,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        '${r.weightKg.toStringAsFixed(0)} kg × ${r.reps}',
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onSurface,
-                        ),
+                      ExerciseThumb(
+                        asset: findExerciseByName(r.exerciseName)?.thumbnailAsset,
+                        size: 40,
                       ),
                       const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              r.exerciseName,
+                              style: GoogleFonts.manrope(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.onSurface,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '${r.achievedAt.day} ${_kMonthAbbrev[r.achievedAt.month - 1]}',
+                              style: GoogleFonts.manrope(
+                                fontSize: 11,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       Text(
-                        '${_kMonthAbbrev[r.achievedAt.month - 1]} ${r.achievedAt.day}',
-                        style: GoogleFonts.manrope(
-                          fontSize: 11,
-                          color: AppColors.onSurfaceVariant,
+                        r.weightKg > 0
+                            ? '${formatKg(r.weightKg)} kg × ${r.reps}'
+                            : '${r.reps} reps',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurface,
                         ),
                       ),
                     ],
@@ -3305,42 +1201,210 @@ class _CoachScreenState extends State<CoachScreen> {
     );
   }
 
-  // Recovery Status List
+  // Injuries — log a new one, or move one on (active → recovering →
+  // recovered) right from its row. Replaces the separate LOG / MARK
+  // RECOVERED tiles and the extra sheet the second one opened.
   Widget _buildRecoveryStatusCard() {
-    if (_injuries.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Text(
-          'No injuries logged. Log an injury if you experience pain during training.',
-          style: GoogleFonts.manrope(
-              fontSize: 13, color: AppColors.onSurfaceVariant),
-        ),
-      );
-    }
-
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Injuries',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+              ),
+              Pressable(
+                onTap: _openLogInjuryScreen,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '+ Log injury',
+                    style: GoogleFonts.manrope(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onPrimary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (_injuries.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Text(
+                'Nothing logged. If something hurts during training, log it — your plan will work around it.',
+                style: GoogleFonts.manrope(
+                    fontSize: 13, height: 1.5, color: AppColors.onSurfaceVariant),
+              ),
+            )
+          else
+            ..._injuries.map((injury) => _buildInjuryRow(injury)),
+        ],
+      ),
+    );
+  }
+
+  // Readiness — which muscle groups are fresh to train, from the same
+  // muscleRecovery data (and injuries) that colour the body map below.
+  static const _injuryRegionGroup = {
+    'chest': 'Chest',
+    'upperBack': 'Back',
+    'lowerBack': 'Back',
+    'neck': 'Back',
+    'leftShoulder': 'Shoulders',
+    'rightShoulder': 'Shoulders',
+    'leftArm': 'Arms',
+    'rightArm': 'Arms',
+    'core': 'Core',
+    'leftHip': 'Glutes',
+    'rightHip': 'Glutes',
+    'leftKnee': 'Legs',
+    'rightKnee': 'Legs',
+    'leftAnkle': 'Legs',
+    'rightAnkle': 'Legs',
+  };
+
+  /// (state, days since trained) — state is one of ready, recovering,
+  /// fatigued, injured, unknown.
+  (String, int?) _readinessOf(String group) {
+    final injured = _injuries.any((i) =>
+        i['status'] != 'recovered' && _injuryRegionGroup[i['region']] == group);
+    final doc = _muscleRecoveryData[group];
+    final lastTrained = DateTime.tryParse(doc?['lastTrained'] as String? ?? '');
+    final daysAgo = lastTrained == null
+        ? null
+        : DateTime.now().difference(lastTrained).inDays;
+    if (injured) return ('injured', daysAgo);
+    if (daysAgo == null || daysAgo > kMuscleRecoveryStaleDays) return ('unknown', daysAgo);
+    final fatigue = (doc?['fatigueScore'] as num?)?.toDouble() ?? 0;
+    if (fatigue >= kHeatmapHighFatigueThreshold) return ('fatigued', daysAgo);
+    if (fatigue >= kHeatmapLowFatigueThreshold) return ('recovering', daysAgo);
+    return ('ready', daysAgo);
+  }
+
+  Widget _buildReadinessCard() {
+    const order = ['ready', 'recovering', 'fatigued', 'injured', 'unknown'];
+    final groups = kBroadMuscleGroupToHeatmapMuscles.keys
+        .map((g) => (g, _readinessOf(g)))
+        .toList()
+      ..sort((a, b) => order.indexOf(a.$2.$1).compareTo(order.indexOf(b.$2.$1)));
+    final ready = groups.where((g) => g.$2.$1 == 'ready').map((g) => g.$1).toList();
+    final resting = groups
+        .where((g) => g.$2.$1 == 'fatigued' || g.$2.$1 == 'recovering')
+        .map((g) => g.$1)
+        .toList();
+    final unknown = groups.every((g) => g.$2.$1 == 'unknown' || g.$2.$1 == 'injured');
+
+    final String summary;
+    if (unknown) {
+      summary = 'Train this week and readiness for each muscle group shows up here.';
+    } else if (resting.isEmpty) {
+      summary = ready.isEmpty
+          ? 'Nothing has been trained recently.'
+          : 'Everything you\'ve trained recently has recovered.';
+    } else {
+      summary = '${resting.join(', ')} ${resting.length == 1 ? 'is' : 'are'} still recovering'
+          '${ready.isEmpty ? '.' : ' — ${ready.take(3).join(', ')} ${ready.length == 1 ? 'is' : 'are'} good to go.'}';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'READINESS',
+                  style: GoogleFonts.manrope(
+                      fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5, color: AppColors.onSurfaceVariant),
+                ),
+              ),
+              Text(
+                '${ready.length} of ${groups.length} ready',
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.onSurface),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [for (final (group, state) in groups) _buildReadinessChip(group, state.$1, state.$2)],
+          ),
+          const SizedBox(height: 12),
           Text(
-            'Recovery Status',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.onSurface,
+            summary,
+            style: GoogleFonts.manrope(fontSize: 12.5, height: 1.45, color: AppColors.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReadinessChip(String group, String state, int? daysAgo) {
+    final color = switch (state) {
+      'ready' => AppColors.primary,
+      'recovering' => const Color(0xFFE8A87C),
+      'fatigued' || 'injured' => AppColors.error,
+      _ => _noDataColor,
+    };
+    final detail = switch (state) {
+      'injured' => 'injured',
+      'unknown' => daysAgo == null ? 'no data' : '${daysAgo}d ago',
+      _ => daysAgo == 0 ? 'today' : '${daysAgo}d ago',
+    };
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 6, 10, 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: state == 'unknown' ? 0.06 : 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            group,
+            style: GoogleFonts.manrope(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: state == 'unknown' ? AppColors.onSurfaceVariant : AppColors.onSurface,
             ),
           ),
-          const SizedBox(height: 16),
-          ..._injuries.map((injury) => _buildInjuryRow(injury)),
+          const SizedBox(width: 5),
+          Text(detail, style: GoogleFonts.manrope(fontSize: 10.5, color: AppColors.onSurfaceVariant)),
         ],
       ),
     );
@@ -3399,13 +1463,14 @@ class _CoachScreenState extends State<CoachScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label,
-                  style: GoogleFonts.manrope(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.onSurface)),
+              Expanded(
+                child: Text(label,
+                    style: GoogleFonts.manrope(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurface)),
+              ),
               Text(
                 statusText,
                 style: GoogleFonts.manrope(
@@ -3414,6 +1479,13 @@ class _CoachScreenState extends State<CoachScreen> {
                   color: statusColor,
                 ),
               ),
+              if (status != 'recovered') ...[
+                const SizedBox(width: 10),
+                _buildInjuryStepButton(
+                  id: injury['id'] as String,
+                  next: status == 'active' ? 'recovering' : 'recovered',
+                ),
+              ],
             ],
           ),
           if (recoverySubtitle != null) ...[
@@ -3441,58 +1513,53 @@ class _CoachScreenState extends State<CoachScreen> {
     );
   }
 
-  // Action Buttons
-  Widget _buildInjuryActionButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildActionBtn(
-            icon: Icons.add_circle_outline_rounded,
-            label: 'LOG NEW\nINJURY',
-            onTap: _openLogInjuryScreen,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildActionBtn(
-            icon: Icons.check_circle_outline_rounded,
-            label: 'MARK\nRECOVERED',
-            onTap: _showMarkRecoveredSheet,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionBtn({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
+  /// Moves an injury to its next status in place, with a spinner while
+  /// the plan regenerates around it.
+  Widget _buildInjuryStepButton({required String id, required String next}) {
+    final busy = _updatingInjuryId == id;
     return Pressable(
-      onTap: onTap,
+      onTap: _updatingInjuryId != null
+          ? null
+          : () async {
+              HapticFeedback.selectionClick();
+              setState(() => _updatingInjuryId = id);
+              try {
+                await _updateInjuryStatus(id, next);
+              } catch (e) {
+                debugPrint('CoachScreen injury update failed: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Couldn't update that injury. Please try again.",
+                          style: GoogleFonts.manrope()),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                }
+              } finally {
+                if (mounted) setState(() => _updatingInjuryId = null);
+              }
+            },
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(20),
+          color: AppColors.primary.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(10),
         ),
-        child: Column(
-          children: [
-            Icon(icon, color: AppColors.primary, size: 28),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.manrope(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.5,
-                color: AppColors.onSurface,
+        child: busy
+            ? const SizedBox.square(
+                dimension: 12,
+                child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.primary),
+              )
+            : Text(
+                next == 'recovering' ? 'MARK RECOVERING' : 'MARK RECOVERED',
+                style: GoogleFonts.manrope(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: AppColors.primary,
+                ),
               ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -3566,101 +1633,6 @@ class _CoachScreenState extends State<CoachScreen> {
     // the screen closes), so always refresh on return rather than relying
     // on a pop result — that covers the back button/gesture too.
     await _loadRecovery();
-  }
-
-  Future<void> _showMarkRecoveredSheet() async {
-    final activeInjuries = _injuries
-        .where((i) => i['status'] != 'recovered')
-        .toList();
-
-    if (activeInjuries.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No active injuries to update.',
-              style: GoogleFonts.manrope()),
-          backgroundColor: AppColors.surfaceContainerHigh,
-        ),
-      );
-      return;
-    }
-
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surfaceContainerLow,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('UPDATE RECOVERY',
-                style: GoogleFonts.spaceGrotesk(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.onSurface)),
-            const SizedBox(height: 20),
-            ...activeInjuries.map((injury) {
-              final label = injury['label'] as String? ?? 'Unknown';
-              final status = injury['status'] as String? ?? 'active';
-              final id = injury['id'] as String;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(label,
-                            style: GoogleFonts.manrope(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.onSurface)),
-                      ),
-                      // Toggle between active → recovering → recovered
-                      Pressable(
-                        onTap: () async {
-                          final nextStatus = status == 'active'
-                              ? 'recovering'
-                              : 'recovered';
-                          await _updateInjuryStatus(id, nextStatus);
-                          if (ctx.mounted) Navigator.pop(ctx);
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            status == 'active' ? 'RECOVERING' : 'RECOVERED',
-                            style: GoogleFonts.manrope(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> _updateInjuryStatus(String injuryId, String newStatus) async {

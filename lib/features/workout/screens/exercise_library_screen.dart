@@ -1,7 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../onboarding/services/user_profile_service.dart';
 import '../data/exercise_data.dart';
+import '../services/workout_plan_service.dart';
 import 'exercise_detail_sheet.dart';
 import '../../../shared/widgets/pressable.dart';
 
@@ -26,10 +29,88 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
     'Advanced',
   ];
 
+  bool _myEquipmentOnly = false;
+  bool _formCheckOnly = false;
+
+  /// The user's equipment (onboarding ids) — null until loaded. The MY
+  /// EQUIPMENT filter only appears once it's known (and isn't "full gym").
+  List<String>? _userEquipment;
+
+  /// The active plan, for IN PLAN badges and adding to a day.
+  Map<String, dynamic>? _plan;
+
+  /// Exercise name → the plan days (1 = Monday) it's on.
+  Map<String, List<int>> _inPlan = const {};
+
+  bool get _canFilterEquipment =>
+      _userEquipment != null &&
+      _userEquipment!.isNotEmpty &&
+      !_userEquipment!.contains('fullGym');
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPlan();
+    _loadEquipment();
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  // Both best-effort: the library works without either.
+  Future<void> _loadPlan() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final plan = await WorkoutPlanService().getActivePlan(uid);
+      if (!mounted) return;
+      final inPlan = <String, List<int>>{};
+      for (final day
+          in (plan?['days'] as List? ?? const [])
+              .cast<Map<String, dynamic>>()) {
+        if (day['dayType'] != 'workout') continue;
+        for (final ex
+            in (day['exercises'] as List? ?? const [])
+                .cast<Map<String, dynamic>>()) {
+          final name = ex['exerciseName'] as String?;
+          if (name != null) (inPlan[name] ??= []).add(day['dayNumber'] as int);
+        }
+      }
+      setState(() {
+        _plan = plan;
+        _inPlan = inPlan;
+      });
+    } catch (e) {
+      debugPrint('Exercise library: plan load failed: $e');
+    }
+  }
+
+  Future<void> _loadEquipment() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final profile = await UserProfileService().getUserProfile(uid);
+      final equipment = (profile?['equipment'] as List?)?.cast<String>();
+      if (mounted && equipment != null) {
+        setState(() => _userEquipment = equipment);
+      }
+    } catch (e) {
+      debugPrint('Exercise library: equipment load failed: $e');
+    }
+  }
+
+  Future<void> _openDetail(ExerciseData exercise) async {
+    final added = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => ExerciseDetailSheet(exercise: exercise, plan: _plan),
+    );
+    // Added to a day — refresh the IN PLAN badges.
+    if (added == true) _loadPlan();
   }
 
   // Filtered list — computed on every build based on current filter state
@@ -44,19 +125,32 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
           _searchQuery.isEmpty ||
           ex.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           ex.muscleGroup.toLowerCase().contains(_searchQuery.toLowerCase());
-      return matchesMuscle && matchesDifficulty && matchesSearch;
+      final matchesEquipment =
+          !_myEquipmentOnly ||
+          !_canFilterEquipment ||
+          equipmentMatches(ex.equipment, _userEquipment!);
+      final matchesFormCheck = !_formCheckOnly || ex.hasPoseDetection;
+      return matchesMuscle &&
+          matchesDifficulty &&
+          matchesSearch &&
+          matchesEquipment &&
+          matchesFormCheck;
     }).toList();
   }
 
   bool get _hasActiveFilters =>
       _selectedMuscle != MuscleGroups.all ||
       _selectedDifficulty != 'All' ||
-      _searchQuery.isNotEmpty;
+      _searchQuery.isNotEmpty ||
+      _myEquipmentOnly ||
+      _formCheckOnly;
 
   void _clearFilters() {
     setState(() {
       _selectedMuscle = MuscleGroups.all;
       _selectedDifficulty = 'All';
+      _myEquipmentOnly = false;
+      _formCheckOnly = false;
       _searchQuery = '';
       _searchController.clear();
     });
@@ -93,7 +187,11 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
                 childAspectRatio: 0.82,
               ),
               delegate: SliverChildBuilderDelegate(
-                (_, i) => _ExerciseCard(exercise: exercises[i]),
+                (_, i) => _ExerciseCard(
+                  exercise: exercises[i],
+                  inPlan: _inPlan.containsKey(exercises[i].name),
+                  onTap: () => _openDetail(exercises[i]),
+                ),
                 childCount: exercises.length,
               ),
             ),
@@ -200,49 +298,112 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
   Widget _buildDifficultyFilterRow() {
     return SizedBox(
       height: 32,
-      child: ListView.builder(
+      child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 24),
-        itemCount: _difficultyFilters.length,
-        itemBuilder: (_, i) {
-          final diff = _difficultyFilters[i];
-          final isSelected = _selectedDifficulty == diff;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Pressable(
-              onTap: () => setState(() => _selectedDifficulty = diff),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppColors.primary.withValues(alpha: 0.15)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(48),
-                  border: Border.all(
-                    color: isSelected
-                        ? AppColors.primary
-                        : AppColors.outlineVariant.withValues(alpha: 0.4),
-                  ),
-                ),
-                child: Text(
-                  diff,
-                  style: GoogleFonts.manrope(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: isSelected
-                        ? AppColors.primary
-                        : AppColors.onSurfaceVariant,
-                  ),
+        children: [
+          if (_canFilterEquipment)
+            _buildToggleChip(
+              icon: Icons.fitness_center_rounded,
+              label: 'My equipment',
+              selected: _myEquipmentOnly,
+              onTap: () => setState(() => _myEquipmentOnly = !_myEquipmentOnly),
+            ),
+          _buildToggleChip(
+            icon: Icons.camera_alt_rounded,
+            label: 'Form check',
+            selected: _formCheckOnly,
+            onTap: () => setState(() => _formCheckOnly = !_formCheckOnly),
+          ),
+          Center(
+            child: Container(
+              width: 1,
+              height: 18,
+              margin: const EdgeInsets.only(right: 8),
+              color: AppColors.outlineVariant,
+            ),
+          ),
+          for (final diff in _difficultyFilters) _buildDifficultyChip(diff),
+        ],
+      ),
+    );
+  }
+
+  /// On/off filter — filled when on, so it reads differently from the
+  /// pick-one difficulty chips beside it.
+  Widget _buildToggleChip({
+    required IconData icon,
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final color = selected ? AppColors.onPrimary : AppColors.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Pressable(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.primary : AppColors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(48),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 12, color: color),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: GoogleFonts.manrope(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: color,
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDifficultyChip(String diff) {
+    final isSelected = _selectedDifficulty == diff;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Pressable(
+        onTap: () => setState(() => _selectedDifficulty = diff),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.primary.withValues(alpha: 0.15)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(48),
+            border: Border.all(
+              color: isSelected
+                  ? AppColors.primary
+                  : AppColors.outlineVariant.withValues(alpha: 0.4),
             ),
-          );
-        },
+          ),
+          child: Center(
+            child: Text(
+              diff,
+              style: GoogleFonts.manrope(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -365,11 +526,16 @@ class _ExerciseLibraryScreenState extends State<ExerciseLibraryScreen> {
 // Exercise card
 class _ExerciseCard extends StatelessWidget {
   final ExerciseData exercise;
+  final bool inPlan;
+  final VoidCallback onTap;
 
-  const _ExerciseCard({required this.exercise});
+  const _ExerciseCard({
+    required this.exercise,
+    required this.inPlan,
+    required this.onTap,
+  });
 
-  @override
-  Widget _buildThumbnail() {
+  Widget _buildThumbnail(BuildContext context) {
     // Case 1: local static thumbnail from the curated GIF set
     if (exercise.thumbnailAsset != null) {
       return Image.asset(
@@ -377,7 +543,13 @@ class _ExerciseCard extends StatelessWidget {
         width: double.infinity,
         height: double.infinity,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _thumbnailPlaceholder(),
+        // Some sources are 700px+; a card is about half the screen wide.
+        cacheWidth:
+            (MediaQuery.sizeOf(context).width *
+                    MediaQuery.devicePixelRatioOf(context) /
+                    2)
+                .round(),
+        errorBuilder: (_, _, _) => _thumbnailPlaceholder(),
       );
     }
 
@@ -400,7 +572,7 @@ class _ExerciseCard extends StatelessWidget {
             ),
           );
         },
-        errorBuilder: (_, __, ___) => _thumbnailPlaceholder(),
+        errorBuilder: (_, _, _) => _thumbnailPlaceholder(),
       );
     }
 
@@ -421,9 +593,10 @@ class _ExerciseCard extends StatelessWidget {
     );
   }
 
+  @override
   Widget build(BuildContext context) {
     return Pressable(
-      onTap: () => _openDetail(context),
+      onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLow,
@@ -441,7 +614,7 @@ class _ExerciseCard extends StatelessWidget {
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(20),
                     ),
-                    child: _buildThumbnail(),
+                    child: _buildThumbnail(context),
                   ),
 
                   // Gradient overlay
@@ -489,6 +662,43 @@ class _ExerciseCard extends StatelessWidget {
                       ),
                     ),
                   ),
+
+                  // Already in the user's plan — bottom left
+                  if (inPlan)
+                    Positioned(
+                      left: 10,
+                      bottom: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.check_rounded,
+                              size: 10,
+                              color: AppColors.onPrimary,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              'IN PLAN',
+                              style: GoogleFonts.manrope(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1,
+                                color: AppColors.onPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
 
                   // Pose detection badge — top left
                   if (exercise.hasPoseDetection)
@@ -577,14 +787,5 @@ class _ExerciseCard extends StatelessWidget {
         ),
       );
     });
-  }
-
-  void _openDetail(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => ExerciseDetailSheet(exercise: exercise),
-    );
   }
 }

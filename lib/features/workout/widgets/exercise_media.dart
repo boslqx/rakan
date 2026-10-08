@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/pressable.dart';
+import '../data/exercise_data.dart';
 
 /// Static exercise thumbnail (the demo GIF's first frame) for compact rows.
 ///
@@ -56,6 +59,81 @@ class ExerciseThumb extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A row of exercise thumbnails — as many as fit the width, then "+N".
+/// Tapping a thumbnail plays that exercise's demo full-screen.
+class ExerciseThumbStrip extends StatelessWidget {
+  final List<String> exerciseNames;
+  final double size;
+  final double gap;
+
+  /// Background of the "+N" tile — translucent over photos by default.
+  final Color overflowColor;
+
+  const ExerciseThumbStrip({
+    super.key,
+    required this.exerciseNames,
+    this.size = 46,
+    this.gap = 8,
+    this.overflowColor = const Color(0x66000000),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fits =
+            math.max(1, ((constraints.maxWidth + gap) / (size + gap)).floor());
+        final overflow = exerciseNames.length > fits;
+        final shown =
+            exerciseNames.take(overflow ? fits - 1 : fits).toList();
+
+        return Row(
+          children: [
+            for (final name in shown) ...[
+              _thumb(context, name),
+              SizedBox(width: gap),
+            ],
+            if (overflow)
+              Container(
+                width: size,
+                height: size,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: overflowColor,
+                  borderRadius: BorderRadius.circular(size * 0.24),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                ),
+                child: Text(
+                  '+${exerciseNames.length - shown.length}',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: size * 0.3,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _thumb(BuildContext context, String name) {
+    final data = findExerciseByName(name);
+    final gif = data?.localGifAsset;
+
+    return Semantics(
+      label: name,
+      child: Pressable(
+        onTap: gif == null
+            ? null
+            : () => showExerciseDemoFullscreen(context, gifAsset: gif, title: data!.name),
+        child: ExerciseThumb(asset: data?.thumbnailAsset, size: size),
       ),
     );
   }

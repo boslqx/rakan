@@ -6,6 +6,26 @@ import 'schedule_matcher.dart';
 class WorkoutPlanService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  /// Estimated session length for a day's exercises — the same formula the
+  /// backend plan generator uses (plan_generator._session_minutes): each set
+  /// is 45s under load plus its rest, plus 10 minutes of warm-up and
+  /// cool-down. The app used its own formula (reps × 3s, no warm-up), which
+  /// came out at about half the generator's figure — so any edit to a day
+  /// made its time drop sharply. Keep the two in step.
+  static int estimateDurationMinutes(List<Map<String, dynamic>> exercises) {
+    if (exercises.isEmpty) return 0;
+    const secondsPerWorkingSet = 45;
+    const warmupCooldownMinutes = 10;
+
+    var totalSeconds = 0;
+    for (final ex in exercises) {
+      final sets = ex['sets'] as int? ?? 3;
+      final restSeconds = ex['restSeconds'] as int? ?? 60;
+      totalSeconds += sets * (restSeconds + secondsPerWorkingSet);
+    }
+    return (totalSeconds / 60).round() + warmupCooldownMinutes;
+  }
+
   /// Fetches the active workout plan for a user.
   /// Returns null if no active plan exists.
   Future<Map<String, dynamic>?> getActivePlan(String uid) async {
@@ -264,24 +284,9 @@ class WorkoutPlanService {
         exercisesForDuration.add(exerciseMap);
       }
 
-      // Reuse the exact same deterministic formula from WorkoutDayDetailScreen
-      // (reps × 3s, min 15s per set, plus rest between sets).
-      const secondsPerRep = 3;
-      const minWorkSeconds = 15;
-      int totalSeconds = 0;
-
-      for (final ex in exercisesForDuration) {
-        final sets = ex['sets'] as int? ?? 3;
-        final reps = ex['reps'] as int? ?? 10;
-        final restSeconds = ex['restSeconds'] as int? ?? 60;
-        final workSeconds = (reps * secondsPerRep) < minWorkSeconds
-            ? minWorkSeconds
-            : reps * secondsPerRep;
-        totalSeconds += sets * workSeconds + (sets - 1) * restSeconds;
-      }
-
-      final minutes = (totalSeconds / 60).round();
-      batch.update(dayRef, {'durationMinutes': minutes < 10 ? 10 : minutes});
+      batch.update(dayRef, {
+        'durationMinutes': estimateDurationMinutes(exercisesForDuration),
+      });
     }
 
     await batch.commit();
@@ -290,12 +295,12 @@ class WorkoutPlanService {
     return {...snap.data()!, 'id': snap.id};
   }
 
-  /// Adds a new exercise to a day, appended after its current last
-  /// exercise (by 'order'), and writes a fresh duration estimate for the
-  /// day in the same batch — computed by the caller (the detail screen),
-  /// since only it has the live, up-to-date exercise list to estimate
-  /// from.
-  Future<void> addExerciseToDay({
+  /// Adds a new exercise to a day at [order], and writes a fresh duration
+  /// estimate for the day in the same batch — computed by the caller (the
+  /// detail screen), since only it has the live, up-to-date exercise list
+  /// to estimate from. Returns the new exercise's doc ID, so the caller can
+  /// edit, remove or reorder it right away without reloading the day.
+  Future<String> addExerciseToDay({
     required String uid,
     required String planId,
     required String dayId,
@@ -314,6 +319,32 @@ class WorkoutPlanService {
 
     final batch = _db.batch();
     batch.set(newExerciseRef, {...exercise, 'order': order});
+    batch.update(dayRef, {'durationMinutes': newDurationMinutes});
+    await batch.commit();
+    return newExerciseRef.id;
+  }
+
+  /// Updates one exercise in a day — its sets/reps/rest, or the exercise
+  /// itself when swapping for an alternative — and the day's duration
+  /// estimate, in one batch.
+  Future<void> updateExerciseInDay({
+    required String uid,
+    required String planId,
+    required String dayId,
+    required String exerciseDocId,
+    required Map<String, dynamic> fields,
+    required int newDurationMinutes,
+  }) async {
+    final dayRef = _db
+        .collection('users')
+        .doc(uid)
+        .collection('workoutPlans')
+        .doc(planId)
+        .collection('days')
+        .doc(dayId);
+
+    final batch = _db.batch();
+    batch.update(dayRef.collection('exercises').doc(exerciseDocId), fields);
     batch.update(dayRef, {'durationMinutes': newDurationMinutes});
     await batch.commit();
   }

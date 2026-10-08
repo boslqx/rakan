@@ -5,13 +5,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../data/exercise_data.dart';
 import '../services/workout_plan_service.dart';
+import '../widgets/exercise_media.dart';
 import 'pose_detection_screen.dart';
 import '../../../shared/widgets/pressable.dart';
 
+/// Exercise library detail. Pops with `true` if the exercise was added to
+/// a plan day, so the library can refresh its IN PLAN badges.
 class ExerciseDetailSheet extends StatefulWidget {
   final ExerciseData exercise;
 
-  const ExerciseDetailSheet({super.key, required this.exercise});
+  /// The active plan, when the caller already has it — shows which days
+  /// the exercise is on and saves a reload when adding. Fetched on demand
+  /// otherwise.
+  final Map<String, dynamic>? plan;
+
+  const ExerciseDetailSheet({super.key, required this.exercise, this.plan});
 
   @override
   State<ExerciseDetailSheet> createState() => _ExerciseDetailSheetState();
@@ -21,13 +29,46 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
   WebViewController? _webController;
   bool _videoLoaded = false;
 
+  /// The exercise on show — starts as the one opened, changes when a
+  /// "similar exercise" is tapped.
+  late ExerciseData _exercise = widget.exercise;
+  ScrollController? _scrollController;
+
   @override
   void initState() {
     super.initState();
-    // Only spin up the WebView if we'll actually need it (no GIF, but a real YouTube ID)
-    if (widget.exercise.localGifAsset == null && widget.exercise.youtubeId.isNotEmpty) {
+    _initWebViewIfNeeded();
+  }
+
+  // Only spin up the WebView if we'll actually need it (no GIF, but a real YouTube ID)
+  void _initWebViewIfNeeded() {
+    if (_exercise.localGifAsset == null && _exercise.youtubeId.isNotEmpty) {
+      _videoLoaded = false;
       _initWebView();
     }
+  }
+
+  void _showExercise(ExerciseData exercise) {
+    setState(() {
+      _exercise = exercise;
+      _initWebViewIfNeeded();
+    });
+    _scrollController?.animateTo(0,
+        duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+  }
+
+  /// Plan days (by short name) this exercise is already on.
+  List<String> get _planDayNames {
+    final days = (widget.plan?['days'] as List? ?? const []).cast<Map<String, dynamic>>();
+    return [
+      for (final day in days)
+        if (day['dayType'] == 'workout' &&
+            (day['exercises'] as List? ?? const [])
+                .any((e) => (e as Map)['exerciseName'] == _exercise.name))
+          (day['dayName'] as String? ?? '').length >= 3
+              ? (day['dayName'] as String).substring(0, 3).toUpperCase()
+              : (day['dayName'] as String? ?? '').toUpperCase(),
+    ];
   }
 
   void _initWebView() {
@@ -58,7 +99,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
 <body>
   <div class="wrapper">
     <iframe
-      src="https://www.youtube.com/embed/${widget.exercise.youtubeId}?rel=0&modestbranding=1&playsinline=1"
+      src="https://www.youtube.com/embed/${_exercise.youtubeId}?rel=0&modestbranding=1&playsinline=1"
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
       allowfullscreen>
     </iframe>
@@ -85,7 +126,9 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
       maxChildSize: 0.97,
       minChildSize: 0.5,
       expand: false,
-      builder: (_, scrollController) => Container(
+      builder: (_, scrollController) {
+        _scrollController = scrollController;
+        return Container(
         decoration: const BoxDecoration(
           color: AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -121,10 +164,10 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
                         // Difficulty + category badges
                         Row(
                           children: [
-                            _buildBadge(widget.exercise.difficulty),
+                            _buildBadge(_exercise.difficulty),
                             const SizedBox(width: 8),
-                            _buildBadge(widget.exercise.muscleGroup),
-                            if (widget.exercise.hasPoseDetection) ...[
+                            _buildBadge(_exercise.muscleGroup),
+                            if (_exercise.hasPoseDetection) ...[
                               const SizedBox(width: 8),
                               _buildBadge('AI Form Check',
                                   highlight: true),
@@ -136,7 +179,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
 
                         // Exercise name
                         Text(
-                          widget.exercise.name,
+                          _exercise.name,
                           style: GoogleFonts.spaceGrotesk(
                             fontSize: 32,
                             fontWeight: FontWeight.w700,
@@ -155,7 +198,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
                                 color: AppColors.onSurfaceVariant),
                             const SizedBox(width: 6),
                             Text(
-                              widget.exercise.equipment,
+                              _exercise.equipment,
                               style: GoogleFonts.manrope(
                                 fontSize: 13,
                                 color: AppColors.onSurfaceVariant,
@@ -163,6 +206,25 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
                             ),
                           ],
                         ),
+                        if (_planDayNames.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Icon(Icons.event_available_rounded,
+                                  size: 14, color: AppColors.primary),
+                              const SizedBox(width: 6),
+                              Text(
+                                'IN YOUR PLAN · ${_planDayNames.join(' · ')}',
+                                style: GoogleFonts.manrope(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
 
                         const SizedBox(height: 20),
 
@@ -175,9 +237,9 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
                           children: [
                             // Primary muscle is always first
                             _buildMuscleChip(
-                                widget.exercise.muscleGroup,
+                                _exercise.muscleGroup,
                                 isPrimary: true),
-                            ...widget.exercise.secondaryMuscles
+                            ..._exercise.secondaryMuscles
                                 .map((m) => _buildMuscleChip(m)),
                           ],
                         ),
@@ -211,7 +273,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    widget.exercise.setsRepsGuide,
+                                    _exercise.setsRepsGuide,
                                     style: GoogleFonts.spaceGrotesk(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
@@ -229,7 +291,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
                         // Step-by-step instructions
                         _buildSectionTitle('STEP-BY-STEP'),
                         const SizedBox(height: 12),
-                        ...widget.exercise.steps.asMap().entries.map(
+                        ..._exercise.steps.asMap().entries.map(
                               (entry) => _buildStep(
                                   entry.key + 1, entry.value),
                             ),
@@ -239,10 +301,14 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
                         // Tips
                         _buildTipsCard(),
 
+                        _buildSimilarExercises(),
+
                         // Exercise actions
                         const SizedBox(height: 24),
-                        _buildFormCheckButton(context),
-                        const SizedBox(height: 12),
+                        if (_exercise.hasPoseDetection) ...[
+                          _buildFormCheckButton(context),
+                          const SizedBox(height: 12),
+                        ],
                         _buildAddToWorkoutButton(context),
 
                         const SizedBox(height: 40),
@@ -254,6 +320,63 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
             ),
           ],
         ),
+      );
+      },
+    );
+  }
+
+  /// Other exercises for the same muscle group — tap one to switch this
+  /// sheet to it, for comparing options without backing out.
+  Widget _buildSimilarExercises() {
+    final similar = kExercises
+        .where((e) => e.muscleGroup == _exercise.muscleGroup && e.name != _exercise.name)
+        .take(12)
+        .toList();
+    if (similar.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionTitle('SIMILAR EXERCISES'),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 112,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: similar.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (_, i) {
+                final ex = similar[i];
+                return Pressable(
+                  onTap: () => _showExercise(ex),
+                  child: SizedBox(
+                    width: 76,
+                    child: Column(
+                      children: [
+                        ExerciseThumb(asset: ex.thumbnailAsset, size: 72),
+                        const SizedBox(height: 6),
+                        Text(
+                          ex.name,
+                          maxLines: 2,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.manrope(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            height: 1.2,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -261,7 +384,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
   // Video player with loading state
   Widget _buildVideoPlayer() {
     // Case 1: GIF available — show it directly, no WebView involved
-    if (widget.exercise.localGifAsset != null) {
+    if (_exercise.localGifAsset != null) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: AspectRatio(
@@ -272,7 +395,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Image.asset(
-              widget.exercise.localGifAsset!,
+              _exercise.localGifAsset!,
               fit: BoxFit.contain,
             ),
           ),
@@ -281,7 +404,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
     }
 
     // Case 2: no GIF, but a real YouTube ID — existing WebView behaviour
-    if (widget.exercise.youtubeId.isNotEmpty) {
+    if (_exercise.youtubeId.isNotEmpty) {
       return SizedBox(
         height: MediaQuery.of(context).size.width * 9 / 16,
         child: Stack(
@@ -446,7 +569,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
             ],
           ),
           const SizedBox(height: 12),
-          ...widget.exercise.tips.map(
+          ..._exercise.tips.map(
             (tip) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
@@ -487,7 +610,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => PoseDetectionScreen(
-              exerciseName: widget.exercise.name,
+              exerciseName: _exercise.name,
               targetReps: 10,
             ),
           ),
@@ -534,8 +657,9 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
     if (uid == null) return;
 
     try {
-      final plan = await WorkoutPlanService().getActivePlan(uid);
+      final plan = widget.plan ?? await WorkoutPlanService().getActivePlan(uid);
       if (plan == null || !mounted) return;
+      final planId = plan['id'] as String;
 
       final days = (plan['days'] as List).cast<Map<String, dynamic>>();
       final workoutDays = days.where((d) => d['dayType'] == 'workout').toList();
@@ -564,12 +688,12 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
         ),
         builder: (sheetContext) => _WorkoutDayPickerSheet(
           workoutDays: workoutDays,
-          exerciseName: widget.exercise.name,
+          exerciseName: _exercise.name,
         ),
       );
 
       if (selectedDay != null && mounted) {
-        await _confirmAddToWorkout(context, selectedDay);
+        await _confirmAddToWorkout(context, selectedDay, planId);
       }
     } catch (e) {
       if (mounted) {
@@ -584,7 +708,8 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
     }
   }
 
-  Future<void> _confirmAddToWorkout(BuildContext context, Map<String, dynamic> day) async {
+  Future<void> _confirmAddToWorkout(
+      BuildContext context, Map<String, dynamic> day, String planId) async {
     final dayName = day['dayName'] as String? ?? 'this day';
     final workoutName = day['workoutName'] as String? ?? 'Workout';
 
@@ -597,7 +722,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
             style: GoogleFonts.spaceGrotesk(
                 color: AppColors.onSurface, fontWeight: FontWeight.w600)),
         content: Text(
-          'Add "${widget.exercise.name}" to $dayName ($workoutName)?',
+          'Add "${_exercise.name}" to $dayName ($workoutName)?',
           style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant),
         ),
         actions: [
@@ -617,16 +742,15 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
     );
 
     if (confirm == true && mounted) {
-      await _addExerciseToDay(day, dayName, workoutName);
+      await _addExerciseToDay(day, planId, dayName);
     }
   }
 
   Future<void> _addExerciseToDay(
-      Map<String, dynamic> day, String dayName, String workoutName) async {
+      Map<String, dynamic> day, String planId, String dayName) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    final planId = day['planId'] as String? ?? '';
     final dayId = day['id'] as String? ?? '';
 
     if (planId.isEmpty || dayId.isEmpty) return;
@@ -636,37 +760,15 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
     final exercises = (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final newExercise = {
       'exerciseId': DateTime.now().millisecondsSinceEpoch.toString(),
-      'exerciseName': widget.exercise.name,
-      'muscleGroup': widget.exercise.muscleGroup,
+      'exerciseName': _exercise.name,
+      'muscleGroup': _exercise.muscleGroup,
       'sets': 3,
       'reps': 10,
       'restSeconds': 60,
     };
 
-    // Estimate duration
-    const secondsPerRep = 3;
-    const minWorkSeconds = 15;
-    int totalSeconds = 0;
-    for (final ex in exercises) {
-      final sets = ex['sets'] as int? ?? 3;
-      final reps = ex['reps'] as int? ?? 10;
-      final restSeconds = ex['restSeconds'] as int? ?? 60;
-      final workSeconds = (reps * secondsPerRep) < minWorkSeconds
-          ? minWorkSeconds
-          : reps * secondsPerRep;
-      totalSeconds += sets * workSeconds + (sets - 1) * restSeconds;
-    }
-    // Add new exercise
-    final newSets = newExercise['sets'] as int;
-    final newReps = newExercise['reps'] as int;
-    final newRest = newExercise['restSeconds'] as int;
-    final newWorkSeconds = (newReps * secondsPerRep) < minWorkSeconds
-        ? minWorkSeconds
-        : newReps * secondsPerRep;
-    totalSeconds += newSets * newWorkSeconds + (newSets - 1) * newRest;
-
-    final newDurationMinutes = (totalSeconds / 60).round();
-    final finalDuration = newDurationMinutes < 10 ? 10 : newDurationMinutes;
+    final finalDuration =
+        WorkoutPlanService.estimateDurationMinutes([...exercises, newExercise]);
 
     try {
       await WorkoutPlanService().addExerciseToDay(
@@ -681,12 +783,12 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Added "${widget.exercise.name}" to $dayName',
-                style: GoogleFonts.manrope()),
-            backgroundColor: AppColors.primary,
+            content: Text('Added "${_exercise.name}" to $dayName',
+                style: GoogleFonts.manrope(color: AppColors.onSurface)),
+            backgroundColor: AppColors.surfaceContainerHigh,
           ),
         );
-        Navigator.pop(context); // Close the exercise detail sheet
+        Navigator.pop(context, true); // Close the exercise detail sheet
       }
     } catch (e) {
       if (mounted) {
@@ -761,11 +863,14 @@ class _WorkoutDayPickerSheet extends StatelessWidget {
                   final focusDescription = day['focusDescription'] as String? ?? '';
                   final durationMinutes = day['durationMinutes'] as int? ?? 0;
                   final exercises = (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                  final alreadyIn = exercises.any((e) => e['exerciseName'] == exerciseName);
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
+                    child: Opacity(
+                    opacity: alreadyIn ? 0.5 : 1,
                     child: Pressable(
-                      onTap: () => Navigator.pop(context, day),
+                      onTap: alreadyIn ? null : () => Navigator.pop(context, day),
                       child: Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -781,16 +886,16 @@ class _WorkoutDayPickerSheet extends StatelessWidget {
                             Row(
                               children: [
                                 Container(
-                                  width: 36,
-                                  height: 36,
+                                  width: 44,
+                                  height: 44,
                                   decoration: BoxDecoration(
                                     color: AppColors.primary.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Center(
-                                    child: Text('DAY $dayNumber',
+                                    child: Text('D$dayNumber',
                                         style: GoogleFonts.spaceGrotesk(
-                                            fontSize: 11,
+                                            fontSize: 14,
                                             fontWeight: FontWeight.w700,
                                             color: AppColors.primary)),
                                   ),
@@ -814,8 +919,16 @@ class _WorkoutDayPickerSheet extends StatelessWidget {
                                     ],
                                   ),
                                 ),
-                                const Icon(Icons.arrow_forward_ios_rounded,
-                                    size: 16, color: AppColors.onSurfaceVariant),
+                                if (alreadyIn)
+                                  Text('ALREADY ADDED',
+                                      style: GoogleFonts.manrope(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 1.2,
+                                          color: AppColors.primary))
+                                else
+                                  const Icon(Icons.arrow_forward_ios_rounded,
+                                      size: 16, color: AppColors.onSurfaceVariant),
                               ],
                             ),
                             const SizedBox(height: 10),
@@ -847,6 +960,7 @@ class _WorkoutDayPickerSheet extends StatelessWidget {
                           ],
                         ),
                       ),
+                    ),
                     ),
                   );
                 },
