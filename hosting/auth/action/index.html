@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="strict-origin">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0C0E10">
+  <title>Rakan</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap">
+  <link rel="preload" as="image" href="/assets/logo-mark.png">
+  <link rel="stylesheet" href="/auth/action/style.css">
+  <script type="module" src="/auth/action/action.js"></script>
+</head>
+<body>
+  <main class="page" data-state="loading">
+    <div class="brand">
+      <div class="mark busy" role="img" aria-label="Rakan">
+        <div class="mark-body">
+          <img src="/assets/logo-mark.png" alt="" width="84" height="120">
+          <span class="tone"></span>
+          <span class="sheen"></span>
+        </div>
+        <span class="badge" aria-hidden="true">
+          <svg class="badge-ok" viewBox="0 0 24 24"><path d="M5.5 12.5l4.2 4.2L18.5 8"/></svg>
+          <svg class="badge-err" viewBox="0 0 24 24"><path d="M12 6.5v7"/><path d="M12 17.6v.01"/></svg>
+        </span>
+      </div>
+      <p class="wordmark">RAKAN</p>
+    </div>
+
+    <section class="panel" aria-live="polite">
+      <h1 id="title">One moment…</h1>
+      <p id="message" class="message"></p>
+
+      <form id="reset-form" class="form" hidden novalidate>
+        <!-- Lets password managers update the right saved login. -->
+        <input id="username" type="email" autocomplete="username" hidden readonly>
+
+        <label class="field">
+          <span class="label">New password</span>
+          <span class="input-wrap">
+            <input id="password" type="password" autocomplete="new-password" required>
+            <button type="button" class="reveal" aria-label="Show password" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </span>
+        </label>
+
+        <ul id="rules" class="rules" aria-label="Password requirements"></ul>
+
+        <label class="field">
+          <span class="label">Confirm password</span>
+          <span class="input-wrap">
+            <input id="confirm" type="password" autocomplete="new-password" required>
+          </span>
+        </label>
+        <p id="form-error" class="form-error" role="alert"></p>
+
+        <button id="submit" class="button" type="submit" disabled>
+          <span class="button-label">Update password</span>
+          <span class="spinner" aria-hidden="true"></span>
+        </button>
+      </form>
+
+      <div id="actions" class="actions"></div>
+    </section>
+
+    <footer class="footer">
+      <span>© Rakan</span>
+      <span class="dot" aria-hidden="true"></span>
+      <span>Train your way</span>
+    </footer>
+  </main>
+</body>
+</html>

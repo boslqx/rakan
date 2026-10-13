@@ -1,0 +1,373 @@
+/* Rakan account-action page. Colours mirror lib/core/theme/app_colors.dart. */
+:root {
+  --bg: #0C0E10;
+  --card: #13161A;
+  --card-high: #1C2026;
+  --bright: #252A30;
+  --primary: #C6C6C7;
+  --primary-dim: #9B9EA3;
+  --on-primary: #0C0E10;
+  --text: #E8E8E9;
+  --muted: #9B9EA3;
+  --outline: #2A2D32;
+  --error: #EE7D77;
+  --display: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+  --body: 'Manrope', 'Helvetica Neue', Arial, sans-serif;
+  --ease-out: cubic-bezier(.2, .7, .2, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Soft spotlight from above, like the app's welcome screen. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(60% 45% at 50% 22%, rgba(198, 198, 199, .07), transparent 70%);
+}
+
+.page {
+  position: relative;
+  min-height: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: max(56px, env(safe-area-inset-top)) 20px max(28px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ── Brand mark ──────────────────────────────────────────────────────── */
+
+.brand { text-align: center; margin-bottom: 36px; }
+
+.mark {
+  position: relative;
+  width: 84px;
+  height: 120px;
+  margin: 0 auto;
+  isolation: isolate;
+}
+
+/* Breathing glow. */
+.mark::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 260px;
+  height: 260px;
+  margin: -130px 0 0 -130px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(198, 198, 199, .2) 0, rgba(198, 198, 199, .08) 42%, transparent 70%);
+  z-index: -1;
+  opacity: 0;
+  animation: glow-in .9s .35s var(--ease-out) forwards, breathe 3.6s 1.2s ease-in-out infinite alternate;
+}
+
+.mark-body {
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+  animation: materialise 1.2s var(--ease-out) both;
+}
+
+.mark-body img,
+.mark-body .tone,
+.mark-body .sheen {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.mark-body .tone,
+.mark-body .sheen {
+  -webkit-mask: url(/assets/logo-mark.png) center / contain no-repeat;
+  mask: url(/assets/logo-mark.png) center / contain no-repeat;
+}
+
+/* Brushed-silver toning, same gradient as the app's BrandMark. */
+.mark-body .tone {
+  background: linear-gradient(135deg, #fff 0%, #E4E5E8 50%, var(--primary) 100%);
+  mix-blend-mode: multiply;
+}
+
+/* Light band: travels left → right across a 300%-wide gradient. */
+.mark-body .sheen {
+  background: linear-gradient(105deg,
+    transparent 30%, rgba(255, 255, 255, .25) 43%, rgba(255, 255, 255, .95) 50%,
+    rgba(255, 255, 255, .25) 57%, transparent 70%) 100% 0 / 300% 100% no-repeat;
+  animation: sweep-idle 5.4s 1.2s ease-in-out infinite;
+}
+
+/* While working, the sweep loops back-to-back as the loading cue. */
+.mark.busy .sheen { animation: sweep-busy 1.6s .25s ease-in-out infinite; }
+
+@keyframes materialise {
+  0% { opacity: 0; filter: blur(12px) brightness(.25); transform: translateY(8px) scale(.88); }
+  40% { opacity: 1; }
+  100% { opacity: 1; filter: blur(0) brightness(1); transform: none; }
+}
+@keyframes glow-in { to { opacity: .75; } }
+@keyframes breathe { from { opacity: .75; transform: scale(.96); } to { opacity: 1; transform: scale(1.04); } }
+@keyframes sweep-idle { 0% { background-position: 100% 0; } 22%, 100% { background-position: 0 0; } }
+@keyframes sweep-busy { 0% { background-position: 100% 0; } 75%, 100% { background-position: 0 0; } }
+
+/* Result badge on the mark's corner: a check, or an alert for errors. */
+.badge {
+  position: absolute;
+  right: -14px;
+  bottom: -6px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--primary);
+  box-shadow: 0 0 0 5px var(--bg), 0 8px 24px rgba(0, 0, 0, .5);
+  transform: scale(0);
+  opacity: 0;
+}
+.badge svg {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: var(--on-primary);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: none;
+}
+.badge-ok path { stroke-dasharray: 22; stroke-dashoffset: 22; }
+
+[data-state="success"] .badge,
+[data-state="error"] .badge {
+  animation: badge-pop .5s .1s cubic-bezier(.3, 1.6, .5, 1) forwards;
+}
+[data-state="success"] .badge-ok { display: block; }
+[data-state="success"] .badge-ok path { animation: draw .45s .4s ease-out forwards; }
+[data-state="error"] .badge { background: var(--error); }
+[data-state="error"] .badge-err { display: block; }
+
+@keyframes badge-pop { to { transform: scale(1); opacity: 1; } }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+
+.wordmark {
+  margin: 28px 0 0;
+  padding-left: .55em; /* balance the trailing letter-spacing */
+  font: 500 13px/1 var(--display);
+  letter-spacing: .55em;
+  color: var(--text);
+  opacity: .9;
+}
+
+/* ── Panel ───────────────────────────────────────────────────────────── */
+
+.panel {
+  width: 100%;
+  text-align: center;
+  animation: rise .7s .5s var(--ease-out) both;
+}
+.panel.swap { animation: rise .5s var(--ease-out) both; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+h1 {
+  margin: 0;
+  font: 700 30px/1.12 var(--display);
+  letter-spacing: -.02em;
+  color: var(--text);
+  text-wrap: balance;
+}
+
+.message {
+  margin: 12px auto 0;
+  max-width: 34ch;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+.message:empty { display: none; }
+.message strong { color: var(--text); font-weight: 600; word-break: break-word; }
+
+.actions { margin-top: 28px; display: grid; gap: 14px; justify-items: center; }
+.actions:empty { display: none; }
+
+.button {
+  position: relative;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 48px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font: 600 16px/1 var(--display);
+  letter-spacing: .02em;
+  cursor: pointer;
+  transition: transform .11s ease-out, opacity .11s, background-color .2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.button:hover { background: #D4D4D5; }
+.button:active { transform: scale(.97); opacity: .85; }
+.button:disabled { background: var(--bright); color: #5F6369; cursor: default; transform: none; opacity: 1; }
+.button:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+
+.link {
+  background: none;
+  border: 0;
+  padding: 8px;
+  font: 700 12px/1 var(--body);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--primary);
+  cursor: pointer;
+}
+.link:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: 6px; }
+
+.hint { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* Busy state for buttons. */
+.spinner {
+  display: none;
+  width: 20px;
+  height: 20px;
+  margin: auto;
+  border-radius: 50%;
+  border: 2px solid rgba(12, 14, 16, .25);
+  border-top-color: var(--on-primary);
+  animation: spin .8s linear infinite;
+}
+.button.loading .button-label { visibility: hidden; }
+.button.loading .spinner { display: block; position: absolute; inset: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Reset form ──────────────────────────────────────────────────────── */
+
+.form { margin-top: 28px; text-align: left; }
+
+.field { display: block; margin-bottom: 14px; }
+
+.label {
+  display: block;
+  margin: 0 0 8px 4px;
+  font: 700 11px/1 var(--body);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.input-wrap { position: relative; display: block; }
+
+.input-wrap input {
+  width: 100%;
+  height: 54px;
+  padding: 0 52px 0 18px;
+  border: 1px solid var(--outline);
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--text);
+  font: 500 16px var(--body);
+  transition: border-color .2s, background-color .2s;
+}
+.input-wrap input:focus { outline: none; border-color: var(--primary-dim); background: var(--card-high); }
+.input-wrap input[aria-invalid="true"] { border-color: var(--error); }
+
+.reveal {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  width: 42px;
+  height: 42px;
+  margin-top: -21px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.reveal svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.reveal[aria-pressed="true"] { color: var(--text); }
+.reveal:focus-visible { outline: 2px solid var(--text); }
+
+.rules {
+  list-style: none;
+  margin: 2px 0 18px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--card);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+.rules li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  transition: color .2s;
+}
+.rules li::before {
+  content: '';
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid #3A3E45;
+  transition: background-color .2s, border-color .2s;
+}
+/* Odd one out (the symbol rule) gets the full row instead of wrapping. */
+.rules li:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.rules li.met { color: var(--text); }
+.rules li.met::before {
+  border-color: var(--primary);
+  background: var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4L18 8.5' fill='none' stroke='%230C0E10' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 11px no-repeat;
+}
+
+.form-error { min-height: 20px; margin: 0 0 12px 4px; font-size: 13px; color: var(--error); }
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+
+.footer {
+  margin-top: auto;
+  padding-top: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 600 10.5px/1 var(--body);
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: rgba(155, 158, 163, .55);
+}
+.footer .dot { width: 3px; height: 3px; border-radius: 50%; background: rgba(198, 198, 199, .35); }
+
+@media (max-width: 360px) {
+  .rules { grid-template-columns: 1fr; }
+  h1 { font-size: 26px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .mark-body .sheen { animation: none !important; }
+}

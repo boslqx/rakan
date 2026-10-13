@@ -1,0 +1,644 @@
+# Curated extension of Rakan's exercise library, built from the
+# exercises-dataset (data/exercises.json, media © Gym visual).
+# Read by build_extended_exercises.py — see its docstring for the format:
+#   id | name | difficulty | flags | equipment | secondary | sets | tips
+#   flags: c/i compound/isolation, * backend pool, h hold, u unilateral
+#   '>' line = corrected steps for the entry above (dataset steps were wrong)
+
+## Chest
+0033 | Decline Barbell Bench Press | I | *c | Barbell, Decline Bench | - | - | Hook your feet securely before unracking; Lower the bar to your lower chest, not your neck; Keep your shoulder blades pinned to the bench
+0122 | Wide-Grip Barbell Bench Press | I | *c | Barbell, Bench | - | - | Grip about one and a half times shoulder width; Stop the descent if your shoulders feel pinched; Keep wrists stacked directly over your elbows
+1257 | Reverse-Grip Incline Bench Press | A | c | Barbell, Incline Bench | - | - | Use a spotter — the underhand grip is less secure; Lower the bar to your upper chest; Keep elbows tucked close to your sides
+0036 | Decline Wide-Grip Barbell Press | I | c | Barbell, Decline Bench | - | - | Lock your feet in before lifting the bar off the rack; Touch the bar to your lower chest each rep; Press up and slightly back toward your face
+0045 | Barbell Guillotine Press | A | c | Barbell, Bench | - | - | Use light weight and a spotter — the bar travels toward your neck; Stop an inch above your neck, never bounce; Flare your elbows to stretch the upper chest
+1255 | Decline Barbell Pullover | I | i | Barbell, Decline Bench | Lats, Triceps | - | Keep a soft, fixed bend in your elbows; Only lower as far as your shoulders allow; Pull the bar back over your chest using your chest and lats
+0251 | Chest Dip | I | c | Parallel Bars | - | - | Lean your torso forward to bias the chest over the triceps; Lower until your shoulders are just below your elbows; Don't let your shoulders shrug up toward your ears
+2363 | Wide-Grip Chest Dip | A | c | Parallel Bars | - | - | Only use bars wide enough to keep your elbows comfortable; Lean forward and let your elbows flare slightly; Control the bottom — this position stretches the shoulders
+1273 | Clap Push-Up | A | *c | Bodyweight | - | - | Push explosively enough to leave the floor before clapping; Land with soft, slightly bent elbows; Keep your body rigid from head to heels
+0258 | Clock Push-Up | I | *c | Bodyweight | - | - | Walk your hands around in small steps between reps; Keep your feet planted as the pivot point; Maintain a straight plank the whole way round
+3327 | Planche Push-Up | A | c | Bodyweight | - | 3–5 sets × 1–5 reps | Only attempt once you can hold a solid planche lean; Lean your shoulders well past your hands; Keep your arms locked straight at the top
+0494 | Incline Reverse-Grip Push-Up | B | c | Bodyweight, Bench | - | - | Turn your fingers to point toward your feet; Keep your elbows tight to your ribs; Lower your chest to the edge of the bench
+1297 | Isometric Chest Squeeze | B | ih | Bodyweight | Front Deltoids | - | Press your palms together as hard as you can; Keep breathing steadily while you hold; Hold the squeeze at chest height
+> Stand tall with your feet shoulder-width apart. | Bring your palms together in front of your chest, elbows bent and pointing out to the sides. | Press your palms into each other as hard as you can, squeezing your chest. | Hold the squeeze for the target time while breathing steadily, then relax.
+3211 | Kneeling Push-Up | B | *c | Bodyweight | - | - | Keep a straight line from your knees to your head; Lower your chest, not your hips, toward the floor; Progress to full push-ups once 15 reps feel easy
+> Kneel on the floor and place your hands slightly wider than shoulder-width apart. | Walk your hands forward until your body forms a straight line from your knees to your head. | Bend your elbows at about 45 degrees to lower your chest toward the floor. | Stop when your chest is just above the floor. | Push through your palms to straighten your arms and return to the start.
+3217 | Hindu Push-Up | I | *c | Bodyweight | - | - | Start with your hips high in an inverted V; Swoop your chest close to the floor before pushing up; Reverse the path to return to the start
+1306 | Plyometric Push-Up | A | c | Bodyweight | - | - | Push hard enough for your hands to leave the floor; Land softly and go straight into the next rep; Stop the set when the explosiveness drops off
+0659 | Wall Push-Up | B | *c | Bodyweight | - | - | Step further from the wall to make it harder; Keep your heels down and body straight; Let your chest move toward the wall, not your head
+3145 | Push-Up Plus | B | c | Bodyweight | Serratus Anterior, Triceps | - | Push the floor away hard at the top; Let your upper back round slightly as you protract; Keep your elbows straight during the 'plus'
+3021 | Scapular Push-Up | B | i | Bodyweight | Serratus Anterior, Upper Back | - | Keep your arms locked straight the whole time; Move only your shoulder blades; Go slowly to feel the serratus work
+> Start in a high plank with your hands under your shoulders and arms straight. | Keeping your arms locked, let your chest sink so your shoulder blades squeeze together. | Push the floor away to spread your shoulder blades apart and round your upper back slightly. | Pause, then lower back to the middle and repeat.
+0699 | Shoulder Tap Push-Up | I | *c | Bodyweight | Core | - | Widen your feet for a more stable base; Keep your hips square as you tap; Tap the opposite shoulder after each push-up
+0725 | One-Arm Push-Up | A | *cu | Bodyweight | Core, Triceps | 3–5 sets × 3–8 reps each arm | Set your feet wide to resist rotation; Keep your working hand under your shoulder; Brace your core so your hips don't twist
+> Start in a plank with your feet set wider than shoulder-width apart. | Place one hand under your shoulder and put the other hand behind your back. | Brace your core and lower your chest toward the floor, keeping your hips level. | Press back up to full arm extension. | Complete your reps, then switch arms.
+0806 | Suspension Trainer Push-Up | I | c | TRX | Core, Triceps | - | Lower the straps to make it harder; Keep the handles from drifting apart; Brace your core so your hips don't sag
+1307 | Bosu Ball Push-Up | I | c | Bosu Ball | Core, Triceps | - | Grip the edges of the platform for control; Lower slowly to keep the ball steady; Keep your core tight to stop wobbling
+0151 | Standing Cable Chest Press | B | c | Cable Machine | - | - | Stagger your stance for balance; Press the handles forward in a slight arc; Keep your torso still — don't lunge into each rep
+0158 | High-to-Low Cable Flye | B | i | Cable Machine | - | - | Keep a slight, fixed bend in your elbows; Bring your hands together at hip height; Lean forward slightly from your hips
+> Set both pulleys above head height and attach a handle to each. | Stand in the middle with a staggered stance, leaning slightly forward, arms out wide with a slight bend in your elbows. | Sweep your hands down and together in front of your hips, squeezing your lower chest. | Slowly let your arms return up and out until you feel a stretch across your chest.
+0169 | Incline Cable Press | I | c | Cable Machine, Incline Bench | - | - | Set the pulleys low behind the bench; Press up and slightly together over your upper chest; Control the handles on the way down
+0171 | Incline Cable Flye | B | *i | Cable Machine, Incline Bench | - | - | Set the bench to 30–45 degrees; Keep a soft bend in your elbows; Bring your hands together over your upper chest
+> Set an incline bench between two low pulleys and attach a handle to each. | Lie back on the bench holding the handles above your chest, palms facing each other. | With a slight bend in your elbows, lower your arms out to the sides until you feel a stretch across your chest. | Squeeze your chest to bring the handles back together above your upper chest.
+0179 | Low-to-High Cable Flye | B | *i | Cable Machine | - | - | Start with your hands just below hip height; Finish with your hands at upper-chest height; Keep your elbows softly bent and fixed
+> Set both pulleys at the lowest position and attach a handle to each. | Stand in the middle with a staggered stance, arms down by your sides with a slight bend in your elbows. | Sweep your hands up and together in front of your upper chest, squeezing your chest. | Slowly lower your arms back down and out to the start.
+0185 | Lying Cable Flye | I | i | Cable Machine, Bench | - | - | Set the bench between two low pulleys; Keep the cables under tension at the top; Stop when your elbows reach bench height
+2144 | Seated Cable Chest Press | B | *c | Cable Machine, Bench | - | - | Keep your back flat against the pad; Press the handles at mid-chest height; Don't let your shoulders roll forward at lockout
+1295 | Stability Ball Dumbbell Pullover | I | i | Dumbbell, Stability Ball | Lats, Triceps, Core | - | Rest only your upper back on the ball; Keep your hips lifted level with your knees; Lower the dumbbell only as far as your shoulders allow
+1274 | Deep Push-Up on Dumbbells | I | c | Dumbbells | Triceps, Front Deltoids | - | Use hex dumbbells so they can't roll; Lower your chest below your hands for a deep stretch; Keep your elbows at about 45 degrees
+> Place two hex dumbbells shoulder-width apart and grip their handles. | Step back into a high plank with your body in a straight line. | Lower your chest between the dumbbells, going below hand level for a deep stretch. | Press back up to full arm extension.
+0301 | Decline Dumbbell Bench Press | I | *c | Dumbbells, Decline Bench | - | - | Press the dumbbells up over your lower chest; Bring them down to the sides of your chest; Have a partner hand you the weights if they're heavy
+0302 | Decline Dumbbell Flye | I | *i | Dumbbells, Decline Bench | - | - | Keep a slight bend in your elbows throughout; Lower until you feel a stretch, not pain; Squeeze the dumbbells together over your lower chest
+3545 | Incline Dumbbell Alternating Press | I | c | Dumbbells, Incline Bench | - | - | Keep the resting dumbbell locked out above you; Brace your core so your torso doesn't twist; Lower each dumbbell to the side of your upper chest
+0319 | Incline Dumbbell Flye | B | *i | Dumbbells, Incline Bench | - | - | Set the bench to 30–45 degrees; Keep a soft bend in your elbows; Bring the dumbbells together over your upper chest
+0321 | Incline Dumbbell Hammer Press | B | *c | Dumbbells, Incline Bench | - | - | Keep your palms facing each other throughout; Tuck your elbows slightly toward your ribs; This grip is easier on the shoulders than a standard press
+1281 | Single-Arm Incline Dumbbell Press | I | *cu | Dumbbell, Incline Bench | Core, Triceps | - | Brace your core to stop your body rolling toward the weight; Rest your free hand on your stomach; Press up and slightly inward
+0331 | Incline Dumbbell Twisting Flye | I | i | Dumbbells, Incline Bench | - | - | Start with palms facing each other at the top; Rotate your palms forward as you lower; Twist back as you bring the dumbbells together
+0340 | Dumbbell Hammer-Grip Bench Press | B | *c | Dumbbells, Bench | - | - | Hold the dumbbells with palms facing each other; Keep your elbows close to your sides; Press until your arms are straight but not locked hard
+0343 | Single-Arm Dumbbell Bench Press | I | *cu | Dumbbell, Bench | Core, Triceps | - | Plant both feet firmly to stay balanced; Keep your hips and shoulders flat on the bench; Lower the dumbbell to the side of your chest
+1285 | Single-Arm Dumbbell Flye | I | iu | Dumbbell, Bench | Core | - | Hold the bench with your free hand for stability; Keep your elbow softly bent; Go lighter than you would for a two-arm flye
+1293 | Stability Ball Dumbbell Press | I | c | Dumbbells, Stability Ball | Core, Triceps | - | Rest your upper back on the ball with hips lifted; Keep your feet flat and wide; Press the dumbbells straight up over your chest
+1277 | Stability Ball Dumbbell Flye | I | i | Dumbbells, Stability Ball | Core | - | Keep your hips level with your knees throughout; Use lighter dumbbells than on a bench; Lower only until you feel a chest stretch
+1279 | Single-Arm Incline Dumbbell Flye | I | iu | Dumbbell, Incline Bench | Core | - | Hold the bench with your free hand; Keep a fixed bend in your elbow; Squeeze your chest as the dumbbell rises
+1287 | Single-Arm Decline Dumbbell Press | I | cu | Dumbbell, Decline Bench | Core, Triceps | - | Secure your feet before picking up the weight; Brace your core so you don't roll; Press over your lower chest
+1624 | Reverse-Grip Dumbbell Bench Press | I | c | Dumbbells, Bench | - | - | Turn your palms to face you; Keep your elbows tucked close to your body; This grip shifts more work to the upper chest
+0519 | Kettlebell Alternating Floor Press | I | *c | Kettlebells | - | - | Let your upper arm touch the floor before pressing; Keep the top kettlebell locked out as the other lowers; Keep your wrists straight
+1298 | Single-Arm Kettlebell Floor Press | B | *cu | Kettlebell | Core, Triceps | - | Pause with your upper arm on the floor; Keep your wrist straight with the bell resting on your forearm; Press straight up over your shoulder
+0545 | Kettlebell Plyo Push-Up | A | c | Kettlebells | Core, Triceps | - | Use heavy kettlebells that won't tip over; Push explosively off the floor between the bells; Land with soft elbows back on the handles
+0009 | Assisted Chest Dip Machine | B | *c | Machine | - | - | More counterweight makes the dip easier; Lean forward slightly to target the chest; Lower until your upper arms are parallel to the floor
+1300 | Decline Machine Chest Press | B | *c | Machine | - | - | Set the seat so the handles line up with your lower chest; Keep your back against the pad; Don't let the weight stack touch between reps
+1299 | Incline Machine Chest Press | B | *c | Machine | - | - | Set the seat so the handles are level with your upper chest; Press without locking your elbows hard; Control the return for a full stretch
+3758 | Standing Machine Chest Press | B | c | Machine | - | - | Stand tall with a slight forward lean; Press in line with your mid-chest; Keep your shoulders down and back
+1301 | Machine Inner Chest Press | B | c | Machine | - | - | Use a close, neutral grip; Squeeze your chest hard at full extension; Return slowly to keep tension on the muscle
+1302 | Medicine Ball Chest Pass | B | c | Medicine Ball | Triceps, Core | - | Throw at a solid wall or a partner; Drive the ball from your chest explosively; Catch with soft elbows and go straight into the next rep
+0663 | Medicine Ball Push-Up | I | c | Medicine Ball | Core, Triceps | - | Press your hands firmly into the ball to steady it; Keep your elbows close to your body; Lower your chest to just above the ball
+0748 | Smith Machine Bench Press | B | *c | Smith Machine, Bench | - | - | Line the bar up with your mid-chest; Set the safety stops just above chest height; Keep your shoulder blades squeezed together
+0753 | Smith Machine Decline Bench Press | I | *c | Smith Machine, Decline Bench | - | - | Secure your feet under the pads; Lower the bar to your lower chest; Keep your elbows at about 45 degrees
+0757 | Smith Machine Incline Bench Press | B | *c | Smith Machine, Incline Bench | - | - | Set the bench to 30–45 degrees; Line the bar up with your upper chest; Drive your back into the bench as you press
+1308 | Smith Machine Wide-Grip Bench Press | I | c | Smith Machine, Bench | - | - | Grip wider than shoulder width; Stop if you feel any shoulder pinch at the bottom; Keep your wrists straight over your elbows
+0764 | Smith Machine Reverse-Grip Bench Press | I | c | Smith Machine, Bench | - | - | Grip the bar palms-up, about shoulder-width apart; Keep your elbows tucked tight; Touch the bar to your lower chest
+> Set a flat bench under the Smith machine so the bar lines up with your lower chest. | Lie back and grip the bar palms-up, about shoulder-width apart. | Unrack the bar and lower it to your lower chest, keeping your elbows tucked close to your body. | Press the bar back up until your arms are straight, then re-rack it after your last rep.
+0655 | Stability Ball Push-Up | I | c | Stability Ball | Core, Triceps | - | Place your hands on the sides of the ball; Squeeze the ball to keep it steady; Keep your body in a straight line
+0856 | Plate Svend Press | B | *i | Weight Plate | Front Deltoids | - | Squeeze the plate between your palms throughout; Press straight out at chest height; Use a light plate — the squeeze does the work
+> Stand tall holding a weight plate at your chest, pressed between your palms with your fingers pointing forward. | Squeeze your palms together hard. | Press the plate straight out in front of you until your arms are extended, keeping the squeeze. | Slowly bring the plate back to your chest.
+3216 | Chest Tap Push-Up | I | c | Bodyweight | Core, Triceps | - | Widen your feet to stay stable on one hand; Tap your chest at the top of each rep; Alternate hands with every push-up
+> Start in a high plank with your hands slightly wider than shoulder-width apart. | Lower your chest toward the floor and press back up. | At the top, lift one hand and tap the middle of your chest, keeping your hips still. | Return the hand to the floor and repeat, tapping with the other hand.
+1261 | Decline Cable Press | I | c | Cable Machine, Decline Bench | - | - | Set the pulleys low behind the bench; Press in line with your lower chest; Keep your feet secured throughout
+0303 | Decline Dumbbell Hammer Press | I | c | Dumbbells, Decline Bench | - | - | Keep your palms facing each other; Lower to the sides of your lower chest; Secure your feet before you start
+1254 | Resistance Band Bench Press | B | *c | Resistance Band, Bench | - | - | Anchor the band under the bench; Choose a band that gives tension at the bottom; Press up and slightly together
+1262 | Single-Arm Decline Cable Flye | I | iu | Cable Machine, Decline Bench | Core | - | Hold the bench with your free hand; Keep a soft bend in your elbow; Bring your hand over the centre of your chest
+0989 | Resistance Band Single-Arm Twisting Press | B | cu | Resistance Band | Core, Triceps | - | Let your hips and torso rotate with the press; Step further from the anchor for more tension; Brace your core as you punch forward
+1265 | Single-Arm Incline Cable Press | I | cu | Cable Machine, Incline Bench | Core, Triceps | - | Set the pulley low behind the bench; Brace so your torso doesn't twist; Press up over your upper chest
+0492 | Incline Push-Up Depth Jump | A | c | Bodyweight, Bench | Core, Triceps | - | Drop from the bench to the floor and absorb with bent elbows; Explode back up onto the bench; Only try this once clap push-ups feel solid
+> Start in a push-up position with your hands on a low bench or step. | Push off and drop your hands to the floor on either side of the bench, absorbing the landing with bent elbows. | Immediately press explosively off the floor so your hands come back up onto the bench. | Reset your plank and repeat.
+2462 | Straight Bar Dip | A | c | Bar | Triceps, Front Deltoids | - | Lean your chest over the bar; Keep your elbows tucked as you lower; Press until your arms are straight
+> Jump up to support yourself on a straight bar at hip height, gripping it in front of you with your arms straight. | Lean your chest forward over the bar and bend your elbows to lower your chest toward it. | Press back up until your arms are straight.
+1276 | Single-Arm Decline Dumbbell Flye | I | iu | Dumbbell, Decline Bench | Core | - | Secure your feet before you start; Keep a soft bend in your elbow; Hold the bench with your free hand
+0758 | Smith Machine Reverse-Grip Incline Press | I | c | Smith Machine, Incline Bench | - | - | Grip the bar palms-up at shoulder width; Lower the bar to your upper chest; Keep your elbows tucked
+> Set an incline bench under the Smith machine so the bar lines up with your upper chest. | Grip the bar palms-up, about shoulder-width apart, and unrack it. | Lower the bar to your upper chest, keeping your elbows tucked. | Press back up until your arms are straight.
+
+## Back
+0970 | Band-Assisted Pull-Up | B | *c | Pull-Up Bar, Resistance Band | - | - | Use a thicker band for more help; Pull your elbows down toward your hips; Lower all the way to a dead hang each rep
+0974 | Resistance Band Close-Grip Pulldown | B | *c | Resistance Band | - | - | Anchor the band high and step back for tension; Drive your elbows down to your sides; Keep your chest lifted as you pull
+0983 | Resistance Band Kneeling Single-Arm Pulldown | B | cu | Resistance Band | - | - | Kneel tall with your hips stacked under your shoulders; Pull your elbow down toward your back pocket; Let your arm stretch fully overhead each rep
+0988 | Resistance Band Single-Arm Low Row | B | cu | Resistance Band | - | - | Hinge slightly forward with a flat back; Row the band to your hip, not your chest; Squeeze your shoulder blade back at the end
+1018 | Resistance Band Shrug | B | *i | Resistance Band | Forearms | - | Stand on the middle of the band; Lift your shoulders straight up toward your ears; Don't roll your shoulders in circles
+0073 | Barbell Pullover | I | i | Barbell, Bench | Chest, Triceps | - | Keep your arms nearly straight throughout; Lower until you feel a stretch in your lats; Use a light bar and a controlled tempo
+0049 | Incline Barbell Row | I | c | Barbell, Incline Bench | Biceps, Rear Deltoids | - | Rest your chest on the pad so your lower back stays out of it; Pull the bar to the bottom of the bench pad; Squeeze your shoulder blades together at the top
+0064 | Single-Arm Landmine Row | I | cu | Barbell | Biceps, Core | - | Anchor one end of the bar in a corner or landmine; Hold the bar just behind the plates; Row toward your hip while keeping your torso still
+3017 | Pendlay Row | I | *c | Barbell | Biceps, Lower Back | - | Start every rep from a dead stop on the floor; Keep your torso close to parallel with the floor; Pull explosively to your lower chest
+> Stand with your feet hip-width apart and the barbell over your mid-foot. | Hinge forward until your torso is nearly parallel to the floor and grip the bar slightly wider than shoulder-width. | With a flat back, row the bar explosively to your lower chest. | Lower the bar back to the floor and let it settle before the next rep.
+0118 | Reverse-Grip Barbell Row | I | *c | Barbell | Biceps, Lower Back | - | Grip the bar palms-up at about shoulder width; Pull toward your belly button with elbows tucked; Keep your back flat and chest up
+> Stand with your feet shoulder-width apart, holding a barbell with an underhand grip at about shoulder width. | Hinge at the hips until your torso is at about 45 degrees, knees slightly bent and back flat. | Row the bar to your lower stomach, keeping your elbows close to your sides. | Squeeze your shoulder blades together, then lower the bar under control.
+0095 | Barbell Shrug | B | *i | Barbell | Forearms | - | Lift straight up — don't roll your shoulders; Pause and squeeze at the top; Use straps if your grip gives out first
+0606 | T-Bar Row | I | *c | Machine | Biceps, Lower Back | - | Keep your chest pressed into the pad; Pull your elbows back past your torso; Lower slowly for a full stretch
+3293 | Archer Pull-Up | A | c | Pull-Up Bar | Biceps, Core | 3–5 sets × 3–6 reps each side | Use a very wide grip; Pull toward one hand while the other arm stays straight; Alternate sides each rep
+3297 | Back Lever | A | ih | Pull-Up Bar | Core, Shoulders | - | Learn it in a tucked position first; Keep your arms locked straight; Squeeze your glutes to hold a straight body line
+> Hang from the bar, tuck your knees and rotate backwards so your legs pass between your arms. | Lower your hips until your body is face-down beneath the bar, arms straight. | Extend into a straight, horizontal line (or keep a tuck while learning) and hold. | Tuck back up and return to a hang under control.
+3168 | Bodyweight Squatting Row | B | c | Bodyweight | Biceps, Quads | - | Hold a sturdy post or doorframe with both hands; Sit back into a squat with arms straight; Pull yourself up as you stand
+3165 | Towel Row | B | *c | Bodyweight | Biceps, Rear Deltoids | - | Loop the towel around something that can't move; Walk your feet closer to make it harder; Keep your body straight as you pull in
+> Loop a towel around a sturdy post, railing or wall bar and hold one end in each hand. | Walk your feet toward the anchor and lean back until your arms are straight. | Keep your body straight and pull your chest toward your hands, squeezing your shoulder blades together. | Slowly lower back until your arms are straight again.
+0253 | Neutral-Grip Pull-Up | I | *c | Pull-Up Bar | Biceps, Forearms | - | Grip parallel handles with palms facing each other; Pull until your chin clears your hands; Lower all the way to straight arms
+1327 | Close-Grip Chin-Up | I | c | Pull-Up Bar | Biceps, Forearms | - | Keep your hands about a fist apart, palms facing you; Drive your elbows down and back; Avoid kicking or swinging your legs
+0466 | Sternum Chin-Up | A | c | Pull-Up Bar | Biceps, Rear Deltoids | - | Lean back as you pull; Bring your lower chest to the bar; Squeeze your shoulder blades hard at the top
+0489 | 45-Degree Back Extension | B | *i | Roman Chair | Glutes, Hamstrings | - | Set the pad just below your hip bones; Hinge at the hips with a flat back; Stop when your body is in a straight line — don't over-arch
+0488 | Bench Back Extension | I | i | Bodyweight, Bench | Glutes, Hamstrings | - | Have a partner hold your ankles or hook them securely; Keep your spine neutral as you lift; Stop when your body is level
+> Lie face down on a flat bench with your hips at the end and your upper body hanging off. | Have a partner hold your ankles or hook your feet under something secure. | Cross your arms over your chest and lower your torso toward the floor with a flat back. | Raise your upper body until it is level with your legs, squeezing your glutes and lower back.
+2300 | Bent-Knee Inverted Row | B | *c | Bar | Biceps, Rear Deltoids | - | Set the bar at about waist height; Keep your hips up in line with your shoulders; Pull your chest to the bar
+> Set a bar at about waist height and lie underneath it. | Grip the bar slightly wider than shoulder-width, bend your knees and plant your feet flat on the floor. | Lift your hips so your body forms a straight line from your knees to your shoulders. | Pull your chest up to the bar, squeezing your shoulder blades, then lower with control.
+0631 | Muscle-Up | A | c | Pull-Up Bar | Triceps, Chest | 3–5 sets × 1–5 reps | Pull explosively toward your hips, not your chin; Lean your chest over the bar to transition; Master 10+ strict pull-ups and dips first
+3418 | L-Sit Pull-Up | A | c | Pull-Up Bar | Core, Hip Flexors | - | Hold your legs straight out in front at hip height; Keep the L position throughout the pull; Bend your knees if your hips start to drop
+> Hang from the bar with an overhand grip, slightly wider than shoulder-width. | Raise your straight legs until they are level with your hips, forming an L shape. | Holding the L, pull yourself up until your chin clears the bar. | Lower slowly to a full hang without dropping your legs.
+1352 | Prone Back Extension | B | *i | Bodyweight | Glutes, Hamstrings | - | Keep your hips and legs on the floor; Lift your chest only a few inches; Look at the floor to keep your neck neutral
+0627 | Mixed-Grip Pull-Up | I | c | Pull-Up Bar | Biceps, Forearms | - | Switch which hand is underhand each set; Pull your chest toward the bar; Keep your body from twisting
+> Grip the bar with one palm facing you and the other facing away, hands about shoulder-width apart. | Hang with your arms straight and your core braced. | Pull yourself up until your chin clears the bar, keeping your body square. | Lower to a full hang, and swap grips on your next set.
+0638 | Assisted One-Arm Chin-Up | A | cu | Pull-Up Bar | Biceps, Forearms | 3–5 sets × 1–5 reps each arm | Hold your working wrist with your free hand for help; Keep your body from rotating; Build up from slow negatives
+0688 | Scapular Pull-Up | B | *i | Pull-Up Bar | Lats, Rear Deltoids | - | Keep your arms straight the whole time; Pull your shoulder blades down away from your ears; Hold the top for a second
+> Hang from the bar with an overhand grip and straight arms. | Without bending your elbows, pull your shoulder blades down and back so your body rises a few centimetres. | Pause, then slowly let your shoulders rise back up to a full hang.
+3012 | Scapular Dip | B | i | Parallel Bars | Rear Deltoids, Chest | - | Keep your elbows locked straight; Let your body sink by shrugging up, then press it back up; Move slowly and only through your shoulders
+> Support yourself on parallel bars with your arms straight. | Keeping your elbows locked, let your body sink by letting your shoulders rise toward your ears. | Press your shoulders down to lift your body back up as tall as you can. | Repeat slowly, moving only at the shoulder blades.
+3304 | Skin the Cat | A | c | Pull-Up Bar | Core, Shoulders | 3 sets × 3–5 reps | Only go as far as your shoulders comfortably allow; Move slowly in both directions; Keep your arms straight
+1429 | Wide-Grip Pull-Up | I | *c | Pull-Up Bar | Biceps, Rear Deltoids | - | Grip well outside shoulder width; Pull your chest toward the bar; Lower to a full hang without swinging
+1772 | Supine Elbow Lift | B | *i | Bodyweight | Rear Deltoids, Triceps | - | Drive your elbows straight down into the floor; Squeeze your shoulder blades together at the top; Keep your hips and legs relaxed on the floor
+> Lie on your back with your legs straight and your elbows bent at 90 degrees, close to your sides. | Press your elbows down into the floor to lift your upper back and chest off the ground. | Squeeze your shoulder blades together and hold for a moment. | Slowly lower your upper back to the floor.
+0153 | Cable Crossover Lat Pulldown | I | c | Cable Machine | Biceps, Rear Deltoids | - | Hold the left handle with your right hand and vice versa; Pull your elbows down to your sides; Let your arms rise fully overhead between reps
+> Set both pulleys high and grab each handle with the opposite hand so the cables cross. | Kneel or stand in the middle with your arms extended overhead. | Pull your elbows down and in to your sides, squeezing your lats. | Slowly let your arms return overhead.
+0167 | Kneeling Cable High Row | B | c | Cable Machine | Biceps, Rear Deltoids | - | Set the pulley high so you pull slightly downward; Keep your torso tall and still; Pull the bar to your upper chest
+2616 | Close-Grip V-Bar Lat Pulldown | B | *c | Cable Machine | Biceps, Forearms | - | Lean back slightly and keep your chest up; Pull the handle to your upper chest; Let your arms extend fully at the top
+> Attach a V-bar to the high pulley and sit with your thighs secured under the pads. | Grip the handle with your palms facing each other and arms extended overhead. | Lean back slightly and pull the handle to your upper chest, driving your elbows down and back. | Slowly return until your arms are fully extended.
+3563 | Standing Single-Arm Cable Pulldown | B | *cu | Cable Machine | Biceps, Core | - | Stand side-on and let your arm stretch overhead; Pull your elbow down to your hip; Keep your torso from leaning away
+1356 | Single-Arm Machine High Row | B | cu | Machine | Biceps, Rear Deltoids | - | Keep your chest on the pad; Pull your elbow down and back; Let your shoulder blade stretch forward on the return
+0720 | Side-to-Side Pull-Up | A | c | Pull-Up Bar | Biceps, Core | 3–5 sets × 3–6 reps each side | Pull up toward one hand, then shift across; Keep your body still as you slide; Lower only when you're back in the middle
+> Hang from the bar with a wide overhand grip. | Pull yourself up toward your right hand until your chin is beside it. | Staying at the top, shift your body across to your left hand. | Lower back to a hang from the middle, then repeat starting on the other side.
+1323 | Cable Rope Seated Row | B | c | Cable Machine | Biceps, Rear Deltoids | - | Pull the rope ends apart as they reach your torso; Keep your torso upright; Let your shoulder blades stretch forward on the return
+0218 | Wide-Grip Seated Cable Row | B | *c | Cable Machine | Biceps, Rear Deltoids | - | Pull the bar to your lower chest; Flare your elbows slightly to hit the upper back; Don't rock your torso back and forth
+0220 | Cable Shrug | B | *i | Cable Machine | Forearms | - | Stand close to the pulley so the cable pulls straight down; Shrug straight up and pause; Lower slowly to a full stretch
+0234 | Standing Cable Row | B | c | Cable Machine | Biceps, Core | - | Soften your knees and brace your core; Row to your stomach; Don't let the cable pull your torso forward
+0245 | Reverse-Grip Lat Pulldown | B | *c | Cable Machine | Biceps, Forearms | - | Grip palms-up at about shoulder width; Pull the bar to your upper chest; Drive your elbows down to your sides
+0818 | Neutral-Grip Lat Pulldown | B | *c | Cable Machine | Biceps, Forearms | - | Use parallel handles with palms facing each other; Lean back slightly as you pull; Keep your elbows close to your body
+0293 | Dumbbell Bent-Over Row | B | *c | Dumbbells | Biceps, Lower Back | - | Hinge until your torso is close to parallel; Row the dumbbells to your hips; Keep your neck in line with your spine
+0329 | Incline Dumbbell Shrug | B | i | Dumbbells, Incline Bench | Forearms | - | Lie chest-down on the incline bench; Shrug your shoulders back and up; Hold the top for a second
+> Lie chest-down on a bench set to about 45 degrees, holding a dumbbell in each hand with your arms hanging straight. | Shrug your shoulders up and back toward your ears without bending your elbows. | Hold the squeeze for a moment, then lower slowly.
+1329 | Rotating Dumbbell Bent-Over Row | I | c | Dumbbells | Biceps, Forearms | - | Start with palms facing your legs; Rotate your palms forward as you pull; Keep your back flat throughout
+2327 | Reverse-Grip Dumbbell Row | B | c | Dumbbells | Biceps, Lower Back | - | Hold the dumbbells palms-forward; Keep your elbows close to your sides; Pull toward your hips
+> Hold a dumbbell in each hand with your palms facing forward. | Hinge at the hips with your knees slightly bent and back flat, arms hanging straight. | Row the dumbbells toward your hips, keeping your elbows close to your sides. | Squeeze your shoulder blades together, then lower slowly.
+0406 | Dumbbell Shrug | B | *i | Dumbbells | Forearms | - | Let the dumbbells hang by your sides; Lift your shoulders straight up toward your ears; Hold the squeeze for a second at the top
+3010 | EZ-Bar Pullover | I | i | EZ-Bar, Bench | Chest, Triceps | - | Keep a slight, fixed bend in your elbows; Lower the bar behind your head until your lats stretch; Pull it back over your chest
+1344 | EZ-Bar Reverse-Grip Row | I | c | EZ-Bar | Biceps, Lower Back | - | Hold the bar palms-up on the inner grips; Pull toward your lower stomach; Keep your torso angle fixed
+0522 | Kettlebell Alternating Row | I | c | Kettlebells | Biceps, Core | - | Keep the resting kettlebell hanging still; Don't twist your torso as you row; Row toward your hip
+0541 | Single-Arm Kettlebell Row | B | *cu | Kettlebell | Biceps, Core | - | Brace your free hand on your knee or a bench; Pull your elbow past your torso; Keep your shoulders level
+0548 | Kettlebell Sumo High Pull | I | *c | Kettlebell | Glutes, Shoulders | - | Drive the bell up with your legs first; Lead with your elbows high and wide; Lower the bell under control between reps
+1345 | Kettlebell Bent-Over Row | B | *c | Kettlebells | Biceps, Lower Back | - | Hinge forward with a flat back; Row both kettlebells to your hips; Lower slowly to a full stretch
+0573 | Back Extension Machine | B | i | Machine | Glutes, Hamstrings | - | Set the pad across your upper back; Extend until you're upright, not leaning back; Return slowly with control
+0579 | Machine Lat Pulldown | B | c | Machine | Biceps, Rear Deltoids | - | Secure your thighs under the pads; Pull the handles to your upper chest; Control the handles on the way up
+0581 | Machine High Row | B | *c | Machine | Biceps, Rear Deltoids | - | Keep your chest against the pad; Pull your elbows down and back; Squeeze your shoulder blades at the bottom
+1350 | Machine Seated Row | B | *c | Machine | Biceps, Rear Deltoids | - | Keep your chest against the pad; Pull your elbows straight back; Avoid shrugging as you row
+2285 | Machine Pullover | B | i | Machine | Chest, Triceps | - | Line your shoulders up with the machine's pivot; Drive with your elbows, not your hands; Control the stretch at the top
+0604 | Machine Shrug | B | i | Machine | Forearms | - | Stand tall with your arms straight; Shrug straight up toward your ears; Pause at the top before lowering
+1313 | Machine Single-Arm Row | B | cu | Machine | Biceps, Rear Deltoids | - | Keep your chest against the pad; Row one side at a time to fix imbalances; Don't rotate your torso to finish the rep
+1354 | Medicine Ball Slam | B | c | Medicine Ball | Core, Shoulders | - | Use a no-bounce slam ball; Reach fully overhead before slamming; Hinge and squat to pick the ball up
+1359 | Smith Machine Bent-Over Row | B | *c | Smith Machine | Biceps, Lower Back | - | Hinge until your torso is about 45 degrees; Row the bar to your lower chest; Keep your back flat throughout
+0767 | Smith Machine Shrug | B | i | Smith Machine | Forearms | - | Stand close to the bar; Shrug straight up and hold; Lower slowly to a full stretch
+1314 | Stability Ball Back Extension | B | i | Stability Ball | Glutes, Hamstrings | - | Brace your feet against a wall; Lift until your body is in a straight line; Keep your neck neutral
+0841 | Weighted Pull-Up | A | c | Pull-Up Bar, Weight Plate | Biceps, Forearms | 4 sets × 3–8 reps | Use a dip belt or hold a dumbbell between your feet; Only add weight once you can do 12 strict pull-ups; Keep the weight still — no swinging
+> Attach a weight plate to a dip belt, or hold a dumbbell between your feet. | Hang from the bar with an overhand grip slightly wider than shoulder-width. | Pull yourself up until your chin clears the bar. | Lower slowly to a full hang.
+0184 | Lying Cable Pullover | I | i | Cable Machine, Bench | Chest, Triceps | - | Lie with your head toward the pulley; Keep your arms nearly straight; Pull the rope over to your thighs
+0572 | Assisted Chin-Up Machine | B | c | Machine | Biceps, Forearms | - | More counterweight makes it easier; Grip the handles palms-facing-you; Lower until your arms are straight
+> Set the counterweight and kneel or stand on the platform. | Grip the handles with your palms facing you, about shoulder-width apart. | Pull yourself up until your chin is above the handles. | Lower slowly until your arms are fully straight.
+1773 | Single-Arm Towel Row | I | cu | Bodyweight | Biceps, Core | - | Loop the towel around something that can't move; Keep your body from rotating; Walk your feet in to make it harder
+> Loop a towel around a sturdy post or wall bar and hold both ends in one hand. | Lean back until your arm is straight, keeping your body in a straight line. | Pull your chest toward your hand without twisting. | Lower slowly, complete your reps, then switch arms.
+0808 | Suspension Trainer Row | B | c | TRX | Biceps, Core | - | Walk your feet forward to make it harder; Keep your body straight from head to heels; Pull until your hands reach your ribs
+1351 | Reverse-Grip T-Bar Row | I | c | Machine | Biceps, Rear Deltoids | - | Hold the handles palms-up; Keep your chest on the pad; Pull your elbows close past your sides
+> Set up on a chest-supported T-bar row machine with your chest against the pad. | Grip the handles with your palms facing up. | Row the handles toward your lower ribs, keeping your elbows close to your body. | Squeeze your shoulder blades together, then lower slowly.
+1360 | Smith Machine Single-Arm Row | B | cu | Smith Machine | Biceps, Core | - | Stand side-on to the bar; Row toward your hip; Keep your torso still
+0746 | Smith Machine Behind-the-Back Shrug | I | i | Smith Machine | Forearms | - | Stand with the bar behind your thighs; Shrug straight up; Pause at the top
+> Stand with your back to the Smith machine bar and grip it behind your thighs, palms facing back. | Unrack the bar and stand tall with your arms straight. | Shrug your shoulders straight up toward your ears. | Pause, then lower slowly.
+2298 | Bench Inverted Row | B | c | Bodyweight, Bench | Biceps, Rear Deltoids | - | Use a sturdy, stable bench or table edge; Keep your body straight; Pull your chest toward the edge
+> Lie face up under the edge of a sturdy bench or table and grip the edge with both hands. | Straighten your body with your heels on the floor. | Pull your chest up toward the edge, squeezing your shoulder blades together. | Lower slowly.
+
+## Shoulders
+0978 | Resistance Band Front Raise | B | *i | Resistance Band | - | - | Stand on the band with your feet hip-width apart; Raise to shoulder height, no higher; Lower slowly against the band's pull
+0993 | Resistance Band Reverse Flye | B | *i | Resistance Band | - | - | Anchor the band at chest height; Keep a soft bend in your elbows; Squeeze your shoulder blades together as your arms open
+0997 | Resistance Band Shoulder Press | B | *c | Resistance Band | - | - | Stand on the band with both feet; Press straight overhead, biceps by your ears; Brace your core so your lower back doesn't arch
+1022 | Resistance Band Rear Delt Row | B | c | Resistance Band | Upper Back, Biceps | - | Flare your elbows out wide as you row; Pull toward your upper chest; Hinge forward with a flat back
+1017 | Resistance Band Y-Raise | B | i | Resistance Band | Trapezius, Upper Back | - | Raise your arms into a Y with thumbs pointing up; Keep your ribs down as your arms go overhead; Use a light band — this is a small-muscle exercise
+0041 | Barbell Front Raise | B | *i | Barbell | - | - | Raise the bar to shoulder height only; Keep a soft bend in your elbows; Don't lean back to swing the bar up
+0076 | Barbell Rear Delt Row | I | c | Barbell | Upper Back, Trapezius | - | Use a wide grip and flare your elbows; Row the bar to your upper chest; Keep your torso close to parallel with the floor
+> Hold a barbell with a wide overhand grip and hinge forward until your torso is nearly parallel to the floor. | Let the bar hang at arm's length with your back flat. | Row the bar toward your upper chest, driving your elbows out wide. | Squeeze your rear delts at the top, then lower slowly.
+0087 | Seated Bradford Press | A | c | Barbell, Bench | Triceps, Upper Back | - | Use light weight and only press as high as needed to clear your head; Keep your core tight and back against the pad; Alternate front and back each rep
+> Sit on a bench holding a barbell at the front of your shoulders with a shoulder-width overhand grip. | Press the bar just high enough to clear your head and lower it behind your head to the base of your neck. | Press it back over your head and lower it to the front of your shoulders. | Keep alternating front and back without locking your elbows.
+1457 | Wide-Grip Military Press | I | c | Barbell | Triceps, Upper Back | - | Grip a little wider than a standard press; Squeeze your glutes to protect your lower back; Move your head back slightly to let the bar pass
+3305 | Barbell Thruster | I | *c | Barbell | Quads, Glutes, Core | - | Hold the bar in a front-rack position; Drive out of the squat and use the momentum to press; Go straight into the next squat as the bar comes down
+0154 | Bent-Over Cable Reverse Flye | B | *i | Cable Machine | Upper Back, Trapezius | - | Hold the left cable in your right hand and vice versa; Hinge forward with a flat back; Lead with your elbows, not your hands
+0162 | Cable Front Raise | B | *i | Cable Machine | - | - | Stand with the pulley low and behind you; Raise to shoulder height only; Keep your torso still — don't swing
+0178 | Cable Lateral Raise | B | *i | Cable Machine | Trapezius | - | Raise your arms until they're level with your shoulders; Lead with your elbows; Keep tension on the cables at the bottom
+0192 | Single-Arm Cable Lateral Raise | B | iu | Cable Machine | Trapezius | - | Stand side-on with the pulley at your ankle; Let the cable cross in front of your body; Raise to shoulder height and lower slowly
+0203 | Cable Rope Rear Delt Row | B | c | Cable Machine | Upper Back, Biceps | - | Pull the rope apart as it comes toward you; Keep your elbows high and wide; Squeeze your rear delts at the end of each rep
+0215 | Seated Cable Rear Delt Flye | B | i | Cable Machine | Upper Back, Trapezius | - | Keep a slight, fixed bend in your elbows; Open your arms out until they're in line with your shoulders; Don't lean back to finish the rep
+0216 | Cable Internal Rotation | B | iu | Cable Machine | Rotator Cuff, Chest | - | Keep your elbow pinned to your side; Use a light weight; Move slowly in both directions
+> Set the pulley at elbow height and stand side-on with the machine next to your working arm. | Hold the handle with your elbow bent to 90 degrees and tucked against your side. | Rotate your forearm across your stomach, keeping your elbow in place. | Slowly let your forearm rotate back out, complete your reps, then switch arms.
+0235 | Cable External Rotation | B | *iu | Cable Machine | Rotator Cuff, Rear Deltoids | - | Keep your elbow pinned to your side; Use a light weight; Rotate only as far as your shoulder allows
+> Set the pulley at elbow height and stand side-on with the machine on the opposite side to your working arm. | Hold the handle with your elbow bent to 90 degrees and tucked against your side, forearm across your stomach. | Rotate your forearm out away from your body, keeping your elbow in place. | Slowly return, complete your reps, then switch arms.
+0219 | Cable Shoulder Press | B | *c | Cable Machine | Triceps | - | Set the pulleys low and stand between them; Press up until your arms are straight; Keep your ribs down and core braced
+0246 | Cable Upright Row | B | *c | Cable Machine | Trapezius, Biceps | - | Use a straight bar or rope on the low pulley; Pull to chest height, elbows leading; Stop lower if you feel shoulder pinching
+0299 | Dumbbell Cuban Press | I | i | Dumbbells | Rotator Cuff, Trapezius | - | Use light dumbbells; Keep your elbows at shoulder height as you rotate; Move slowly through each stage
+> Stand holding light dumbbells in front of your thighs with an overhand grip. | Raise your elbows out to the sides until they are level with your shoulders, like an upright row. | Rotate your forearms up so the dumbbells point to the ceiling, keeping your elbows in place. | Press the dumbbells overhead, then reverse each step back to the start.
+0311 | Full Can Lateral Raise | B | i | Dumbbells | Rotator Cuff, Trapezius | - | Keep your thumbs pointing up; Raise your arms slightly forward of your sides; Stop at shoulder height
+0323 | Incline Single-Arm Lateral Raise | I | iu | Dumbbell, Incline Bench | Trapezius | - | Lie side-on against the incline pad; Raise the dumbbell until your arm is in line with your body; Use a light weight — the angle makes it harder
+> Set a bench to about 45 degrees and lie on your side against it, holding a dumbbell in your top hand. | Let the dumbbell hang down in front of you with a slight bend in your elbow. | Raise the dumbbell out to the side until your arm is in line with your body. | Lower slowly, complete your reps, then switch sides.
+0326 | Incline Dumbbell Rear Delt Raise | B | i | Dumbbells, Incline Bench | Upper Back, Trapezius | - | Lie chest-down on the incline pad; Raise your arms out to the sides with a slight elbow bend; Don't shrug your shoulders up
+3542 | Incline Dumbbell T-Raise | B | i | Dumbbells, Incline Bench | Upper Back, Trapezius | - | Lie chest-down on the bench; Raise your arms straight out into a T; Pause and squeeze your shoulder blades at the top
+> Lie chest-down on a bench set to about 45 degrees with a dumbbell in each hand. | Let your arms hang straight down, palms facing each other. | Raise your arms straight out to the sides until your body forms a T. | Pause, then lower slowly.
+0332 | Dumbbell Iron Cross | I | i | Dumbbells | Trapezius | - | Use light dumbbells; Keep your arms straight but not locked; Control the sweep — don't swing
+> Stand holding a dumbbell in each hand in front of your thighs. | Raise both arms straight in front of you to shoulder height. | Keeping them at shoulder height, sweep your arms out to the sides to form a T. | Sweep them back to the front, then lower to your thighs.
+0335 | Dumbbell Lateral-to-Front Raise | B | *i | Dumbbells | Trapezius | - | Alternate a lateral raise with a front raise; Stop each raise at shoulder height; Use lighter dumbbells than for either raise alone
+0863 | Side-Lying Dumbbell External Rotation | B | iu | Dumbbell, Bench | Rotator Cuff, Rear Deltoids | - | Keep your elbow pinned to your side; Place a rolled towel under your elbow; Use a very light dumbbell
+0355 | Single-Arm Dumbbell Lateral Raise | B | iu | Dumbbell | Trapezius | - | Hold something steady with your free hand; Lead with your elbow; Lower slowly over 2–3 seconds
+0356 | Leaning Single-Arm Lateral Raise | B | *iu | Dumbbell | Trapezius | - | Hold a post and lean away from it; The lean keeps tension on the delt at the bottom; Raise to shoulder height only
+0361 | Single-Arm Dumbbell Shoulder Press | B | *cu | Dumbbell | Triceps, Core | - | Brace your core so you don't lean away; Press straight up from your shoulder; Keep your wrist stacked over your elbow
+0363 | Single-Arm Dumbbell Upright Row | B | cu | Dumbbell | Trapezius, Biceps | - | Lead with your elbow; Pull to chest height; Keep the dumbbell close to your body
+1700 | Dumbbell Push Press | I | *c | Dumbbells | Triceps, Quads | - | Dip by bending your knees slightly, not by squatting; Drive with your legs to launch the dumbbells; Lock out overhead with biceps by your ears
+2397 | Dumbbell Scott Press | I | c | Dumbbells, Bench | Triceps, Upper Chest | - | Start with your elbows out wide and slightly behind you; Press up and in toward the centre; Use lighter dumbbells than a normal press
+> Sit on a bench holding dumbbells at shoulder height, palms facing forward and elbows out wide, slightly behind your body. | Press the dumbbells up and in until they meet above your head. | Lower them back down along the same wide path.
+0387 | Seated Alternating Dumbbell Front Raise | B | i | Dumbbells, Bench | - | - | Sit tall without leaning back; Raise one arm to shoulder height at a time; Lower slowly before switching arms
+0388 | Seated Alternating Dumbbell Press | B | *c | Dumbbells, Bench | Triceps | - | Keep the resting dumbbell at shoulder height; Press straight up, not forward; Keep your back against the pad
+0392 | Seated Dumbbell Front Raise | B | i | Dumbbells, Bench | - | - | Sit tall without leaning back; Raise both dumbbells to shoulder height; Lower slowly over 2–3 seconds
+0396 | Seated Dumbbell Lateral Raise | B | *i | Dumbbells, Bench | Trapezius | - | Sitting stops you swinging the weight; Lead with your elbows; Stop at shoulder height
+0404 | Neutral-Grip Dumbbell Shoulder Press | B | *c | Dumbbells, Bench | Triceps | - | Keep your palms facing each other throughout; Press straight up; This grip is easier on the shoulders
+3548 | Single-Arm Overhead Carry | I | cu | Dumbbell | Core, Trapezius | 3 sets × 20–30 m each arm | Lock your arm with your biceps by your ear; Walk slowly and stay tall; Don't lean away from the weight
+0414 | Standing Alternating Dumbbell Press | B | *c | Dumbbells | Triceps, Core | - | Brace your core so your torso doesn't sway; Keep the resting dumbbell at your shoulder; Press straight up
+2143 | Dumbbell Around the World | B | i | Dumbbells | Chest, Trapezius | - | Use very light dumbbells; Keep your arms almost straight; Move slowly through the full circle
+0864 | Dumbbell 90/90 External Rotation | B | i | Dumbbells | Rotator Cuff, Trapezius | - | Keep your elbows at shoulder height; Rotate only your forearms; Use very light dumbbells
+> Stand holding light dumbbells and raise your elbows out to the sides to shoulder height, bent to 90 degrees with forearms pointing forward. | Keeping your elbows in place, rotate your forearms up until they point to the ceiling. | Slowly rotate them back down to the start.
+0520 | Kettlebell Alternating Press | I | c | Kettlebells | Triceps, Core | - | Rest the bells in the rack position on your forearms; Press one bell while the other stays racked; Keep your core braced so you don't lean
+0523 | Kettlebell Arnold Press | I | *c | Kettlebells | Triceps | - | Start with your palms facing you; Rotate your palms forward as you press; Reverse the rotation on the way down
+0527 | Double Kettlebell Jerk | A | c | Kettlebells | Quads, Triceps, Core | 4–5 sets × 3–6 reps | Use your legs to drive the bells up; Drop under the bells to catch them; Stand fully before lowering the bells to the rack
+> Hold two kettlebells in the rack position at your shoulders. | Dip by bending your knees slightly, then drive up explosively through your legs. | As the bells rise, drop into a quarter squat and lock your arms straight overhead. | Stand up fully with the bells overhead, then lower them back to the rack.
+0540 | Single-Arm Kettlebell Push Press | I | *cu | Kettlebell | Triceps, Quads | - | Dip with your knees, then drive the bell up; Lock out with your biceps by your ear; Lower the bell back to the rack position under control
+0542 | Kettlebell Snatch | A | cu | Kettlebell | Glutes, Hamstrings | 3–5 sets × 5–10 reps each arm | Power the bell with a hip snap, not your arm; Punch through at the top so the bell doesn't flop onto your wrist; Learn the swing and clean first
+0537 | Kettlebell Clean and Jerk | A | cu | Kettlebell | Glutes, Quads, Triceps | 3–5 sets × 5–8 reps each arm | Clean the bell to the rack before each jerk; Drive the bell up with your legs; Keep your wrist straight in the rack
+> Swing the kettlebell back between your legs, then drive your hips forward and pull it up into the rack position at your shoulder. | Dip by bending your knees slightly, then drive up through your legs. | Drop under the bell as it rises and lock your arm straight overhead. | Stand fully, then lower the bell to the rack and back between your legs for the next rep.
+0547 | Kettlebell Seesaw Press | I | c | Kettlebells | Triceps, Core | - | Press one bell as the other comes down; Keep a smooth, steady rhythm; Stay tall without leaning side to side
+0550 | Kettlebell Thruster | I | *c | Kettlebell | Quads, Glutes, Core | - | Hold the bell by its horns at your chest; Drive out of the squat into the press in one movement; Keep your chest up at the bottom
+0553 | Kettlebell Military Press | I | *c | Kettlebells | Triceps, Core | - | Squeeze your glutes and brace your core; Press both bells straight overhead; Lower them back to the rack position under control
+0584 | Machine Lateral Raise | B | *i | Machine | Trapezius | - | Line your shoulders up with the machine's pivot; Lead with your elbows against the pads; Lower slowly without letting the stack rest
+0590 | Single-Arm Machine Shoulder Press | B | cu | Machine | Triceps | - | Set the seat so the handle starts at shoulder height; Press straight up; Work your weaker side first
+0602 | Reverse Pec Deck Flye | B | *i | Machine | Upper Back, Trapezius | - | Set the handles so your arms are at shoulder height; Keep a slight bend in your elbows; Squeeze your shoulder blades at the end
+0765 | Smith Machine Seated Shoulder Press | B | *c | Smith Machine, Bench | Triceps | - | Set the bench so the bar passes just in front of your face; Lower the bar to about chin height; Keep your back against the pad
+0774 | Smith Machine Military Press | I | *c | Smith Machine | Triceps, Core | - | Stand with the bar just in front of your face; Brace your core and squeeze your glutes; Press to full lockout
+0775 | Smith Machine Upright Row | B | c | Smith Machine | Trapezius, Biceps | - | Grip slightly wider than shoulder width; Pull to chest height, elbows leading; Stop if you feel any shoulder pinch
+0834 | Plate Front Raise | B | *i | Weight Plate | Trapezius | - | Hold the plate at the 3 and 9 o'clock positions; Raise to eye level; Keep your core tight and don't lean back
+> Stand tall holding a weight plate in front of your thighs with your hands at its sides. | Keeping your arms nearly straight, raise the plate in front of you to eye level. | Pause, then lower it slowly back to your thighs.
+0408 | Side-Lying Lateral Raise | B | iu | Dumbbell | Trapezius | - | Lie on your side with your head supported; Raise the dumbbell until your arm points to the ceiling; Use a light weight and move slowly
+1456 | Close-Grip Military Press | I | c | Barbell | Triceps, Upper Chest | - | Grip just inside shoulder width; Keep your elbows in front of the bar; Squeeze your glutes to stay upright
+0528 | Double Kettlebell Push Press | I | c | Kettlebells | Quads, Triceps | - | Dip with your knees, then drive the bells up; Lock out with your biceps by your ears; Return to the rack position under control
+0546 | Seated Kettlebell Press | I | c | Kettlebells, Bench | Triceps | - | Sit tall without leaning back; Start with the bells in the rack position; Press straight overhead
+0225 | Cable High Reverse Flye | B | i | Cable Machine | Upper Back, Trapezius | - | Hold the left cable in your right hand and vice versa; Pull your arms out and back at shoulder height; Keep a slight bend in your elbows
+> Set both pulleys at shoulder height and grab each handle with the opposite hand so the cables cross in front of you. | Stand in the middle with your arms extended in front at shoulder height. | Pull your arms out and back until they're in line with your body, squeezing your rear delts. | Slowly return to the crossed position.
+0148 | Cable Alternating Shoulder Press | B | c | Cable Machine | Triceps, Core | - | Set the pulleys low and stand between them; Press one arm at a time; Keep your core braced so you don't lean
+0419 | Dumbbell Overhead Front Raise | B | i | Dumbbells | Trapezius | - | Use light dumbbells; Keep a slight bend in your elbows; Raise until your arms point overhead
+0427 | Standing Palms-In Dumbbell Press | B | c | Dumbbells | Triceps, Core | - | Keep your palms facing each other; Press straight up; Brace your core so your back doesn't arch
+0359 | Supported Single-Arm Reverse Flye | B | iu | Dumbbell, Bench | Upper Back, Trapezius | - | Rest your free hand on the bench; Raise your arm out to the side with a slight bend; Squeeze your rear delt at the top
+2317 | Seated Bent-Arm Lateral Raise | B | i | Dumbbells, Bench | Trapezius | - | Keep your elbows bent to 90 degrees; Lead with your elbows; Stop at shoulder height
+0471 | Handstand Push-Up | A | *c | Bodyweight | - | - | Use a wall for balance; Lower your head to the floor between your hands; Master pike push-ups first
+> Place your hands on the floor shoulder-width apart, about a hand's length from a wall. | Kick up into a handstand with your heels resting against the wall. | Bend your elbows to lower your head toward the floor, keeping your body straight. | Press back up until your arms are straight.
+0123 | Wide-Grip Barbell Upright Row | I | c | Barbell | Trapezius, Biceps | - | A wide grip is easier on the shoulders than a narrow one; Pull to chest height, elbows leading; Keep the bar close to your body
+3237 | Landmine Lateral Raise | I | iu | Barbell | Trapezius | - | Stand side-on to the landmine; Raise the bar out to the side to shoulder height; Keep your torso upright
+> Wedge one end of a barbell into a corner or landmine and stand side-on to it. | Hold the free end with the hand furthest from the anchor, arm across your body. | Raise the bar out to the side until your arm is at shoulder height. | Lower slowly, complete your reps, then switch sides.
+0529 | Double Kettlebell Snatch | A | c | Kettlebells | Glutes, Hamstrings | 3–5 sets × 3–6 reps | Drive the bells up with a hip snap; Punch through at the top; Learn the single-arm snatch first
+1012 | Resistance Band Twisting Overhead Press | B | c | Resistance Band | Obliques, Triceps | - | Stand on the band with both feet; Rotate your torso as you press; Alternate sides each rep
+0240 | Prone Cable Reverse Flye | B | i | Cable Machine, Bench | Upper Back, Trapezius | - | Lie face down on a flat bench between two low pulleys; Raise your arms out to the sides; Keep a soft bend in your elbows
+
+## Arms
+0976 | Resistance Band Concentration Curl | B | *iu | Resistance Band | - | - | Stand on the band with the foot on your working side; Brace your elbow against your inner thigh; Lower slowly against the band
+0038 | Barbell Drag Curl | I | *i | Barbell | Forearms, Rear Deltoids | - | Keep the bar touching your body the whole time; Drive your elbows back as you curl; Use less weight than a normal curl
+> Stand holding a barbell with an underhand, shoulder-width grip, arms straight in front of your thighs. | Curl the bar up while pulling your elbows back, dragging the bar up the front of your body. | Stop when the bar reaches your lower chest, squeezing your biceps. | Lower it back down the same path.
+0070 | Barbell Preacher Curl | B | *i | Barbell, Preacher Bench | - | - | Keep the backs of your arms flat on the pad; Lower until your arms are almost straight; Don't let the bar bounce at the bottom
+0080 | Barbell Reverse Curl | B | *i | Barbell | Brachialis, Forearms | - | Hold the bar palms-down; Keep your elbows pinned to your sides; Use lighter weight than a normal curl
+0106 | Close-Grip Barbell Curl | B | i | Barbell | Forearms | - | Hold the bar with your hands a few inches apart; Keep your elbows at your sides; Squeeze your biceps at the top
+0113 | Wide-Grip Barbell Curl | B | i | Barbell | Forearms | - | Grip the bar palms-up, wider than your shoulders; Keep your elbows at your sides; Lower slowly to full extension
+> Stand holding a barbell with an underhand grip wider than shoulder-width, arms straight. | Keeping your elbows at your sides, curl the bar up toward your shoulders. | Squeeze your biceps at the top. | Lower the bar slowly to the start.
+1770 | Leg-Resisted Bicep Curl | B | *iu | Bodyweight | Forearms | - | Your leg provides the resistance — push down with it as you curl; Brace your elbow against your inner thigh; Make every rep slow and controlled
+> Sit on a bench or chair and lift one foot slightly off the floor. | Hold the back of that thigh, just above the knee, with the hand on the same side, palm up, and rest your elbow on your other knee. | Curl your hand toward your shoulder while pushing down with your leg to resist the movement. | Lower slowly while still resisting, complete your reps, then switch arms.
+1631 | Cable Concentration Curl | B | iu | Cable Machine | Forearms | - | Rest your elbow against your inner thigh; Curl toward your shoulder; Lower slowly to full extension
+0165 | Cable Rope Hammer Curl | B | *i | Cable Machine | Brachialis, Forearms | - | Keep your palms facing each other; Pin your elbows to your sides; Squeeze at the top before lowering
+1636 | Cable Overhead Curl | I | *i | Cable Machine | Forearms | - | Keep your upper arms level with your shoulders; Curl the handles toward your head; Hold the squeeze for a second
+> Set both pulleys high and stand between them, holding a handle in each hand with your arms out to the sides at shoulder height. | Keeping your upper arms still, curl the handles toward the sides of your head. | Squeeze your biceps hard at the end of the curl. | Slowly straighten your arms back out.
+0195 | Cable Preacher Curl | B | *i | Cable Machine, Preacher Bench | - | - | Keep the backs of your arms flat on the pad; The cable keeps tension at the bottom; Don't lift your elbows off the pad
+0206 | Cable Reverse Curl | B | i | Cable Machine | Brachialis, Forearms | - | Hold the bar palms-down; Keep your wrists straight; Pin your elbows to your sides
+> Attach a straight bar to a low pulley and hold it palms-down, about shoulder-width apart. | Keeping your elbows at your sides and wrists straight, curl the bar up toward your shoulders. | Pause, then lower the bar slowly.
+1645 | Incline Cable Curl | I | i | Cable Machine, Incline Bench | Forearms | - | Let your arms hang back behind your body; Keep your shoulders against the bench; Curl without moving your upper arms
+0190 | Single-Arm Cable Curl | B | iu | Cable Machine | Forearms | - | Stand side-on to the low pulley; Keep your elbow pinned to your side; Turn your pinky up slightly at the top
+0285 | Alternating Dumbbell Curl | B | *i | Dumbbells | Forearms | - | Keep the resting arm still while the other curls; Turn your palm up as you lift; Don't swing your torso
+0294 | Dumbbell Bicep Curl | B | i | Dumbbells | Forearms | - | Keep your elbows pinned to your sides; Lower the dumbbells all the way down; Don't lean back to lift the weight
+0298 | Cross-Body Hammer Curl | B | *i | Dumbbells | Brachialis, Forearms | - | Curl the dumbbell toward your opposite shoulder; Keep your palm facing your body; Alternate arms each rep
+0320 | Incline Dumbbell Hammer Curl | B | i | Dumbbells, Incline Bench | Brachialis, Forearms | - | Let your arms hang straight down behind your torso; Keep your palms facing each other; Keep your shoulders against the bench
+0372 | Dumbbell Preacher Curl | B | *i | Dumbbells, Preacher Bench | - | - | Keep the backs of your arms flat on the pad; Stop just short of locking out at the bottom; Curl slowly — don't swing
+0374 | Prone Incline Dumbbell Curl | I | i | Dumbbells, Incline Bench | Forearms | - | Lie chest-down on the incline bench; Let your arms hang straight down; Curl without moving your elbows forward
+> Lie chest-down on a bench set to about 45 degrees with a dumbbell in each hand. | Let your arms hang straight down with your palms facing forward. | Curl the dumbbells up toward your shoulders, keeping your upper arms still. | Squeeze, then lower slowly to full extension.
+0382 | Reverse-Grip Dumbbell Curl | B | i | Dumbbells | Brachialis, Forearms | - | Hold the dumbbells palms-down; Keep your wrists straight; Use lighter weights than a normal curl
+3547 | Seated Curl to Press | B | c | Dumbbells, Bench | Shoulders, Triceps | - | Curl first, then rotate your palms forward and press; Keep your back against the pad; Reverse each step on the way down
+3560 | Hammer Curl to Press | B | c | Dumbbells | Shoulders, Triceps | - | Hammer curl the dumbbell to your shoulder; Press it straight overhead from there; Alternate arms each rep
+> Stand holding a dumbbell in each hand with your palms facing your body. | Hammer curl one dumbbell up to your shoulder. | Press it straight overhead, then lower it back to your shoulder and down to your side. | Repeat with the other arm, alternating each rep.
+0439 | Zottman Curl | I | *i | Dumbbells | Brachialis, Forearms | - | Curl palms-up, lower palms-down; Lower slowly to work your forearms; Keep your elbows at your sides
+> Stand holding a dumbbell in each hand with your palms facing forward. | Curl the dumbbells up to your shoulders. | At the top, rotate your palms to face down. | Lower slowly with your palms down, then rotate them back up at the bottom.
+5201 | Waiter Curl | B | i | Dumbbell | Forearms | - | Cup the top end of the dumbbell in both palms; Keep the dumbbell vertical throughout; Squeeze your biceps at the top
+> Hold one dumbbell vertically, cupping the top plate in both palms like a tray. | Keep your elbows at your sides with your arms straight. | Curl the dumbbell up toward your chest, keeping it level. | Lower it slowly to the start.
+1678 | Seated Dumbbell Hammer Curl | B | i | Dumbbells, Bench | Brachialis, Forearms | - | Sit tall so you can't swing; Keep your palms facing each other; Lower all the way down each rep
+0370 | Dumbbell Hammer Preacher Curl | B | i | Dumbbells, Preacher Bench | Brachialis, Forearms | - | Keep your palms facing each other; Keep the backs of your arms on the pad; Lower slowly to almost straight
+> Sit at a preacher bench with the backs of your arms on the pad, holding a dumbbell in each hand with your palms facing each other. | Curl the dumbbells up toward your shoulders. | Squeeze at the top. | Lower slowly until your arms are almost straight.
+0447 | EZ-Bar Curl | B | *i | EZ-Bar | Forearms | - | Use the angled grips to ease wrist strain; Keep your elbows pinned to your sides; Lower slowly to full extension
+0451 | EZ-Bar Reverse Curl | B | i | EZ-Bar | Brachialis, Forearms | - | Hold the bar palms-down on the angled grips; Keep your wrists straight; Use a light weight
+> Stand holding an EZ-bar with an overhand grip on the angled handles. | Keeping your elbows at your sides, curl the bar up toward your shoulders. | Pause, then lower it slowly.
+1627 | EZ-Bar Preacher Curl | B | i | EZ-Bar, Preacher Bench | - | - | Use the inner angled grips; Keep the backs of your arms on the pad; Don't bounce at the bottom
+0454 | EZ-Bar Spider Curl | I | i | EZ-Bar, Incline Bench | Forearms | - | Let your arms hang straight down; Keep your upper arms vertical as you curl; Squeeze hard at the top
+> Lie chest-down on an incline bench holding an EZ-bar with an underhand grip. | Let your arms hang straight down toward the floor. | Curl the bar up toward your face, keeping your upper arms vertical. | Squeeze, then lower slowly.
+0575 | Machine Bicep Curl | B | *i | Machine | Forearms | - | Line your elbows up with the machine's pivot; Curl smoothly without lifting your elbows; Lower slowly against the weight
+0592 | Machine Preacher Curl | B | i | Machine | - | - | Keep the backs of your arms on the pad; Lower until your arms are almost straight; Pause at the top
+0126 | Barbell Wrist Curl | B | *i | Barbell, Bench | Biceps | - | Rest your forearms on your thighs or a bench; Let the bar roll to your fingertips at the bottom; Move only at your wrists
+0082 | Barbell Reverse Wrist Curl | B | i | Barbell, Bench | - | - | Hold the bar palms-down; Rest your forearms on your thighs; Use a light weight
+0104 | Behind-the-Back Wrist Curl | B | i | Barbell | Biceps | - | Hold the bar behind you with your palms facing back; Curl only at your wrists; Keep your arms straight
+> Stand holding a barbell behind your back with an overhand grip, palms facing backwards, arms straight. | Let the bar roll down toward your fingers. | Curl your wrists to lift the bar up and back as far as you can. | Lower slowly.
+0455 | Barbell Finger Curl | B | i | Barbell, Bench | - | 3 sets × 15–20 reps | Let the bar roll down to your fingertips; Curl your fingers then your wrists; Use a light bar
+0369 | Dumbbell Wrist Curl | B | i | Dumbbells, Bench | - | - | Rest your forearms on the bench with your wrists over the edge; Move only at your wrists; Lower slowly for a full stretch
+0368 | Dumbbell Reverse Wrist Curl | B | i | Dumbbells, Bench | - | - | Hold the dumbbells palms-down; Rest your forearms on the bench; Use lighter weights than wrist curls
+2133 | Farmer's Walk | B | c | Dumbbells | Trapezius, Core, Quads | 3 sets × 20–40 m | Stand tall with your shoulders back; Take short, quick steps; Squeeze the handles as hard as you can
+1719 | Incline Close-Grip Bench Press | I | c | Barbell, Incline Bench | Upper Chest, Shoulders | - | Grip just inside shoulder width; Keep your elbows tucked to your sides; Lower the bar to your upper chest
+0052 | JM Press | A | c | Barbell, Bench | Chest, Shoulders | - | Use a moderate weight and a spotter; Let your elbows travel forward as the bar comes down; Stop the bar a few inches above your chin
+> Lie on a flat bench holding a barbell above your chest with a grip just inside shoulder width. | Bend your elbows and let them drift forward as you lower the bar toward your chin. | Stop when the bar is a few inches above your upper chest and chin. | Press back up by straightening your elbows.
+1721 | Reverse-Grip Skull Crusher | I | i | Barbell, Bench | - | - | Hold the bar palms-up; Lower to your forehead with elbows pointing up; Use a lighter weight than normal skull crushers
+0092 | Seated Barbell Overhead Tricep Extension | I | i | Barbell, Bench | - | - | Keep your elbows pointing forward; Lower the bar behind your head; Sit tall with your back against the pad
+0109 | Standing Barbell Overhead Tricep Extension | I | *i | Barbell | Core | - | Keep your elbows close to your head; Brace your core so your back doesn't arch; Lower the bar behind your head slowly
+0137 | Tricep Body-Up | I | c | Bodyweight | Core, Chest | - | Start in a forearm plank; Press through your palms to straighten your arms; Keep your body rigid throughout
+> Start in a forearm plank with your hands flat on the floor in front of your face. | Press your palms into the floor to straighten your elbows, lifting your forearms off the floor. | Keep your body in a straight line as you rise. | Slowly lower back onto your forearms.
+1771 | Kneeling Bodyweight Tricep Extension | B | *i | Bodyweight | Core, Chest | - | Start on your knees with your forearms on the floor; Push through your palms to straighten your arms; Keep your hips in line with your shoulders
+> Kneel and place your forearms on the floor in front of you, hands flat, body in a straight line from knees to head. | Press your palms into the floor to straighten your elbows and lift your forearms off the floor. | Pause with your arms straight. | Slowly lower back down onto your forearms.
+2398 | Kneeling Close-Grip Push-Up | B | *c | Bodyweight | Chest, Shoulders | - | Place your hands just inside shoulder width; Keep your elbows brushing your ribs; Keep a straight line from knees to head
+> Kneel and place your hands on the floor just inside shoulder-width, body straight from knees to head. | Lower your chest toward your hands, keeping your elbows tucked close to your sides. | Push back up until your arms are straight.
+3289 | Impossible Dip | A | c | Parallel Bars | Chest, Shoulders | 3 sets × 3–8 reps | Lower until your forearms rest on the bars; Press back up using only your triceps; Build up from regular dips first
+> Support yourself on parallel bars with your arms straight. | Bend your elbows and lower yourself until your forearms rest flat on the bars. | Press through your hands to lift your forearms off the bars and return to straight arms.
+0490 | Incline Close-Grip Push-Up | B | c | Bodyweight, Bench | Chest, Shoulders | - | Place your hands close together on the bench; Keep your elbows tucked to your sides; Lower your chest to the edge
+> Place your hands on the edge of a bench, just inside shoulder-width apart. | Step your feet back so your body forms a straight line. | Lower your chest to the bench, keeping your elbows close to your sides. | Push back up until your arms are straight.
+0677 | Ring Dip | A | c | Gymnastic Rings | Chest, Shoulders | - | Turn the rings out slightly at the top; Keep the rings close to your body; Master bar dips before trying rings
+> Jump up to support yourself on the rings with your arms straight and the rings by your sides. | Lower your body by bending your elbows until your shoulders are just below your elbows. | Press back up to straight arms, keeping the rings close to your body.
+1753 | Three-Bench Dip | I | c | Bodyweight, Bench | Chest, Shoulders | - | Rest your heels on a second bench; Keep your back close to the bench; Lower until your elbows are at 90 degrees
+> Place your hands on the edge of one bench and your heels on another bench in front of you. | Lift your hips off the bench with your arms straight. | Bend your elbows to lower your body until they reach about 90 degrees. | Press back up until your arms are straight.
+0815 | Floor Tricep Dip | B | *c | Bodyweight | Chest, Shoulders | - | Point your fingers toward your feet; Keep your hips off the floor; Lower until your elbows reach 90 degrees
+> Sit on the floor with your knees bent, feet flat and hands behind you, fingers pointing toward your feet. | Press through your hands to lift your hips off the floor. | Bend your elbows to lower your body back toward the floor. | Straighten your arms to press back up.
+0860 | Cable Tricep Kickback | B | *iu | Cable Machine | - | - | Hinge forward and pin your upper arm to your side; Straighten your arm fully behind you; Keep your upper arm still
+0186 | Lying Cable Tricep Extension | I | i | Cable Machine, Bench | - | - | Lie with your head toward the low pulley; Keep your upper arms still; Lower the rope toward your forehead
+0200 | Cable Rope Tricep Pushdown | B | *i | Cable Machine | - | - | Pull the rope ends apart at the bottom; Keep your elbows pinned to your sides; Don't lean over the rope
+0207 | Reverse-Grip Tricep Pushdown | B | *i | Cable Machine | Forearms | - | Hold the bar palms-up; Keep your elbows at your sides; Use a lighter weight than a normal pushdown
+0241 | V-Bar Tricep Pushdown | B | *i | Cable Machine | - | - | Keep your elbows pinned to your sides; Push down until your arms are straight; Let the bar rise only to chest height
+0231 | Single-Arm Cable Pushdown | B | *iu | Cable Machine | - | - | Keep your elbow tucked against your side; Straighten your arm fully; Work your weaker arm first
+> Stand facing a high pulley holding a single handle in one hand. | Tuck your elbow against your side with your forearm level with the floor. | Push the handle down until your arm is straight. | Slowly let it rise back up, complete your reps, then switch arms.
+1731 | Dumbbell Close-Grip Press | B | *c | Dumbbells, Bench | Chest, Shoulders | - | Press the dumbbells together throughout; Keep your elbows tucked to your sides; Lower to your mid-chest
+> Lie on a flat bench holding two dumbbells above your chest, palms facing each other and dumbbells pressed together. | Lower them to your mid-chest, keeping your elbows tucked close to your sides. | Press back up, keeping the dumbbells touching.
+0330 | Incline Dumbbell Tricep Extension | I | i | Dumbbells, Incline Bench | - | - | Keep your elbows pointing up; Lower the dumbbells behind your head; Keep your back against the bench
+0306 | Decline Dumbbell Tricep Extension | I | i | Dumbbells, Decline Bench | - | - | Keep your elbows pointing up; Lower the dumbbells beside your head; Secure your feet before starting
+0333 | Dumbbell Tricep Kickback | B | *i | Dumbbells | - | - | Hinge forward and pin your upper arms to your sides; Straighten your arms fully behind you; Use a light weight and squeeze at the top
+0337 | Cross-Face Dumbbell Tricep Extension | I | iu | Dumbbell, Bench | - | - | Lower the dumbbell across your face toward your opposite shoulder; Keep your upper arm still; Use a light weight
+> Lie on a flat bench holding a dumbbell in one hand straight above your chest. | Bend your elbow to lower the dumbbell across your face toward your opposite shoulder. | Straighten your arm back to the start. | Complete your reps, then switch arms.
+0436 | Dumbbell Tate Press | I | i | Dumbbells, Bench | Chest | - | Flare your elbows out to the sides; Touch the dumbbells to your chest; Use lighter weights than a press
+> Lie on a flat bench holding two dumbbells above your chest, palms facing your feet. | Bend your elbows out to the sides, lowering the dumbbells toward your chest until they touch it. | Straighten your elbows to press back up.
+1749 | EZ-Bar Overhead Tricep Extension | I | *i | EZ-Bar | Core | - | Keep your elbows close to your head; Lower the bar behind your head slowly; Brace your core so your back doesn't arch
+0449 | Incline EZ-Bar Tricep Extension | I | i | EZ-Bar, Incline Bench | - | - | Keep your elbows pointing up; Lower the bar behind your head; Keep your back against the bench
+0591 | Machine Tricep Dip | B | *c | Machine | Chest, Shoulders | - | Keep your elbows close to your sides; Push until your arms are straight; Lower slowly to 90 degrees
+0607 | Machine Tricep Extension | B | *i | Machine | - | - | Line your elbows up with the machine's pivot; Extend fully at the end; Lower slowly under control
+0751 | Smith Machine Close-Grip Bench Press | I | c | Smith Machine, Bench | Chest, Shoulders | - | Grip just inside shoulder width; Keep your elbows tucked; Lower the bar to your lower chest
+0453 | Seated EZ-Bar Overhead Tricep Extension | I | i | EZ-Bar, Bench | - | - | Sit tall with your back against the pad; Keep your elbows pointing forward; Lower the bar behind your head
+1728 | Cable Two-Arm Tricep Kickback | I | i | Cable Machine | - | - | Hinge forward with a flat back; Pin your upper arms to your sides; Straighten both arms fully behind you
+> Stand between two low pulleys holding the left handle in your right hand and the right handle in your left. | Hinge forward with a flat back and pin your upper arms to your sides, elbows bent. | Straighten both arms behind you. | Slowly bend your elbows back to the start.
+0081 | Barbell Reverse Preacher Curl | I | i | Barbell, Preacher Bench | Brachialis, Forearms | - | Hold the bar palms-down; Keep the backs of your arms on the pad; Use a light weight
+1632 | Cable Drag Curl | I | i | Cable Machine | Forearms | - | Keep the bar touching your body; Drive your elbows back as you curl; Stand far enough back for tension at the bottom
+> Attach a straight bar to a low pulley and hold it with an underhand grip, arms straight in front of your thighs. | Curl the bar up while driving your elbows back, dragging the bar up your body. | Stop when the bar reaches your lower chest. | Lower it back down the same path.
+0247 | Cable Wrist Curl | B | i | Cable Machine, Bench | - | - | Rest your forearms on a bench or your thighs; Move only at your wrists; Lower slowly for a full stretch
+0176 | Kneeling Cable Overhead Tricep Extension | I | i | Cable Machine | Core | - | Kneel facing away from the high pulley; Keep your elbows by your head; Straighten your arms fully
+> Attach a rope to a high pulley, hold it behind your head and kneel facing away from the machine. | Lean forward slightly with your elbows pointing forward beside your head. | Straighten your arms forward and up until they are fully extended. | Slowly bend your elbows back to the start.
+0717 | Side-Lying Tricep Push-Up | I | iu | Bodyweight | Chest | - | Place your top hand on the floor in front of your chest; Press your torso up with that arm; Keep your legs on the floor
+> Lie on your side with your bottom arm wrapped across your body. | Place your top hand flat on the floor in front of your chest. | Press through that hand to straighten your arm and lift your upper body. | Lower slowly, complete your reps, then switch sides.
+1701 | Medicine Ball Close-Grip Push-Up | I | c | Medicine Ball | Chest, Core | - | Place both hands on the ball; Keep your elbows tucked; Lower your chest to the ball
+> Place both hands on top of a medicine ball under your chest and step back into a plank. | Lower your chest toward the ball, keeping your elbows tucked close to your sides. | Press back up until your arms are straight.
+0322 | Incline Inner Bicep Curl | B | i | Dumbbells, Incline Bench | Forearms | - | Let your arms hang straight down behind your torso; Turn your palms out slightly; Curl without moving your upper arms
+1639 | Cable Rope Hammer Preacher Curl | B | i | Cable Machine, Preacher Bench | Brachialis, Forearms | - | Keep the backs of your arms on the pad; Hold the rope with palms facing each other; Lower slowly to almost straight
+
+## Legs
+1001 | Resistance Band Split Squat | B | cu | Resistance Band | Glutes | - | Stand on the band with your front foot; Drop your back knee straight down; Keep your front knee over your mid-foot
+> Stand in a split stance with the middle of the band under your front foot, holding the ends at your shoulders. | Lower your back knee toward the floor until your front thigh is about parallel to the floor. | Push through your front heel to stand back up. | Complete your reps, then switch legs.
+1369 | Resistance Band Calf Raise | B | *i | Resistance Band | - | - | Stand on the band with both feet; Rise as high as you can onto the balls of your feet; Lower slowly for a full stretch
+0026 | Barbell Box Squat | I | *c | Barbell, Bench | Glutes, Lower Back | - | Sit back until you lightly touch the box; Stay tight — don't relax on the box; Drive up through your heels
+> Set a box or bench behind you at about knee height. | Unrack a barbell onto your upper back and stand with your feet shoulder-width apart. | Push your hips back and squat down until you lightly touch the box, keeping your chest up. | Without relaxing, drive through your heels to stand back up.
+0028 | Barbell Clean and Press | A | c | Barbell | Shoulders, Glutes, Triceps | 4–5 sets × 3–5 reps | Pull the bar close to your body; Catch it on your shoulders with high elbows; Reset your feet before pressing
+0088 | Barbell Seated Calf Raise | B | i | Barbell, Bench | - | - | Pad the bar across your thighs; Put the balls of your feet on a plate or step; Pause at the top of each rep
+0069 | Barbell Overhead Squat | A | c | Barbell | Shoulders, Core, Glutes | 3–5 sets × 3–6 reps | Use a wide snatch grip with locked arms; Keep the bar over your mid-foot; Practise with an empty bar or dowel first
+2810 | Barbell Split Squat | I | *cu | Barbell | Glutes | - | Take a long stance so both knees reach 90 degrees; Keep your torso upright; Drop your back knee straight down
+1372 | Barbell Standing Calf Raise | B | *i | Barbell | - | - | Stand on a plate for a bigger stretch; Rise onto the balls of your feet and pause; Keep your knees straight but soft
+0116 | Barbell Stiff-Leg Deadlift | I | *c | Barbell | Glutes, Lower Back | - | Keep your legs nearly straight with a soft knee bend; Push your hips back as the bar slides down your thighs; Stop when you feel a strong hamstring stretch
+0648 | Power Clean | A | c | Barbell | Glutes, Trapezius, Shoulders | 4–5 sets × 2–5 reps | Keep the bar close as it passes your knees; Drive explosively with your hips and legs; Learn it with coaching and light weights first
+0284 | Donkey Calf Raise | I | i | Bodyweight | Hamstrings | - | Bend at your hips with your hands on a support; Let your heels drop below the step; Rise as high as you can
+> Stand with the balls of your feet on a step and bend forward at your hips, resting your hands on a bench or rail. | Let your heels drop below the step for a stretch. | Rise onto your toes as high as you can. | Lower slowly back to the stretch.
+3193 | Glute-Ham Raise | A | i | Machine | Glutes, Lower Back | 3 sets × 5–8 reps | Set the knee pad just behind your kneecaps; Pull yourself up with your hamstrings; Lower as slowly as you can
+0496 | Nordic Hamstring Curl | A | *i | Bodyweight | Glutes | 3 sets × 3–6 reps | Anchor your ankles under something solid; Keep a straight line from knees to head; Catch yourself with your hands and push back up
+> Kneel on a pad with your ankles held down by a partner or a solid anchor. | Keeping your hips straight, slowly lean forward as far as your hamstrings can control. | Catch yourself with your hands when you can't hold it any longer. | Push lightly off the floor and pull yourself back up with your hamstrings.
+0697 | Assisted Nordic Curl | I | i | Bodyweight | Glutes | 3 sets × 5–8 reps | Use your hands to help on the way up; Lower as slowly as you can; Keep your hips straight
+> Kneel with your ankles anchored under something solid. | Lean forward slowly from your knees, keeping your body straight. | Lower to the floor with your hands ready to catch you. | Push off the floor with your hands to help your hamstrings bring you back up.
+1387 | Single-Leg Calf Raise | B | *iu | Bodyweight | - | - | Hold a wall for balance; Rise as high as you can; Stand on a step to make it harder
+1489 | Sissy Squat | I | *i | Bodyweight | Core | - | Hold a support for balance; Lean back as your knees travel forward; Keep your hips straight throughout
+> Stand with your feet hip-width apart, holding a post or rail with one hand. | Rise onto the balls of your feet and push your knees forward while leaning your torso back. | Lower until your knees are well bent, keeping a straight line from your knees to your head. | Drive your knees back to stand up.
+1685 | Squat to Overhead Reach | B | c | Bodyweight | Glutes, Shoulders | - | Squat as deep as you comfortably can; Reach tall as you stand; Keep your heels down
+1490 | Step Calf Raise | B | i | Bodyweight | - | - | Let your heels drop below the step; Pause at the top; Hold the rail for balance
+0795 | Standing Bodyweight Leg Curl | B | iu | Bodyweight | Glutes | - | Keep your knees together; Squeeze your hamstring at the top; Add an ankle weight once it's easy
+0809 | Suspension Trainer Split Squat | I | cu | TRX | Glutes | - | Rest your back foot in the foot cradle; Drop your back knee toward the floor; Keep your front knee over your mid-foot
+> Stand facing away from the anchor and place one foot in the strap's foot cradle behind you. | Hop your front foot forward into a long split stance. | Lower your back knee toward the floor until your front thigh is about parallel. | Drive through your front heel to stand back up, then switch legs.
+1705 | Bosu Ball Squat | I | c | Bosu Ball | Glutes, Core | - | Stand on the flat side with feet shoulder-width; Squat slowly to stay balanced; Have something nearby to hold until you're steady
+0168 | Cable Hip Adduction | B | *iu | Cable Machine | Glutes | - | Stand side-on with the cuff on your inside ankle; Sweep your leg across your body; Return slowly against the cable
+> Attach an ankle cuff to a low pulley and to the ankle nearest the machine. | Stand side-on and step away until the cable is taut, holding the machine for support. | Sweep your working leg across in front of your other leg. | Slowly let it return out to the side, then switch legs.
+1375 | Cable Standing Calf Raise | B | i | Cable Machine | - | - | Stand on a plate for extra range; Keep your knees straight; Pause at the top of each rep
+0339 | Dumbbell Lying Leg Curl | I | i | Dumbbell, Bench | Glutes | - | Grip the dumbbell firmly between your feet; Curl until your shins are vertical; Lower slowly to keep control
+> Lie face down on a flat bench with your knees just off the end. | Have a partner place a dumbbell between your feet, or grip it with your feet before lying down. | Curl your heels toward your glutes until your shins are vertical. | Lower slowly back to straight legs.
+1379 | Dumbbell Seated Calf Raise | B | *i | Dumbbells, Bench | - | - | Rest the dumbbells on your knees; Put the balls of your feet on a step; Pause at the top and stretch at the bottom
+0409 | Single-Leg Dumbbell Calf Raise | B | iu | Dumbbell | - | - | Hold the dumbbell on your working side; Let your heel drop below the step; Hold a rail with your free hand
+0417 | Dumbbell Standing Calf Raise | B | *i | Dumbbells | - | - | Let the dumbbells hang by your sides; Rise as high as you can; Stand on a step for a deeper stretch
+0535 | Kettlebell Hang Clean | I | cu | Kettlebell | Glutes, Shoulders | - | Power the bell with your hips; Keep the bell close so it doesn't flip onto your wrist; Absorb the catch with soft knees
+2287 | Single-Leg Leg Press | I | cu | Machine | Glutes | - | Place your foot in the middle of the platform; Lower until your knee reaches about 90 degrees; Don't let your lower back lift off the pad
+2289 | Leg Press Calf Raise | B | *i | Machine | - | - | Keep your knees straight but not locked; Press through the balls of your feet; Go slowly through the full range
+1253 | Donkey Calf Raise Machine | B | i | Machine | - | - | Set the pad on your lower back or hips; Drop your heels for a full stretch; Rise as high as you can
+0582 | Kneeling Leg Curl Machine | B | *i | Machine | Glutes | - | Keep your hips pressed into the pad; Curl smoothly without jerking; Lower slowly
+0598 | Hip Adductor Machine | B | *i | Machine | - | - | Sit upright against the pad; Squeeze your knees together; Return slowly without letting the weights touch
+0599 | Seated Leg Curl | B | *i | Machine | - | - | Line your knees up with the machine's pivot; Curl the pad all the way under the seat; Control the return
+3007 | Resistance Band Leg Extension | B | *iu | Resistance Band, Bench | - | - | Loop a mini band around both ankles; Straighten one knee against the band; Pause with your leg straight
+> Sit on a bench or chair with a mini band looped around both ankles. | Keep one foot planted and straighten the other knee, lifting your foot against the band. | Pause with your leg straight and squeeze your quads. | Lower slowly, complete your reps, then switch legs.
+0768 | Smith Machine Bulgarian Split Squat | I | cu | Smith Machine, Bench | Glutes | - | Rest your back foot on the bench behind you; Keep your torso upright under the bar; Lower until your front thigh is parallel
+0773 | Smith Machine Calf Raise | B | i | Smith Machine | - | - | Stand on a plate under the bar; Rise as high as you can; Pause at the top
+3667 | Side-Lying Hip Adduction | B | *iu | Bodyweight | - | - | Cross your top leg over in front of you; Lift your bottom leg off the floor; Keep your hips stacked
+> Lie on your side and cross your top leg over, placing that foot flat on the floor in front of your bottom knee. | Keep your bottom leg straight. | Lift your bottom leg a few inches off the floor using your inner thigh. | Lower slowly, complete your reps, then switch sides.
+0127 | Zercher Squat | A | c | Barbell | Glutes, Core, Biceps | - | Cradle the bar in the crooks of your elbows; Keep your chest tall; Use a bar pad or towel for comfort
+0046 | Barbell Hack Squat | I | *c | Barbell | Glutes | - | Hold the bar behind your legs; Keep your chest up as you descend; Let the bar slide close to your legs
+1435 | Low-Bar Back Squat | I | c | Barbell | Glutes, Lower Back | - | Rest the bar on your rear delts, not your neck; Lean forward slightly more than a high-bar squat; Push your hips back as you descend
+0053 | Barbell Jump Squat | A | c | Barbell | Glutes, Calves | 3–4 sets × 5–8 reps | Use a light bar; Land softly and go straight into the next rep; Keep the bar tight on your back
+0063 | Narrow-Stance Barbell Squat | I | c | Barbell | Glutes | - | Set your feet about hip-width apart; Let your knees travel forward over your toes; Keep your torso upright
+> Unrack a barbell onto your upper back and stand with your feet about hip-width apart, toes forward. | Bend your knees and hips to squat down, letting your knees travel forward and keeping your torso upright. | Lower until your thighs are about parallel to the floor. | Drive back up through your whole foot.
+0078 | Barbell Reverse Lunge | I | *cu | Barbell | Glutes | - | Step back far enough for both knees to reach 90 degrees; Keep most of your weight on your front leg; Brace your core to stay balanced
+3194 | Frankenstein Squat | I | c | Barbell | Core, Glutes | - | Rest the bar on your front shoulders with arms straight out; Keep your elbows high so the bar can't roll; Use a light bar
+3582 | Jumping Lunge | I | *c | Bodyweight | Glutes | - | Switch legs in mid-air; Land softly in a lunge; Keep your torso upright
+0624 | Wall Sit March | I | i | Bodyweight | Hip Flexors, Glutes | - | Keep your back flat against the wall; Hold your thighs parallel to the floor; Lift each knee slowly
+1759 | Pistol Squat | A | *cu | Bodyweight | Glutes, Core | - | Reach your arms forward for balance; Keep your heel down; Use a box behind you to learn the depth
+1460 | Walking Lunge | B | *c | Bodyweight | Glutes | - | Take long steps so both knees reach 90 degrees; Keep your torso upright; Push off your front heel to step through
+0291 | Dumbbell Box Squat | B | c | Dumbbell, Bench | Glutes | - | Hold the dumbbell at your chest; Sit back until you touch the bench; Stand up without rocking
+> Stand in front of a bench holding a dumbbell vertically at your chest. | Push your hips back and squat until you lightly touch the bench. | Drive through your heels to stand back up.
+0336 | Dumbbell Forward Lunge | B | *c | Dumbbells | Glutes | - | Step forward far enough for both knees to reach 90 degrees; Push back off your front heel; Keep your torso upright
+0381 | Dumbbell Reverse Lunge | B | *c | Dumbbells | Glutes | - | Step straight back; Keep most of your weight on your front leg; Drive through your front heel to stand
+0413 | Dumbbell Squat | B | *c | Dumbbells | Glutes | - | Let the dumbbells hang by your sides; Keep your chest up and back flat; Squat to at least parallel
+0533 | Double Kettlebell Front Squat | I | *c | Kettlebells | Glutes, Core | - | Rest the bells in the rack position on your forearms; Keep your elbows tucked and chest up; Squat to at least parallel
+> Hold two kettlebells in the rack position at your shoulders, elbows tucked. | Stand with your feet shoulder-width apart. | Squat down until your thighs are at least parallel to the floor, keeping your chest up. | Drive back up through your whole foot.
+0534 | Kettlebell Goblet Squat | B | *c | Kettlebell | Glutes, Core | - | Hold the bell by its horns at your chest; Push your knees out as you descend; Keep your elbows inside your knees at the bottom
+0536 | Kettlebell Lunge Pass-Through | I | c | Kettlebell | Glutes, Core | - | Pass the bell under your front thigh at the bottom; Keep your torso upright; Alternate legs each rep
+0544 | Kettlebell Pistol Squat | A | cu | Kettlebell | Glutes, Core | - | Hold the bell at your chest as a counterweight; Keep your heel down; Master bodyweight pistols first
+1433 | Smith Machine Front Squat | I | c | Smith Machine | Glutes, Core | - | Rest the bar on your front shoulders; Keep your elbows high; Squat with your torso upright
+0770 | Smith Machine Squat | B | *c | Smith Machine | Glutes | - | Set your feet slightly in front of the bar; Set the safety stops just below your bottom position; Squat to at least parallel
+0755 | Smith Machine Hack Squat | I | c | Smith Machine | Glutes | - | Place your feet well in front of the bar; Lean back into the bar as you squat; Go deep with your torso upright
+> Set the bar on your upper back and walk your feet forward so they sit well in front of your body. | Lean back slightly into the bar and unrack it. | Squat down as deep as you can while keeping your torso upright. | Press back up through your whole foot.
+1376 | Single-Leg Cable Calf Raise | B | iu | Cable Machine | - | - | Hold the machine for balance; Rise as high as you can; Stand on a plate for extra range
+0400 | Single-Leg Seated Dumbbell Calf Raise | B | iu | Dumbbell, Bench | - | - | Rest the dumbbell on your working knee; Put the ball of your foot on a step; Pause at the top
+2315 | Rotary Calf Machine | B | i | Machine | - | - | Keep your knees slightly bent; Lower your heels for a full stretch; Press through the balls of your feet
+0730 | Slider Reverse Lunge | I | cu | Bodyweight | Glutes | - | Slide your back foot straight back; Keep your weight on your front leg; Pull the slider back in with control
+3235 | Lying Cable Leg Curl | B | i | Cable Machine, Bench | Glutes | - | Attach the cuffs to both ankles; Keep your hips pressed into the bench; Curl smoothly and lower slowly
+0068 | Barbell Single-Leg Squat | A | cu | Barbell | Glutes, Core | 3 sets × 3–6 reps each leg | Use a light bar; Hold your free leg out in front; Only go as deep as you can control
+
+## Glutes
+0980 | Resistance Band Bent-Over Hip Extension | B | *iu | Resistance Band | Hamstrings | - | Hinge forward with a flat back; Kick your heel straight back and up; Squeeze your glute at the top
+0991 | Resistance Band Pull-Through | B | *c | Resistance Band | Hamstrings, Lower Back | - | Anchor the band low behind you; Push your hips back, then snap them forward; Squeeze your glutes hard at lockout
+1008 | Resistance Band Step-Up | B | *c | Resistance Band, Box | Quads, Hamstrings | - | Loop the band just above your knees; Push your knees out against the band; Drive through the heel of your top foot
+1009 | Resistance Band Stiff-Leg Deadlift | B | *c | Resistance Band | Hamstrings, Lower Back | - | Stand on the middle of the band; Push your hips back with a soft knee bend; Squeeze your glutes to stand up
+> Stand on the middle of a resistance band with your feet hip-width apart, holding an end in each hand. | With a soft bend in your knees, push your hips back and lower your hands down the front of your legs, keeping your back flat. | Stop when you feel a strong stretch in your hamstrings. | Drive your hips forward and squeeze your glutes to stand back up.
+1409 | Barbell Glute Bridge | I | *c | Barbell | Hamstrings | - | Pad the bar across your hips; Drive through your heels and squeeze at the top; Keep your ribs down so your back doesn't arch
+1410 | Barbell Lateral Lunge | I | *cu | Barbell | Quads, Hamstrings | - | Step wide and sit back into your hip; Keep your trailing leg straight; Push off your bent leg to return
+0066 | Barbell Suitcase Deadlift | I | cu | Barbell | Core, Forearms | - | Hold the bar in the middle at your side; Keep your shoulders level — don't lean; Brace your core hard
+1756 | Barbell Single-Leg Deadlift | A | cu | Barbell | Hamstrings, Core | - | Hinge on one leg with your back leg in line with your torso; Keep your hips square to the floor; Start light — balance is the limiter
+0114 | Barbell Step-Up | I | *cu | Barbell, Box | Quads, Hamstrings | - | Use a box at about knee height; Drive through the heel of your top foot; Don't push off your bottom foot
+0117 | Barbell Sumo Deadlift | I | *c | Barbell | Hamstrings, Quads, Lower Back | - | Take a wide stance with toes turned out; Grip the bar inside your knees; Push the floor apart as you stand
+0130 | Bench Glute Kickback | B | iu | Bodyweight, Bench | Hamstrings | - | Kneel on the bench with one knee; Kick your free leg back until it's in line with your body; Don't arch your lower back
+> Kneel with one knee on a flat bench and your hands on the bench under your shoulders. | Let your other leg hang off the side, knee bent. | Drive that leg back and up until your thigh is in line with your body, squeezing your glute. | Lower slowly, complete your reps, then switch legs.
+3561 | Glute Bridge March | B | *c | Bodyweight | Hamstrings, Core | - | Hold your hips high and level; Lift one knee at a time; Don't let your hips drop when you march
+1423 | Bench Reverse Hyperextension | I | *i | Bodyweight, Bench | Hamstrings, Lower Back | - | Lie with your hips at the end of the bench; Lift your legs until they're level with your body; Lower slowly without swinging
+1774 | Side Plank Hip Abduction | I | iu | Bodyweight | Core, Obliques | - | Hold a straight side plank on your forearm; Lift your top leg without rotating your hips; Keep your hips lifted throughout
+0710 | Standing Hip Abduction | B | *iu | Bodyweight | - | - | Hold a wall for balance; Lift your leg out to the side without leaning; Keep your toes pointing forward
+1427 | Side-Lying Hip Abduction | B | *iu | Bodyweight | - | - | Keep your legs straight and stacked; Lead with your heel, toes pointing forward; Don't roll your hips backward
+0157 | Cable Deadlift | B | *c | Cable Machine | Hamstrings, Lower Back | - | Stand close to the low pulley; Hinge at your hips with a flat back; Squeeze your glutes as you stand tall
+0228 | Cable Standing Hip Extension | B | *iu | Cable Machine | Hamstrings | - | Face the machine with the cuff on your ankle; Kick back with a straight leg; Keep your torso still
+0300 | Dumbbell Deadlift | B | *c | Dumbbells | Hamstrings, Lower Back | - | Keep the dumbbells close to your legs; Push your hips back with a flat back; Drive through your heels to stand
+3888 | Dumbbell Snatch | I | cu | Dumbbell | Shoulders, Hamstrings, Core | 3–4 sets × 5–8 reps each arm | Power the dumbbell up with your hips and legs; Keep it close to your body as it rises; Punch your arm straight overhead to finish
+0295 | Dumbbell Clean | I | c | Dumbbells | Quads, Trapezius | 3–4 sets × 6–8 reps | Drive explosively through your legs; Keep the dumbbells close to your body; Catch them softly at your shoulders
+1757 | Dumbbell Single-Leg Deadlift | I | *cu | Dumbbell | Hamstrings, Core | - | Hold the dumbbell in the hand opposite your standing leg; Keep your hips square as you hinge; Reach your back leg long behind you
+0432 | Dumbbell Stiff-Leg Deadlift | B | *c | Dumbbells | Hamstrings, Lower Back | - | Keep a soft bend in your knees; Slide the dumbbells down the front of your legs; Stop at a strong hamstring stretch
+2808 | Dumbbell Sumo Squat | B | *c | Dumbbell | Quads, Hamstrings | - | Hold one dumbbell between your legs; Take a wide stance with toes turned out; Push your knees out as you squat
+0549 | Kettlebell Swing | I | *c | Kettlebell | Hamstrings, Core | 3–4 sets × 12–20 reps | It's a hip hinge, not a squat; Snap your hips forward to float the bell; Let your arms stay loose like ropes
+0551 | Turkish Get-Up | A | cu | Kettlebell | Shoulders, Core | 3 sets × 2–3 reps each side | Keep your eyes on the bell throughout; Keep your arm locked straight; Move slowly from one position to the next
+2286 | Glute Kickback Machine | B | *iu | Machine | Hamstrings | - | Keep your hips square on the pad; Push the platform back with your heel; Don't arch your lower back at the top
+> Kneel on the machine with your forearms on the pad and one foot against the platform. | Push the platform back and up with your heel until your hip is fully extended. | Squeeze your glute at the top. | Lower slowly, complete your reps, then switch legs.
+0593 | Reverse Hyperextension Machine | I | *i | Machine | Hamstrings, Lower Back | - | Hold the handles and lie with your hips at the edge of the pad; Swing your legs up with your glutes, not momentum; Lower under control
+3236 | Kneeling Banded Hip Thrust | B | *i | Resistance Band | Hamstrings | - | Loop the band around your hips and anchor it behind you; Sit your hips back toward your heels; Drive your hips forward and squeeze
+3006 | Seated Banded Hip Abduction | B | *i | Resistance Band | - | - | Loop the band just above your knees; Push your knees out and pause; Lean forward slightly to hit more of the glutes
+0752 | Smith Machine Deadlift | B | *c | Smith Machine | Hamstrings, Lower Back | - | Keep the bar close to your legs; Push your hips back with a flat back; Lock out by squeezing your glutes
+3142 | Smith Machine Sumo Squat | B | *c | Smith Machine | Quads, Hamstrings | - | Take a wide stance with toes turned out; Push your knees out over your toes; Squeeze your glutes at the top
+0675 | Stability Ball Reverse Hyperextension | B | i | Stability Ball | Hamstrings, Lower Back | - | Lie with your hips on the ball and hands on the floor; Lift your legs until they're level with your body; Lower slowly
+3769 | Curtsy Squat | B | *c | Bodyweight | Quads | - | Step back and across behind your front leg; Keep your hips facing forward; Drive through your front heel to stand
+0124 | Wide-Stance Barbell Squat | I | *c | Barbell | Quads, Hamstrings | - | Set your feet wider than your shoulders, toes out; Push your knees out as you descend; Squat to at least parallel
+0090 | Seated Good Morning | A | i | Barbell, Bench | Hamstrings, Lower Back | - | Use a light bar; Hinge forward with a flat back; Only lower as far as you can keep your back flat
+1466 | Twisting Hip Lift | B | c | Bodyweight | Obliques, Hamstrings | - | Hold your hips high throughout; Rotate your knees slowly side to side; Keep your shoulders on the floor
+0051 | Jefferson Squat | A | c | Barbell | Quads, Hamstrings, Core | - | Straddle the bar with one foot in front; Grip one hand in front and one behind; Stand up keeping your back straight
+0749 | Smith Machine Good Morning | I | i | Smith Machine | Hamstrings, Lower Back | - | Rest the bar on your upper back; Hinge with a soft bend in your knees; Stop at a strong hamstring stretch
+2805 | Supported Single-Leg Dumbbell Deadlift | B | cu | Dumbbell, Box | Hamstrings | - | Rest the toes of your back foot on a box for balance; Keep most of your weight on your front leg; Hinge with a flat back
+0411 | Dumbbell Single-Leg Squat | A | cu | Dumbbells | Quads, Core | 3 sets × 5–8 reps each leg | Hold your free leg out in front; Sit your hips back as you lower; Use a box behind you to control the depth
+1420 | Barbell Kneeling Jump Squat | A | c | Barbell | Quads, Hamstrings | 3–4 sets × 3–6 reps | Use a light bar; Swing your hips forward to jump onto your feet; Land in a squat with soft knees
+2611 | Single-Leg Horizontal Leg Press | I | cu | Machine | Quads, Hamstrings | - | Place your foot in the middle of the platform; Push through your heel; Don't let your knee cave inward
+3643 | Cossack Squat | I | cu | Kettlebell / Dumbbell | Quads, Hamstrings | - | Hold the weight at your chest as a counterbalance; Keep the heel of your bent leg down; Point the toes of your straight leg up
+1003 | Resistance Band Squat Row | B | c | Resistance Band | Quads, Upper Back | - | Anchor the band at waist height; Row as you stand out of the squat; Keep your chest up throughout
+0756 | Smith Machine Hip Thrust | B | i | Smith Machine, Bench | Hamstrings | - | Rest your upper back on the bench; Pad the bar across your hips; Squeeze your glutes hard at the top
+3433 | Swimmer Kicks | B | i | Bodyweight | Lower Back, Hamstrings | 3 sets × 20–30 seconds | Lift your chest and legs a few inches; Kick quickly with straight legs; Keep your neck neutral
+0102 | Kneeling Barbell Squat | I | c | Barbell | Hamstrings | - | Kneel on a pad with the bar on your upper back; Sit your hips back toward your heels; Drive your hips forward to rise
+0044 | Barbell Good Morning | I | *c | Barbell | Hamstrings, Lower Back | - | Keep a soft bend in your knees; Push your hips back with a flat back; Use a light weight — this lifts with leverage against you
+2812 | Dumbbell Step-Up with Knee Drive | I | c | Dumbbells, Box | Quads, Hip Flexors | - | Drive the trailing knee up to hip height; Push through the heel of your top foot; Stand tall at the top
+1687 | Reverse Lunge to Overhead Reach | B | c | Bodyweight | Quads, Shoulders | - | Step back into the lunge; Reach both arms tall overhead at the bottom; Drive through your front heel to return
+
+## Core
+0985 | Resistance Band Kneeling Twisting Crunch | B | *i | Resistance Band | Obliques | - | Kneel tall with your hips over your knees; Crunch down and across toward one hip; Alternate sides with control
+1005 | Resistance Band Standing Crunch | B | *i | Resistance Band | - | - | Anchor the band high behind you; Curl your ribs toward your hips; Don't hinge at the hips — crunch your spine
+0071 | Barbell Press Sit-Up | I | i | Barbell | Shoulders, Hip Flexors | - | Use a light bar or plate; Press the bar up as you sit up; Lower your torso slowly
+> Lie on your back with your knees bent, holding a light barbell across your chest. | Sit up, pressing the bar straight up over your chest as you rise. | Lower the bar back to your chest as you slowly roll back down.
+0084 | Barbell Rollout | I | i | Barbell | Shoulders, Lats | - | Use round plates so the bar rolls smoothly; Keep your hips in line with your torso; Only roll out as far as you can without your back sagging
+0103 | Standing Barbell Rollout | A | i | Barbell | Shoulders, Lats | 3 sets × 3–8 reps | Master kneeling rollouts first; Brace hard so your lower back doesn't sag; Roll out only as far as you can control
+0562 | Landmine Rotation | I | *i | Barbell | Obliques, Shoulders | - | Hold the end of the bar at arm's length; Rotate through your torso, not just your arms; Pivot your back foot as you turn
+> Wedge one end of a barbell into a corner or landmine and hold the other end with both hands at arm's length above your chest. | Rotate your torso to lower the bar in an arc toward one hip, keeping your arms straight. | Bring it back up over your head and down to the other hip. | Keep alternating sides with control.
+0001 | 3/4 Sit-Up | B | *i | Bodyweight | Hip Flexors | - | Stop when your torso is about 45 degrees off the floor; Keep your feet flat; Don't pull on your neck
+0002 | 45-Degree Side Bend | I | iu | Roman Chair | Obliques, Lower Back | - | Lie sideways on the 45-degree bench; Lower your torso sideways, then lift it back up; Keep your body facing forward
+> Lie sideways on a 45-degree back extension bench with your hip on the pad and feet secured. | Cross your arms over your chest. | Lower your upper body sideways toward the floor. | Lift back up by crunching your obliques, then switch sides after your reps.
+0006 | Alternating Heel Touch | B | *i | Bodyweight | Obliques | - | Lift your shoulders off the floor and keep them up; Reach side to side to touch each heel; Keep your feet flat
+3544 | Incline Side Plank | B | *ihu | Bodyweight, Bench | Obliques, Shoulders | - | Rest your forearm on a bench; Keep a straight line from head to feet; Progress to the floor version when it's easy
+> Place your forearm on a bench with your elbow under your shoulder and your body angled down to your feet on the floor. | Stack your feet and lift your hips so your body forms a straight line. | Hold for the target time, then switch sides.
+0138 | Bottoms-Up | I | i | Bodyweight | Hip Flexors | - | Push your feet toward the ceiling; Lift your hips off the floor with your abs; Lower slowly without swinging
+0870 | Butt-Ups | B | i | Bodyweight | Shoulders | - | Start in a forearm plank; Push your hips up toward the ceiling; Lower back to a straight plank without sagging
+> Start in a forearm plank with your body in a straight line. | Push your hips up toward the ceiling into an inverted V. | Lower back to the plank position, keeping your hips from sagging.
+2963 | Captain's Chair Leg Raise | I | i | Machine | Hip Flexors | - | Press your back into the pad; Raise your legs without swinging; Lower slowly
+0260 | Cocoon Crunch | B | *i | Bodyweight | Hip Flexors | - | Reach your arms overhead at the start; Bring your knees and chest together; Lower slowly to a stretch
+> Lie on your back with your legs straight and arms extended overhead. | Crunch up, pulling your knees toward your chest and bringing your arms around them. | Slowly extend back out to the start without letting your feet touch the floor.
+1468 | Crab Twist Toe Touch | B | c | Bodyweight | Triceps, Glutes | - | Lift your hips high in a crab position; Reach one hand toward the opposite foot; Alternate sides smoothly
+0262 | Cross-Body Crunch | B | *i | Bodyweight | Obliques | - | Twist your elbow toward the opposite knee; Keep your lower back on the floor; Don't pull on your neck
+0267 | Overhead-Arm Crunch | B | i | Bodyweight | - | - | Keep your arms by your ears; Curl your shoulders off the floor; Lower slowly
+3016 | McGill Curl-Up | B | *i | Bodyweight | - | - | Keep one knee bent and one leg straight; Lift your head and shoulders only slightly; Keep your lower back neutral
+> Lie on your back with one knee bent and the other leg straight, hands under the small of your back. | Brace your core and lift your head and shoulders a few centimetres off the floor without bending your neck. | Hold for a few seconds, then lower. | Switch leg positions halfway through your set.
+0277 | Decline Crunch | I | *i | Bodyweight, Decline Bench | Hip Flexors | - | Hook your feet securely; Curl your shoulders up off the bench; Lower slowly to keep tension
+0282 | Decline Sit-Up | I | *i | Bodyweight, Decline Bench | Hip Flexors | - | Hook your feet securely; Sit all the way up; Lower slowly
+0443 | Elbow-to-Knee Crunch | B | *i | Bodyweight | Obliques, Hip Flexors | - | Bring your elbow and opposite knee together; Twist through your torso; Keep the movement slow
+2429 | Frog Crunch | B | i | Bodyweight | - | - | Put the soles of your feet together and let your knees fall open; Curl your shoulders up toward your feet; This position takes the hip flexors out
+> Lie on your back with the soles of your feet together and your knees falling out to the sides. | Place your hands behind your head. | Curl your shoulders off the floor toward your feet. | Lower slowly.
+3296 | Front Lever | A | ih | Pull-Up Bar | Lats, Shoulders | - | Learn it tucked first; Keep your arms locked straight; Squeeze your glutes to stay flat
+> Hang from the bar with an overhand grip and pull your shoulder blades down. | Tuck your knees and lean back until your torso is horizontal. | Extend your legs (or keep a tuck while learning) so your body is a straight horizontal line, and hold.
+0464 | Plank Hip Twist | B | *i | Bodyweight | Obliques | - | Start in a forearm plank; Rotate your hips to tap each side toward the floor; Keep your shoulders over your elbows
+> Start in a forearm plank with your feet together. | Rotate your hips to one side, lowering that hip toward the floor. | Rotate back through the middle to the other side. | Keep alternating without letting your hips sag.
+3300 | Planche Lean | A | ih | Bodyweight | Shoulders, Chest | - | Turn your fingers out slightly; Lean your shoulders well past your hands; Keep your arms locked straight
+0467 | Gorilla Chin Crunch | A | c | Pull-Up Bar | Biceps, Lats | - | Hold the top of a chin-up; Pull your knees to your chest at the top; Lower your legs and body under control
+> Hang from a bar with an underhand grip. | Pull yourself up into a chin-up. | At the top, bring your knees up toward your chest. | Lower your legs, then lower your body to a full hang.
+3202 | Half Sit-Up | B | i | Bodyweight | Hip Flexors | - | Stop when your torso is halfway up; Keep your feet flat; Lower slowly
+0476 | Hanging Oblique Leg Raise | A | i | Pull-Up Bar | Obliques, Hip Flexors | - | Raise your legs toward one side; Keep the swing out of it; Alternate sides each rep
+0473 | Hanging Pike | A | i | Pull-Up Bar | Hip Flexors, Lats | 3 sets × 5–10 reps | Lift straight legs toward the bar; Press the bar down with straight arms; Lower slowly without swinging
+1471 | Inchworm | B | *c | Bodyweight | Hamstrings, Shoulders | - | Keep your legs as straight as you can; Walk your hands out to a full plank; Walk them back in with small steps
+0491 | Incline Bench Leg Raise | I | i | Bodyweight, Incline Bench | Hip Flexors | - | Hold the bench behind your head; Raise your legs until your hips curl up; Lower slowly
+0495 | Decline Twisting Sit-Up | I | i | Bodyweight, Decline Bench | Obliques, Hip Flexors | - | Hook your feet securely; Twist toward one knee as you rise; Alternate sides each rep
+0508 | Janda Sit-Up | I | i | Bodyweight | - | - | Press your heels into the floor; Curl up slowly; Keep your hamstrings tight to switch off your hip flexors
+> Lie on your back with your knees bent and feet flat. | Press your heels down into the floor and tighten your hamstrings. | Slowly curl up through your spine, keeping your heels pressed down. | Roll back down slowly.
+3640 | Knee Touch Crunch | B | i | Bodyweight | Obliques | - | Reach your hand across to the opposite knee; Keep your shoulder blades off the floor; Alternate sides
+3419 | L-Sit | A | *ih | Bodyweight | Hip Flexors, Triceps | - | Press your shoulders down away from your ears; Lock your arms and lift your legs; Bend your knees if you can't hold straight legs
+0570 | Seated Bench Knee Tuck | B | *i | Bodyweight, Bench | Hip Flexors | - | Lean back slightly with your hands on the bench; Pull your knees in to your chest; Extend your legs without touching the floor
+1688 | Lunge with Twist | B | c | Bodyweight | Obliques, Quads | - | Rotate toward your front leg; Keep your front knee over your ankle; Alternate legs each rep
+0635 | Oblique Crunch | B | *i | Bodyweight | Obliques | - | Rotate your shoulder toward the opposite knee; Keep your lower back on the floor; Alternate sides
+3147 | Pelvic Tilt | B | i | Bodyweight | Lower Back | - | Flatten your lower back into the floor; Breathe out as you tilt; Hold briefly before relaxing
+0664 | Push-Up to Side Plank | I | *c | Bodyweight | Obliques, Chest | - | Rotate into the side plank after each push-up; Stack your feet or stagger them; Alternate sides each rep
+0872 | Reverse Crunch | B | *i | Bodyweight | Hip Flexors | - | Curl your hips off the floor with your abs; Don't swing your legs; Lower slowly
+3663 | Reverse Plank Leg Lift | I | c | Bodyweight | Glutes, Shoulders | - | Lift your hips until your body is straight; Raise one leg without letting your hips drop; Alternate legs
+0689 | Seated Bench Leg Raise | B | i | Bodyweight, Bench | Hip Flexors | - | Sit tall holding the bench; Lift your legs straight out; Lower slowly
+0735 | Sit-Up | B | *i | Bodyweight | Hip Flexors | - | Anchor your feet if you need to; Sit all the way up; Lower slowly
+> Lie on your back with your knees bent and feet flat on the floor. | Cross your arms over your chest or touch your fingertips to your temples. | Curl up through your spine until you are sitting upright. | Lower slowly back down to the floor.
+0805 | Suspension Trainer Ab Fallout | I | i | TRX | Shoulders, Lats | - | Start with the straps at waist height; Let your arms rise overhead as you lean; Keep your body in a straight line
+0807 | Suspension Trainer Knee Tuck | I | i | TRX | Hip Flexors, Shoulders | - | Hook your feet into the foot cradles; Pull your knees toward your chest; Keep your hips level
+> Place your feet in the suspension trainer's foot cradles and walk your hands out into a high plank. | Pull your knees toward your chest, keeping your hips level. | Extend your legs back out to the plank.
+0871 | Tuck Crunch | B | *i | Bodyweight | Hip Flexors | - | Bring your knees and chest together; Lift your shoulders off the floor; Lower slowly
+2802 | Twisting Leg Raise | I | i | Bodyweight | Obliques, Hip Flexors | - | Keep your hands under your hips; Raise your legs and angle them to one side; Alternate sides
+3420 | V-Sit Hold | I | ih | Bodyweight | Hip Flexors | - | Balance on your sit bones; Keep your back straight; Bend your knees if your back rounds
+0873 | Cable Reverse Crunch | I | *i | Cable Machine | Hip Flexors | - | Attach the cable to your ankles; Curl your hips off the floor; Lower slowly against the cable
+> Attach ankle straps to a low pulley and lie on your back with your feet toward the machine. | Bring your knees up over your hips. | Curl your hips off the floor, pulling your knees toward your chest against the cable. | Lower slowly to the start.
+0222 | Cable Side Bend | B | *iu | Cable Machine | Obliques | - | Stand side-on to the low pulley; Bend sideways away from the machine; Keep your hips still
+0230 | Cable Low-to-High Woodchop | B | *iu | Cable Machine | Obliques, Shoulders | - | Set the pulley low; Rotate through your torso with straight arms; Pivot your back foot as you turn
+0243 | Standing Cable Rotation | B | i | Cable Machine | Obliques | - | Set the pulley at chest height; Keep your arms straight; Rotate through your torso, not your arms
+0407 | Dumbbell Side Bend | B | *iu | Dumbbell | Obliques | - | Hold the dumbbell at your side; Bend sideways only; Don't lean forward or back
+0777 | Dumbbell Spell Caster | I | i | Dumbbells | Obliques, Shoulders | - | Swing the dumbbells to one hip, then across to the other; Keep your hips facing forward; Move with control, not momentum
+0554 | Kettlebell Windmill | I | *iu | Kettlebell | Obliques, Shoulders | - | Keep your eyes on the bell; Lock your arm straight overhead; Push your hip out as you lower
+0524 | Kettlebell Bent Press | A | cu | Kettlebell | Shoulders, Obliques | 3 sets × 2–5 reps each side | Bend away from the bell to get under it; Keep your arm locked; Start very light
+0532 | Kettlebell Figure 8 | I | c | Kettlebell | Glutes, Forearms | - | Pass the bell between your legs; Keep your back flat; Move smoothly
+1452 | Machine Crunch | B | *i | Machine | - | - | Curl your ribs toward your hips; Don't pull with your arms; Return slowly
+0640 | Single-Arm Medicine Ball Slam | B | c | Medicine Ball | Shoulders, Lats | - | Use a no-bounce slam ball; Slam with your whole body; Alternate arms each rep
+0271 | Stability Ball Crunch | B | i | Stability Ball | - | - | Rest your lower back on the ball; Let your back stretch over the ball; Curl up without pulling your neck
+0650 | Stability Ball Knee Tuck | I | i | Stability Ball | Hip Flexors, Shoulders | - | Start in a plank with your shins on the ball; Roll the ball in with your knees; Keep your hips level
+> Start in a high plank with your shins resting on a stability ball. | Pull your knees toward your chest, rolling the ball forward. | Extend your legs to roll the ball back to the start.
+2135 | Weighted Plank | I | ih | Weight Plate | Shoulders | - | Have someone place the plate on your upper back; Keep a straight line from head to heels; Don't let your hips sag
+> Set up in a forearm plank and have a partner place a weight plate on your upper back. | Hold a straight line from your head to your heels. | Hold for the target time, then have the plate removed before you lower.
+1011 | Resistance Band Seated Twist | B | *i | Resistance Band | Obliques | - | Anchor the band at chest height to your side; Rotate away from the anchor; Keep your arms straight
+> Anchor a resistance band at chest height beside you and sit on the floor with your legs straight. | Hold the band with both hands, arms straight in front of your chest. | Rotate your torso away from the anchor. | Return slowly, then switch sides after your reps.
+0226 | Cable Standing Crunch | B | i | Cable Machine | - | - | Face the machine and hold the rope beside your head; Crunch your ribs toward your hips; Don't hinge at your hips
+> Attach a rope to a high pulley and face the machine, holding the rope beside your head. | Crunch down, pulling your ribs toward your hips. | Return slowly to the start.
+2399 | Cable Seated Twist | B | i | Cable Machine | Obliques | - | Sit side-on to the pulley; Keep your arms straight; Rotate through your torso
+0600 | Machine Leg Raise Crunch | B | i | Machine | Hip Flexors | - | Lift your knees toward your chest; Curl your torso forward; Return slowly
+2466 | Cross-Body Mountain Climber | I | c | Bodyweight | Obliques, Shoulders | - | Drive each knee toward the opposite elbow; Keep your hips level; Move at a steady pace
+0212 | Cable Seated Crunch | B | i | Cable Machine | - | - | Hold the rope behind your head; Curl your chest toward your knees; Return slowly
+0223 | Cable Side Crunch | B | iu | Cable Machine | Obliques | - | Stand side-on to the low pulley; Crunch your elbow toward your hip; Keep your hips still
+0865 | Lying Leg-Hip Raise | I | i | Bodyweight | Hip Flexors | - | Raise your legs to vertical; Lift your hips off the floor; Lower slowly
+> Lie on your back with your legs straight and hands by your sides. | Raise your legs until they point straight up. | Lift your hips off the floor, pushing your feet toward the ceiling. | Lower your hips, then your legs, slowly.
+3239 | Kneeling Plank Shoulder Tap | B | i | Bodyweight | Shoulders | - | Keep your knees down; Tap the opposite shoulder; Keep your hips still
+> Start in a high plank on your knees with your hands under your shoulders. | Lift one hand and tap your opposite shoulder, keeping your hips still. | Return the hand and repeat with the other side.
+3204 | Overhead-Arm Sit-Up | I | i | Bodyweight | Hip Flexors | - | Keep your arms by your ears; Sit all the way up; Lower slowly
+0634 | Negative Crunch | B | i | Bodyweight | - | - | Lower slowly over 3–5 seconds; Use a quick crunch up; Keep your lower back on the floor
+> Lie on your back with your knees bent and feet flat. | Crunch up quickly. | Lower your shoulders back to the floor as slowly as you can.
+3670 | Weighted Decline Sit-Up | I | i | Weight Plate, Decline Bench | Hip Flexors | - | Hold the plate against your chest; Hook your feet securely; Lower slowly
+> Lie on a decline bench with your feet secured, holding a weight plate against your chest. | Sit up until your torso is upright. | Lower slowly back down.
+0832 | Plate Crunch | B | i | Weight Plate | - | - | Hold the plate on your chest; Curl your shoulders off the floor; Lower slowly
+0094 | Seated Barbell Twist | B | i | Barbell, Bench | Obliques | - | Use an empty bar or broomstick; Rotate only as far as is comfortable; Keep your hips facing forward
+1707 | Stability Ball Prone Twist | I | i | Stability Ball | Lower Back, Obliques | - | Lie face down on the ball; Lift your chest and rotate; Keep your hips still

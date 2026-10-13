@@ -2,6 +2,8 @@
 # wger_id links to wger.de REST API for descriptions and images
 # wger API docs: https://wger.de/api/v2/
 
+from data.exercises_extended import EXTENDED_EXERCISES
+
 EXERCISES = [
   # CHEST
   {
@@ -604,12 +606,12 @@ ADDITIONAL_EXERCISES = [
     "wger_id": None,
   },
   {
-    "name": "Renegade Row",
+    "name": "Rotating Dumbbell Bent-Over Row",
     "muscle_group": "back",
-    "secondary_muscles": ["biceps", "core", "shoulders"],
+    "secondary_muscles": ["biceps", "forearms"],
     "equipment": ["dumbbell"],
-    "difficulty": "advanced",
-    "sets": 3, "reps": 8, "rest_seconds": 90,
+    "difficulty": "intermediate",
+    "sets": 3, "reps": 10, "rest_seconds": 75,
     "is_compound": True,
     "wger_id": None,
   },
@@ -1264,21 +1266,21 @@ ADDITIONAL_EXERCISES = [
     "wger_id": None,
   },
   {
-    "name": "Pallof Press",
+    "name": "Standing Cable Rotation",
     "muscle_group": "abs",
-    "secondary_muscles": ["shoulders", "glutes"],
+    "secondary_muscles": ["core"],
     "equipment": ["machines"],
     "difficulty": "beginner",
-    "sets": 3, "reps": 12, "rest_seconds": 45,
+    "sets": 3, "reps": 15, "rest_seconds": 45,
     "is_compound": False,
     "wger_id": None,
   },
   {
-    "name": "Resistance Band Pallof Press",
+    "name": "Resistance Band Vertical Pallof Press",
     "muscle_group": "abs",
-    "secondary_muscles": ["shoulders", "glutes"],
+    "secondary_muscles": ["core"],
     "equipment": ["resistanceBand"],
-    "difficulty": "beginner",
+    "difficulty": "intermediate",
     "sets": 3, "reps": 12, "rest_seconds": 45,
     "is_compound": False,
     "wger_id": None,
@@ -1296,6 +1298,8 @@ ADDITIONAL_EXERCISES = [
 ]
 
 EXERCISES.extend(ADDITIONAL_EXERCISES)
+# 200 well-known exercises from the extended library (generated file)
+EXERCISES.extend(EXTENDED_EXERCISES)
 
 
 def get_exercises_for_equipment(equipment_list: list[str]) -> list[dict]:

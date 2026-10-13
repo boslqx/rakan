@@ -86,7 +86,7 @@ rakan/
 ├─ firebase.json
 ├─ pubspec.yaml
 ├─ assets/
-│   ├─ exercise_gifs/       # ~125 local GIF demos
+│   ├─ exercise_gifs/       # ~625 local GIF demos (500 from the exercises-dataset, © Gym visual)
 │   ├─ exercise_thumbnails/  muscle_illustration/  fonts/  images/
 ├─ android/app/src/main/kotlin/com/example/rakan/   # native pose pipeline
 ├─ backend/
@@ -94,7 +94,8 @@ rakan/
 │   ├─ firebase_config.py   # Admin SDK init (env JSON or local file)
 │   ├─ routers/             # plan_router, adapt_router, adaptation_engine_router
 │   ├─ services/            # plan_generator.py, adaptation_engine.py
-│   ├─ data/exercises.py    # backend exercise pool (126 exercises)
+│   ├─ data/exercises.py    # backend exercise pool (126 hand-written + 200 from exercises_extended.py)
+│   ├─ scripts/build_extended_exercises.py  # builds the extended library from extended_exercises_spec.txt
 │   ├─ ml/                  # generate_training_data.py, train_model.py, *.pkl, training_data.csv
 │   └─ tests/test_adaptation_engine.py
 ├─ lib/
@@ -184,7 +185,7 @@ Header, week indicator (shows mesocycle week; every 4th week flagged deload), **
 ### 6.5 Workout tab
 Segmented **SCHEDULE / EXERCISE LIBRARY**.
 - *Schedule:* "CURRENT CYCLE", workout/rest counts, per-day cards; edit mode supports **Replace Day** (swap content between days), **Cancel Day** (→ rest), **Convert rest→workout** (empty or template), add/remove/reorder exercises, per-day **start-time reminder**.
-- *Library:* 127 static `ExerciseData` entries (muscle group, secondary muscles, difficulty, equipment, YouTube id, steps, tips, GIF/thumbnail, `hasPoseDetection`), filter by muscle group, detail sheet.
+- *Library:* 626 static `ExerciseData` entries — 126 hand-written in `exercise_data.dart` plus 500 generated into `exercise_data_extended.dart` from the exercises-dataset (muscle group, secondary muscles, difficulty, equipment, YouTube id, steps, tips, GIF/thumbnail, `hasPoseDetection`), filter by muscle group, detail sheet.
 - *Session flow:* `WorkoutPreviewScreen` → choose **Manual** (`WorkoutActiveScreen`: scrollable list, per-set reps/weight, per-exercise **RPE 1–10 slider**) or **Guided** (`AutoLogScreen`: phase machine `ready → active → resting → rpe`, rest timers, optional camera rep-counting) → `WorkoutCompleteScreen` (summary, PRs, photo, triggers adaptation) → `WorkoutLogDetailScreen` for history.
 - Standalone `PoseDetectionScreen` (countdown overlay → live skeleton + feedback + rep counter).
 
@@ -234,7 +235,9 @@ Input: `uid, goal, experience, equipment[], workout_days[1–7], session_duratio
 4. Client side (`InjuryService`): body regions map to muscle groups (`kBodyRegionToMuscleGroups`; head/neck deliberately excluded); injuries with status `recovered` are ignored; call is best-effort (errors swallowed, 90 s timeout).
 
 ### 7.4 Exercise pool (`backend/data/exercises.py`)
-126 entries. By muscle group: legs 22, back 19, abs 19, chest 18, arms 17, shoulders 16, glutes 15. By difficulty: beginner 84, intermediate 34, advanced 8. Fields: `name, muscle_group, secondary_muscles, equipment[], difficulty, sets, reps, rest_seconds, is_compound, wger_id`. (The Flutter app carries its **own** 127-entry static library — the two lists are not a single source of truth; see §17.)
+326 entries: 126 hand-written plus 200 well-known exercises generated into `data/exercises_extended.py` (`wger_id` is `None` for those). By muscle group: legs 50, back 48, chest 47, abs 47, arms 46, shoulders 45, glutes 43. By difficulty: beginner 225, intermediate 87, advanced 14. Fields: `name, muscle_group, secondary_muscles, equipment[], difficulty, sets, reps, rest_seconds, is_compound, wger_id`. (The Flutter app carries its **own** 626-entry static library — the two lists are not a single source of truth; see §17. Every generated backend name also exists in the Flutter library.)
+
+The extended entries are built by `backend/scripts/build_extended_exercises.py` from the curated `extended_exercises_spec.txt` (names, groups, difficulty, equipment, tips, corrected steps) joined with the exercises-dataset (instructions, secondary muscles, media). Re-run it with `--dataset <path>` after editing the spec; `--check` validates without writing.
 
 ### 7.5 Startup
 `main.py` mounts the three routers. `adapt_router` loads `fatigue_model.pkl` + `fatigue_scaler.pkl` **once at import**; if missing it falls back to `avg_rpe/10`.
@@ -475,7 +478,7 @@ Follow/request system (public → instant accept; private → `pending` until ta
 2. **Synthetic-data circularity** (see §8.3): high R² is expected, not validation.
 3. **Backend endpoints are unauthenticated.** `uid` is taken from the request body and the Admin SDK bypasses Firestore rules, so anyone who knows a uid could call `/generate-plan` or `/regenerate-plan` for it. Acceptable for an FYP; state as a limitation with the mitigation (verify Firebase ID token server-side).
 4. **Render cold start ~50 s** on the free tier → 60–90 s client timeouts; `adapt-plan` failures return `''` and are swallowed (session still saves, adaptation proposal silently skipped).
-5. **Two exercise libraries** (backend `exercises.py`, 126 items; client `exercise_data.dart`, 127 items) with name-based joins (`findExerciseByName`) — a renamed exercise silently breaks lookup (`_muscleGroupsForPlanDay` etc. fall back to null).
+5. **Two exercise libraries** (backend `exercises.py`, 326 items; client `exercise_data.dart` + `exercise_data_extended.dart`, 626 items) with name-based joins (`findExerciseByName`) — a renamed exercise silently breaks lookup (`_muscleGroupsForPlanDay` etc. fall back to null).
 6. **Client-clock dependence** for skip/return-from-break timing (Decision #56, accepted). Signal is event-driven, not time-driven.
 7. **Scaling:** many queries read the whole `workoutLogs` collection and sort in Dart; PR/calendar scans capped at 30 logs. Fine at FYP scale.
 8. **Goal does not affect generated plans** (see §7.2): the four goals produce equivalent plans for the same profile.
