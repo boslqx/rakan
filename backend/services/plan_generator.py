@@ -202,6 +202,70 @@ def generate_plan(
     }
 
 
+# Markers regenerate_days leaves on a day it had to change because of an
+# injury: a whole-day rest swap, or a workout rebuilt on fallback muscles.
+INJURY_REST_FOCUS = "Recovery (injury-adjusted)"
+ADJUSTED_SUFFIX = " (Adjusted)"
+
+
+def is_injury_adjusted(day: dict) -> bool:
+    return (day.get("workoutName") or "").endswith(ADJUSTED_SUFFIX) or (
+        day.get("focusDescription") == INJURY_REST_FOCUS
+    )
+
+
+def select_days_to_regenerate(
+    days: list[dict],            # the plan's day docs, each with its dayPlanId
+    logged_days: set[int],
+    restore_only: bool,
+) -> list[dict]:
+    """The regenerate_days specs for the days /regenerate-plan may rewrite.
+
+    Days logged this week are never touched. With injuries still active,
+    every workout day is rebuilt around them, plus any injury rest day so it
+    can come back once its muscles are safe again. With no injuries left
+    (restore_only), only days an earlier regeneration adjusted are rebuilt;
+    everything else keeps its weekly adaptations and manual edits.
+    """
+    specs = []
+    for day in days:
+        if day.get("dayNumber") in logged_days:
+            continue
+        injury_rest = day.get("focusDescription") == INJURY_REST_FOCUS
+        if restore_only:
+            if not is_injury_adjusted(day):
+                continue
+        elif day.get("dayType") != "workout" and not injury_rest:
+            continue  # ordinary rest days have nothing to filter
+
+        if injury_rest:
+            split_name = day.get("originalWorkoutName") or _infer_split_name(day, days)
+        else:
+            split_name = day.get("workoutName") or "Full Body"
+        specs.append({
+            "dayPlanId": day["dayPlanId"],
+            "dayNumber": day.get("dayNumber"),
+            "dayName": day.get("dayName"),
+            "workoutName": split_name,
+        })
+    return specs
+
+
+def _infer_split_name(day: dict, days: list[dict]) -> str:
+    """Best guess at the split of an injury rest day saved before
+    originalWorkoutName existed. generate_plan hands out DAY_SPLITS in
+    weekday order, so the day's position among the plan's training days
+    (workout days + injury rest days) gives its split back."""
+    training = sorted(
+        d.get("dayNumber") for d in days
+        if d.get("dayType") == "workout" or d.get("focusDescription") == INJURY_REST_FOCUS
+    )
+    splits = DAY_SPLITS.get(len(training))
+    if not splits or day.get("dayNumber") not in training:
+        return "Full Body"
+    return splits[training.index(day.get("dayNumber")) % len(splits)]
+
+
 def regenerate_days(
     day_specs: list[dict],       # [{dayPlanId, dayNumber, dayName, workoutName(splitName)}]
     excluded_muscle_groups: list[str],
@@ -222,7 +286,7 @@ def regenerate_days(
         split_name = spec.get("workoutName", "Full Body")
         # A day regenerated before may already carry the " (Adjusted)"
         # suffix — strip it so the original split's muscles are used.
-        base_split = split_name.replace(" (Adjusted)", "")
+        base_split = split_name.replace(ADJUSTED_SUFFIX, "")
         target_muscles = SPLIT_MUSCLES.get(base_split, ["chest"])
 
         # Remove injured muscle groups from this day's target focus
@@ -247,33 +311,39 @@ def regenerate_days(
             )
 
         if not raw_exercises:
-            # Every muscle group is excluded, or nothing safe is available
+            # Every muscle group is excluded, or nothing safe is available.
+            # originalWorkoutName keeps the split so the day can be restored
+            # once the injury recovers ("Rest Day" alone would lose it).
             updated_days.append({
                 "dayPlanId": spec["dayPlanId"],
                 "dayNumber": spec["dayNumber"],
                 "dayName": spec["dayName"],
                 "dayType": "rest",
                 "workoutName": "Rest Day",
-                "focusDescription": "Recovery (injury-adjusted)",
+                "focusDescription": INJURY_REST_FOCUS,
                 "durationMinutes": 0,
                 "exercises": [],
+                "originalWorkoutName": base_split,
             })
             continue
 
         focus_label = _focus_label(safe_targets)
         if used_fallback:
-            focus_label += " (Adjusted)"
+            focus_label += ADJUSTED_SUFFIX
 
-        updated_days.append({
+        day = {
             "dayPlanId": spec["dayPlanId"],
             "dayNumber": spec["dayNumber"],
             "dayName": spec["dayName"],
             "dayType": "workout",
-            "workoutName": base_split if not used_fallback else f"{base_split} (Adjusted)",
+            "workoutName": base_split if not used_fallback else f"{base_split}{ADJUSTED_SUFFIX}",
             "focusDescription": focus_label,
             "durationMinutes": _session_minutes(raw_exercises),
             "exercises": [_format_exercise(ex) for ex in raw_exercises],
-        })
+        }
+        if used_fallback:
+            day["originalWorkoutName"] = base_split
+        updated_days.append(day)
 
     return updated_days
 

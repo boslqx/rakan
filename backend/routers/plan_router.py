@@ -1,7 +1,12 @@
 from fastapi import APIRouter, HTTPException
 from typing import Optional
 from pydantic import BaseModel, Field
-from services.plan_generator import generate_plan, regenerate_days, get_logged_day_numbers_this_week
+from services.plan_generator import (
+    generate_plan,
+    regenerate_days,
+    get_logged_day_numbers_this_week,
+    select_days_to_regenerate,
+)
 from firebase_config import db
 
 router = APIRouter()
@@ -106,6 +111,8 @@ async def generate_plan_endpoint(request: GeneratePlanRequest):
 class RegeneratePlanRequest(BaseModel):
     uid: str
     plan_id: str
+    # Empty once the last injury recovers: the call then only restores the
+    # days earlier injury regenerations adjusted.
     excluded_muscle_groups: list[str]
     goal: str
     experience: str
@@ -128,25 +135,11 @@ async def regenerate_plan_endpoint(request: RegeneratePlanRequest):
         # Step 1: find which weekdays are already locked (logged this week)
         logged_days = get_logged_day_numbers_this_week(db, request.uid, request.client_date)
 
-        # Step 2: fetch all day docs, split into locked vs eligible
-        all_days_snap = days_ref.get()
-        eligible_specs = []
-        eligible_doc_ids = {}  # dayNumber -> firestore doc id
-
-        for doc in all_days_snap:
-            data = doc.to_dict()
-            day_number = data.get("dayNumber")
-            if day_number in logged_days:
-                continue  # locked — never touched, per your explicit decision
-            if data.get("dayType") != "workout":
-                continue  # rest days have nothing to filter
-            eligible_specs.append({
-                "dayPlanId": doc.id,
-                "dayNumber": day_number,
-                "dayName": data.get("dayName"),
-                "workoutName": data.get("workoutName", "Full Body"),
-            })
-            eligible_doc_ids[day_number] = doc.id
+        # Step 2: pick the days to rebuild. Locked days are never touched;
+        # with no exclusions left, only injury-adjusted days are restored.
+        restore_only = not request.excluded_muscle_groups
+        all_days = [{**doc.to_dict(), "dayPlanId": doc.id} for doc in days_ref.get()]
+        eligible_specs = select_days_to_regenerate(all_days, logged_days, restore_only)
 
         if not eligible_specs:
             return {"success": True, "message": "No eligible days to update.", "updatedCount": 0}
@@ -166,7 +159,7 @@ async def regenerate_plan_endpoint(request: RegeneratePlanRequest):
         batch = db.batch()
         for day in updated_days:
             day_ref = days_ref.document(day["dayPlanId"])
-            batch.set(day_ref, {
+            day_doc = {
                 "dayPlanId": day["dayPlanId"],
                 "dayNumber": day["dayNumber"],
                 "dayName": day["dayName"],
@@ -174,7 +167,12 @@ async def regenerate_plan_endpoint(request: RegeneratePlanRequest):
                 "workoutName": day["workoutName"],
                 "focusDescription": day["focusDescription"],
                 "durationMinutes": day["durationMinutes"],
-            })
+            }
+            # Only on injury-adjusted days; a full overwrite drops it again
+            # once the day is restored.
+            if day.get("originalWorkoutName"):
+                day_doc["originalWorkoutName"] = day["originalWorkoutName"]
+            batch.set(day_ref, day_doc)
             # Clear old exercises, write new ones
             old_exercises = day_ref.collection("exercises").get()
             for ex_doc in old_exercises:
@@ -185,9 +183,14 @@ async def regenerate_plan_endpoint(request: RegeneratePlanRequest):
 
         batch.commit()
 
+        message = (
+            f"Restored {len(updated_days)} injury-adjusted day(s)."
+            if restore_only
+            else f"Regenerated {len(updated_days)} day(s) around active injuries."
+        )
         return {
             "success": True,
-            "message": f"Regenerated {len(updated_days)} day(s) around active injuries.",
+            "message": message,
             "updatedCount": len(updated_days),
         }
 

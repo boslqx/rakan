@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_body_heatmap/flutter_body_heatmap.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../workout/services/workout_plan_service.dart';
+import '../../workout/services/notification_service.dart';
 import '../services/injury_service.dart';
 import '../../workout/data/exercise_data.dart';
 import 'dart:convert';
@@ -91,6 +92,20 @@ class _CoachScreenState extends State<CoachScreen> {
     _loadRecovery();
     _loadBodyJourney();
     _loadWorkoutRecords();
+    NotificationService().recoveryMapRequests.addListener(_openRecoveryMap);
+  }
+
+  @override
+  void dispose() {
+    NotificationService().recoveryMapRequests.removeListener(_openRecoveryMap);
+    super.dispose();
+  }
+
+  /// An injury check-in was tapped (MainShell switches to this tab).
+  void _openRecoveryMap() {
+    if (!mounted) return;
+    setState(() => _selectedTab = 1);
+    _loadRecovery();
   }
 
   // RECORDS TAB — BODY JOURNEY
@@ -397,29 +412,19 @@ class _CoachScreenState extends State<CoachScreen> {
         _muscleRecoveryData = muscleRecoveryData;
         _recoveryLoading = false;
       });
+      // Check-ins for injuries logged while notifications were off (or
+      // before reminders existed). Fire-and-forget; never prompts.
+      InjuryService().backfillRecoveryReminders(_uid, _injuries);
     } catch (e) {
       debugPrint('CoachScreen recovery error: $e');
       setState(() => _recoveryLoading = false);
     }
   }
 
-  Future<void> _seedInjuriesFromProfile(List<dynamic> profileInjuries) async {
-    for (final inj in profileInjuries) {
-      final injMap = inj as Map<String, dynamic>;
-      await _db
-          .collection('users')
-          .doc(_uid)
-          .collection('injuries')
-          .add({
-        'region': injMap['region'] ?? '',
-        'label': injMap['label'] ?? '',
-        'isCustom': injMap['isCustom'] ?? false,
-        'status': 'active',
-        'loggedAt': FieldValue.serverTimestamp(),
-        'recoveredAt': null,
-      });
-    }
-  }
+  // Fallback for accounts whose first plan was generated before onboarding
+  // injuries were seeded at plan generation (or where that call failed).
+  Future<void> _seedInjuriesFromProfile(List<dynamic> profileInjuries) =>
+      InjuryService().seedFromProfile(_uid!, profileInjuries);
 
   // BUILD
   @override
@@ -1647,6 +1652,23 @@ class _CoachScreenState extends State<CoachScreen> {
       if (newStatus == 'recovered')
         'recoveredAt': FieldValue.serverTimestamp(),
     });
+
+    // The check-in has nothing left to ask once it's recovered. Kept while
+    // it's only 'recovering' — that's exactly when the nudge is useful.
+    if (newStatus == 'recovered') {
+      final injury = _injuries.firstWhere(
+        (i) => i['id'] == injuryId,
+        orElse: () => const {},
+      );
+      try {
+        await NotificationService().cancelInjuryReminder(
+          injuryId,
+          notificationId: (injury['reminderNotificationId'] as num?)?.toInt(),
+        );
+      } catch (e) {
+        debugPrint('CoachScreen reminder cancel failed: $e');
+      }
+    }
 
     final plan = await WorkoutPlanService().getActivePlan(_uid);
     if (plan != null) {

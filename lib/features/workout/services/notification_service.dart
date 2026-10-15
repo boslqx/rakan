@@ -4,7 +4,8 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tzdata;
 
-/// Handles scheduling of local workout reminder notifications.
+/// Handles scheduling of local workout reminder notifications, plus the
+/// one-time injury recovery check-ins (IDs 1000+).
 ///
 /// WHY LOCAL NOTIFICATIONS (not push/FCM):
 /// The 7-day workout plan is already known to the device once fetched
@@ -24,6 +25,9 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+  bool _timezoneReady = false;
+  bool _pluginReady = false;
+  bool _launchTapHandled = false;
 
   // Notification IDs 101-107 reserved for the 7 days of the week
   // (Monday=101 ... Sunday=107). Fixed IDs let us cancel/replace
@@ -36,27 +40,27 @@ class NotificationService {
   // two features can't cancel/overwrite each other.
   static const int _dayReminderBaseId = 200;
 
+  // Every ID from 1000 up is a one-time injury recovery check-in. Each
+  // injury gets its own ID hashed from its Firestore doc ID (see
+  // injuryReminderId), so it can be cancelled on its own and can never
+  // collide with the 101-107 / 201-207 weekly ranges or the 999 test ping.
+  static const int _injuryReminderBaseId = 1000;
+  static const int _injuryReminderIdSpan = 1000000000;
+
+  /// Payload prefix on injury check-ins; tapping one opens Recovery Map.
+  static const String _injuryPayloadPrefix = 'injury:';
+
+  /// Bumped whenever the user taps an injury check-in. MainShell and
+  /// CoachScreen listen to it to jump to Coach → Recovery Map.
+  final ValueNotifier<int> recoveryMapRequests = ValueNotifier(0);
+
   /// Must be called once before scheduling — sets up timezone data
   /// and platform-specific notification channels.
   Future<void> init() async {
     if (_initialized) return;
 
-    // latest_all (not latest) is required here: Android reports the device
-    // zone as "Asia/Kuala_Lumpur", which IANA tzdata defines as an alias of
-    // the canonical "Asia/Singapore" zone. package:timezone's "latest"
-    // dataset only ships canonical zone names and throws on alias lookups
-    // ("Location ... doesn't exist") — "latest_all" includes the aliases.
-    tzdata.initializeTimeZones();
-    await _setLocalTimezone();
-
-    const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
-    );
-
-    // v22 uses named parameter 'settings' instead of positional
-    await _plugin.initialize(
-      settings: const InitializationSettings(android: androidSettings),
-    );
+    await _initTimezone();
+    await _initPlugin();
 
     // Android 13+ requires runtime notification permission
     await _plugin
@@ -73,6 +77,54 @@ class NotificationService {
         ?.requestExactAlarmsPermission();
 
     _initialized = true;
+  }
+
+  Future<void> _initTimezone() async {
+    if (_timezoneReady) return;
+    // latest_all (not latest) is required here: Android reports the device
+    // zone as "Asia/Kuala_Lumpur", which IANA tzdata defines as an alias of
+    // the canonical "Asia/Singapore" zone. package:timezone's "latest"
+    // dataset only ships canonical zone names and throws on alias lookups
+    // ("Location ... doesn't exist") — "latest_all" includes the aliases.
+    tzdata.initializeTimeZones();
+    await _setLocalTimezone();
+    _timezoneReady = true;
+  }
+
+  /// Plugin setup only — no permission prompts, so it is safe to run when
+  /// a screen loads (tap handling, injury reminder backfill).
+  Future<void> _initPlugin() async {
+    if (_pluginReady) return;
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
+
+    // v22 uses named parameter 'settings' instead of positional
+    await _plugin.initialize(
+      settings: const InitializationSettings(android: androidSettings),
+      onDidReceiveNotificationResponse: (response) =>
+          _handleTap(response.payload),
+    );
+    _pluginReady = true;
+  }
+
+  void _handleTap(String? payload) {
+    if (payload != null && payload.startsWith(_injuryPayloadPrefix)) {
+      recoveryMapRequests.value++;
+    }
+  }
+
+  /// Called by MainShell on start. Registers the tap handler for this run
+  /// of the app, and — once per launch — routes to Recovery Map if the app
+  /// was opened by tapping an injury check-in.
+  Future<void> handleNotificationTaps() async {
+    await _initPlugin();
+    if (_launchTapHandled) return;
+    _launchTapHandled = true;
+    final details = await _plugin.getNotificationAppLaunchDetails();
+    if (details?.didNotificationLaunchApp ?? false) {
+      _handleTap(details!.notificationResponse?.payload);
+    }
   }
 
   /// Points package:timezone's `tz.local` at the device's zone.
@@ -290,6 +342,125 @@ class NotificationService {
   /// Cancels a single day's "time to start" reminder.
   Future<void> cancelDayReminder(int dayNumber) async {
     await _plugin.cancel(id: _dayReminderBaseId + dayNumber);
+  }
+
+  /// Stable notification ID for an injury's recovery check-in, derived from
+  /// its Firestore doc ID (FNV-1a — String.hashCode isn't guaranteed to be
+  /// stable across app versions). Always in [1000, 1000000999].
+  static int injuryReminderId(String injuryId) {
+    var hash = 0x811c9dc5;
+    for (final unit in injuryId.codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+    }
+    return _injuryReminderBaseId + hash % _injuryReminderIdSpan;
+  }
+
+  /// 9:00 AM local time on the expected recovery date (logged date +
+  /// [estimatedRecoveryDays]), or null when there's no estimate.
+  static DateTime? injuryReminderTime(
+    DateTime? loggedAt,
+    int? estimatedRecoveryDays,
+  ) {
+    if (loggedAt == null || estimatedRecoveryDays == null) return null;
+    return DateTime(
+      loggedAt.year,
+      loggedAt.month,
+      loggedAt.day + estimatedRecoveryDays,
+      9,
+    );
+  }
+
+  static String injuryReminderBody(String label, {bool affectsPlan = true}) =>
+      affectsPlan
+          ? 'Is your $label better? Mark it recovered in Recovery Map so it returns to your plan.'
+          : 'Is your $label better? Mark it recovered in Recovery Map.';
+
+  /// "leftKnee" -> "Left Knee"
+  static String _regionLabel(String region) => region
+      .replaceAllMapped(RegExp(r'[A-Z]'), (m) => ' ${m[0]}')
+      .trim()
+      .split(' ')
+      .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1))
+      .join(' ');
+
+  /// Schedules a one-time recovery check-in for an injury at [fireAt]
+  /// (device-local time). Doesn't ask for permission — callers check
+  /// [hasPermission] first. Returns the notification ID to store on the
+  /// injury doc, or null if [fireAt] has already passed.
+  Future<int?> scheduleInjuryReminder({
+    required String injuryId,
+    required String label,
+    required String region,
+    required DateTime fireAt,
+    bool affectsPlan = true,
+  }) async {
+    await _initTimezone();
+    await _initPlugin();
+
+    final scheduledDate = tz.TZDateTime(
+      tz.local,
+      fireAt.year,
+      fireAt.month,
+      fireAt.day,
+      fireAt.hour,
+      fireAt.minute,
+    );
+    if (!scheduledDate.isAfter(tz.TZDateTime.now(tz.local))) return null;
+
+    // Exact like the weekly reminders when allowed. Android 14 denies exact
+    // alarms by default, and an exact request then throws — a check-in that
+    // lands a few minutes late is fine, so fall back to inexact.
+    final canExact = await _plugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >()
+            ?.canScheduleExactNotifications() ??
+        true;
+
+    final id = injuryReminderId(injuryId);
+    final regionLabel = _regionLabel(region);
+    await _plugin.zonedSchedule(
+      id: id,
+      title: regionLabel.isEmpty
+          ? 'Recovery check-in'
+          : 'Recovery check-in · $regionLabel',
+      body: injuryReminderBody(label, affectsPlan: affectsPlan),
+      payload: '$_injuryPayloadPrefix$injuryId',
+      scheduledDate: scheduledDate,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'injury_reminders',
+          'Injury Check-ins',
+          channelDescription:
+              'Asks whether an injury has recovered on its expected date',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+      androidScheduleMode: canExact
+          ? AndroidScheduleMode.exactAllowWhileIdle
+          : AndroidScheduleMode.inexactAllowWhileIdle,
+    );
+    debugPrint('[Notif] injury id=$id -> $scheduledDate');
+    await _logPending();
+    return id;
+  }
+
+  /// Cancels one injury's check-in. Pass the stored reminderNotificationId
+  /// when there is one; otherwise it's re-derived from [injuryId].
+  Future<void> cancelInjuryReminder(
+    String injuryId, {
+    int? notificationId,
+  }) async {
+    await _plugin.cancel(id: notificationId ?? injuryReminderId(injuryId));
+  }
+
+  /// Cancels every pending injury check-in (all IDs from 1000 up).
+  Future<void> cancelAllInjuryReminders() async {
+    final pending = await _plugin.pendingNotificationRequests();
+    for (final p in pending) {
+      if (p.id >= _injuryReminderBaseId) await _plugin.cancel(id: p.id);
+    }
   }
 
   /// Returns true if notification permission has been granted.

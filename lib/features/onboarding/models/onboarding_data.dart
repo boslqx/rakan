@@ -78,6 +78,13 @@ class InjuryEntry {
     required this.label,
     this.isCustom = false,
   });
+
+  /// Shape stored in the profile's 'injuries' list.
+  Map<String, dynamic> toMap() => {
+    'region': region.name,
+    'label': label,
+    'isCustom': isCustom,
+  };
 }
 
 // The main data object, one instance created at splash, pass through all steps
@@ -224,11 +231,7 @@ OnboardingData:
       'equipment': equipment.map((e) => e.name).toList(), 
       'motivation': motivation?.name,
       'focusAreas': focusAreas.map((f) => f.name).toList(),
-      'injuries': injuries.map((i) => {                   
-        'region': i.region.name,
-        'label': i.label,
-        'isCustom': i.isCustom,
-      }).toList(),
+      'injuries': injuries.map((i) => i.toMap()).toList(),
       'onboardingCompleted': true, 
     };
   }

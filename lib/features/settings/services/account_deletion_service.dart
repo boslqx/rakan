@@ -165,6 +165,9 @@ class AccountDeletionService {
     try {
       await NotificationService().cancelAllReminders();
     } catch (_) {}
+    try {
+      await NotificationService().cancelAllInjuryReminders();
+    } catch (_) {}
 
     await user.delete();
 

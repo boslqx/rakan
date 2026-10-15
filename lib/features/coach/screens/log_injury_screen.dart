@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../onboarding/models/onboarding_data.dart' show BodyRegion;
 import '../../onboarding/screens/steps/body_map_painter.dart'
     show regionInjuries;
+import '../../workout/services/notification_service.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../services/injury_service.dart';
 import '../../../shared/widgets/pressable.dart';
@@ -433,7 +434,7 @@ class _LogInjuryScreenState extends State<LogInjuryScreen> {
                               final custom = customController.text.trim();
                               if (custom.isNotEmpty) labels.add(custom);
 
-                              await _saveInjuries(
+                              final reminderSet = await _saveInjuries(
                                 region: region,
                                 labels: labels,
                                 customLabel: custom,
@@ -455,6 +456,7 @@ class _LogInjuryScreenState extends State<LogInjuryScreen> {
                                 zoneName: zoneName,
                                 labels: labels,
                                 option: option,
+                                reminderSet: reminderSet,
                               );
                             },
                       child: isSaving
@@ -484,29 +486,73 @@ class _LogInjuryScreenState extends State<LogInjuryScreen> {
     );
   }
 
-  Future<void> _saveInjuries({
+  /// Returns true if a recovery check-in reminder was scheduled.
+  Future<bool> _saveInjuries({
     required BodyRegion region,
     required List<String> labels,
     required String customLabel,
     required _RecoveryOption option,
   }) async {
     final db = FirebaseFirestore.instance;
+    final loggedAt = DateTime.now();
+    final injuryIds = <String, String>{}; // doc id -> label
     for (final label in labels) {
-      await db.collection('users').doc(widget.uid).collection('injuries').add({
-        'region': region.name,
-        'label': label,
-        'isCustom': label == customLabel,
-        'status': 'active',
-        'loggedAt': FieldValue.serverTimestamp(),
-        'recoveredAt': null,
-        'estimatedRecoveryDays': option.days,
-        'estimatedRecoveryLabel': option.label,
-      });
+      final ref = await db
+          .collection('users')
+          .doc(widget.uid)
+          .collection('injuries')
+          .add({
+            'region': region.name,
+            'label': label,
+            'isCustom': label == customLabel,
+            'status': 'active',
+            'loggedAt': FieldValue.serverTimestamp(),
+            'recoveredAt': null,
+            'estimatedRecoveryDays': option.days,
+            'estimatedRecoveryLabel': option.label,
+          });
+      injuryIds[ref.id] = label;
     }
+
+    final reminderSet = option.days != null &&
+        await _scheduleRecoveryReminders(region, injuryIds, loggedAt, option);
 
     // Plan regeneration hits the Render backend (~50 s cold start), so run it
     // in the background instead of leaving the CONFIRM spinner up for it.
     _regeneratePlanInBackground();
+    return reminderSet;
+  }
+
+  /// One check-in per injury on its expected recovery date. Asks for
+  /// notification permission the same way the Settings reminder toggle
+  /// does; if it's denied the injury is still saved, just without one
+  /// (Recovery Map backfills it once notifications are allowed).
+  Future<bool> _scheduleRecoveryReminders(
+    BodyRegion region,
+    Map<String, String> injuryIds,
+    DateTime loggedAt,
+    _RecoveryOption option,
+  ) async {
+    try {
+      await NotificationService().init();
+      if (!await NotificationService().hasPermission()) return false;
+      var scheduled = false;
+      for (final entry in injuryIds.entries) {
+        final ok = await InjuryService().scheduleRecoveryReminder(
+          uid: widget.uid,
+          injuryId: entry.key,
+          region: region.name,
+          label: entry.value,
+          loggedAt: loggedAt,
+          estimatedRecoveryDays: option.days,
+        );
+        scheduled = scheduled || ok;
+      }
+      return scheduled;
+    } catch (e) {
+      debugPrint('LogInjuryScreen reminder error: $e');
+      return false;
+    }
   }
 
   Future<void> _regeneratePlanInBackground() async {
@@ -528,6 +574,7 @@ class _LogInjuryScreenState extends State<LogInjuryScreen> {
     required String zoneName,
     required List<String> labels,
     required _RecoveryOption option,
+    required bool reminderSet,
   }) {
     final willPauseExercises = kBodyRegionToMuscleGroups.containsKey(
       region.name,
@@ -551,6 +598,9 @@ class _LogInjuryScreenState extends State<LogInjuryScreen> {
       message.write(
         '\n\nEstimated recovery: ${option.label} (around $expectedStr).',
       );
+      if (reminderSet) {
+        message.write(" We'll check in with you that morning.");
+      }
     }
 
     showDialog(

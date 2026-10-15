@@ -5,6 +5,7 @@ import '../../features/home/screens/home_screen.dart';
 import '../../features/coach/screens/coach_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/workout/screens/workout_screen.dart';
+import '../../features/workout/services/notification_service.dart';
 
 class MainShell extends StatefulWidget{
   const MainShell({super.key});
@@ -23,6 +24,29 @@ class _MainShellState extends State<MainShell> {
     const CoachScreen(),
     const SettingsScreen(),
   ];
+
+  static const int _coachTabIndex = 2;
+
+  @override
+  void initState() {
+    super.initState();
+    // Tapping an injury check-in opens Coach → Recovery Map (CoachScreen
+    // picks its own segment from the same signal).
+    NotificationService().recoveryMapRequests.addListener(_openCoachTab);
+    NotificationService().handleNotificationTaps().catchError(
+      (Object e) => debugPrint('MainShell notification tap setup failed: $e'),
+    );
+  }
+
+  @override
+  void dispose() {
+    NotificationService().recoveryMapRequests.removeListener(_openCoachTab);
+    super.dispose();
+  }
+
+  void _openCoachTab() {
+    if (mounted) setState(() => _currentIndex = _coachTabIndex);
+  }
 
   @override
   Widget build(BuildContext context) {

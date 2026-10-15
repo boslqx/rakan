@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_colors.dart';
 import '../models/onboarding_data.dart';
 import '../services/plan_service.dart';
+import '../../coach/services/injury_service.dart';
 import '../../../shared/widgets/main_shell.dart';
 
 class PlanGenerationScreen extends StatefulWidget {
@@ -106,10 +107,11 @@ class _PlanGenerationScreenState extends State<PlanGenerationScreen>
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) throw Exception('No user logged in');
 
-      await PlanService().generatePlan(
+      final planId = await PlanService().generatePlan(
         uid: uid,
         data: widget.data,
       );
+      await _applyInjuries(uid, planId);
 
       _apiDone = true;
       _tryNavigate();
@@ -119,6 +121,25 @@ class _PlanGenerationScreenState extends State<PlanGenerationScreen>
       _error = e.toString();
       _apiDone = true;
       _tryNavigate();
+    }
+  }
+
+  // Step 8 injuries used to reach the injuries subcollection only when the
+  // Coach tab first opened, and nothing regenerated the plan, so the first
+  // plan could train an injured area. Seed them and rebuild the plan around
+  // them before the user sees it. Awaited (the backend is warm from
+  // /generate-plan) but never fails plan generation — Recovery Map still
+  // seeds them later if this doesn't get through.
+  Future<void> _applyInjuries(String uid, String planId) async {
+    try {
+      await InjuryService().applyInjuriesToNewPlan(
+        uid: uid,
+        planId: planId,
+        onboardingInjuries:
+            widget.data.injuries.map((i) => i.toMap()).toList(),
+      );
+    } catch (e) {
+      debugPrint('Applying injuries to new plan failed: $e');
     }
   }
 
