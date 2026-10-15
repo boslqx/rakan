@@ -1,0 +1,5 @@
+==== Thu 10/15/2026 11:29:47.96 
+SDK=C:\Users\User\AppData\Local\Android\Sdk 
+--- avds 
+Medium_Phone
+Pixel_9_Pro

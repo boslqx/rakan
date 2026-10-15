@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "weeklySummaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "changesAcknowledged", "order": "ASCENDING" },
+        { "fieldPath": "generatedAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

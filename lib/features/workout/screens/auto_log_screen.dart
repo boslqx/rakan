@@ -59,6 +59,14 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   PostureResult? _lastResult;
   late PostureAnalyser _analyser;
   int _repCount = 0;
+
+  /// The form verdict of each rep counted so far this set, in order. The
+  /// last one shows under the rep ring until the next rep.
+  final List<bool> _repForm = [];
+
+  /// [_repForm] of the set most recently logged, for its summary. Null when
+  /// that set wasn't camera-tracked or the camera counted no reps.
+  List<bool>? _lastSetForm;
   int _frameWidth = 640;
   int _frameHeight = 480;
   int _frameRotation = 0;
@@ -163,6 +171,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
     if (_currentExerciseCanUseCamera) {
       _analyser = ExerciseAnalyserFactory.getAnalyser(ex.exerciseName);
       _repCount = 0;
+      _repForm.clear();
       _poseDetected = false;
       _landmarks = [];
       _lastResult = null;
@@ -229,6 +238,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
 
           if (result.countRep) {
             _repCount = _analyser.repCount;
+            _repForm.add(result.repCorrect);
             HapticFeedback.lightImpact();
 
             final target = _currentExercise.sets[_currentExercise.currentSetIndex].reps;
@@ -254,6 +264,9 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
     }
     ex.completedSets.add(setIndex);
     _lastLoggedSet = setIndex;
+    _lastSetForm = _currentExerciseCanUseCamera && _repForm.isNotEmpty
+        ? List.of(_repForm)
+        : null;
     HapticFeedback.mediumImpact();
 
     if (!ex.isFullyComplete) {
@@ -928,6 +941,10 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
             child: Column(
               children: [
                 _RepRing(count: _repCount, target: target),
+                if (_repForm.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _RepVerdictBox(rep: _repCount, correct: _repForm.last),
+                ],
                 if (phaseLabel != null) ...[
                   const SizedBox(height: 10),
                   _pill(
@@ -1169,6 +1186,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
     final left = math.max(0, ex.timerSecondsLeft);
     final progress = _restTotal > 0 ? (left / _restTotal).clamp(0.0, 1.0) : 0.0;
     final logged = _lastLoggedSet;
+    final form = _lastSetForm;
     final tips = ex.data?.tips ?? const <String>[];
     // A different tip each rest.
     final tip = tips.isEmpty ? null : tips[(ex.completedSets.length - 1) % tips.length];
@@ -1207,6 +1225,10 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                     const SizedBox(height: 24),
                     Center(child: _RestRing(secondsLeft: left, progress: progress)),
                     const SizedBox(height: 28),
+                    if (form != null && logged != null && logged < ex.sets.length) ...[
+                      _buildFormSummary(ex, logged, form),
+                      const SizedBox(height: 10),
+                    ],
                     if (tip != null) ...[
                       _buildTipCard(tip),
                       const SizedBox(height: 10),
@@ -1276,6 +1298,68 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                 const SizedBox(height: 4),
                 Text(tip,
                     style: GoogleFonts.manrope(fontSize: 13, height: 1.4, color: Colors.white70)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// How the camera judged each rep of the set just logged, one dot per rep
+  /// in order — including the final rep, which ends the set before the HUD
+  /// can show its verdict.
+  Widget _buildFormSummary(ExerciseSessionState ex, int setIndex, List<bool> form) {
+    final good = form.where((ok) => ok).length;
+    final allGood = good == form.length;
+    // Ending a set by hand can log a different count than the camera saw.
+    final tracked = form.length != ex.sets[setIndex].reps ? ' tracked' : '';
+    final reps = form.length == 1 ? 'rep' : 'reps';
+    final summary = allGood && form.length > 1
+        ? 'All ${form.length}$tracked $reps with good form'
+        : '$good of ${form.length}$tracked $reps with good form';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            allGood ? Icons.verified_rounded : Icons.insights_rounded,
+            size: 18,
+            color: allGood ? Colors.green : AppColors.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('SET ${setIndex + 1} FORM', style: _label(fontSize: 9, color: Colors.white38)),
+                const SizedBox(height: 4),
+                Text(summary,
+                    style: GoogleFonts.manrope(fontSize: 13, height: 1.4, color: Colors.white70)),
+                const SizedBox(height: 10),
+                ExcludeSemantics(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final ok in form)
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: ok ? Colors.green : AppColors.error,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -1373,6 +1457,8 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
     final reps = ex.completedSets.fold<int>(0, (sum, i) => sum + ex.sets[i].reps);
     final volume = ex.completedSets
         .fold<double>(0, (sum, i) => sum + ex.sets[i].reps * ex.sets[i].weightKg);
+    final logged = _lastLoggedSet;
+    final form = _lastSetForm;
 
     return Column(
       children: [
@@ -1413,6 +1499,11 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                     ],
                   ],
                 ),
+                // The final set skips the rest screen, so its form shows here.
+                if (form != null && logged != null && logged < ex.sets.length) ...[
+                  const SizedBox(height: 10),
+                  _buildFormSummary(ex, logged, form),
+                ],
                 const SizedBox(height: 30),
                 Text('How hard was that?',
                     style: GoogleFonts.spaceGrotesk(
@@ -1682,6 +1773,71 @@ class _RepRing extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The latest rep's form verdict, judged over the whole rep: green for good
+/// form, red for bad. Pops in fresh with every rep, so two good reps in a
+/// row still read as two verdicts.
+class _RepVerdictBox extends StatelessWidget {
+  final int rep;
+  final bool correct;
+
+  const _RepVerdictBox({required this.rep, required this.correct});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 260),
+      transitionBuilder: (child, anim) => ScaleTransition(
+        scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+        child: FadeTransition(opacity: anim, child: child),
+      ),
+      child: Container(
+        key: ValueKey(rep),
+        padding: const EdgeInsets.fromLTRB(10, 8, 14, 8),
+        decoration: BoxDecoration(
+          color: (correct ? Colors.green : AppColors.error).withValues(alpha: 0.88),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              correct ? Icons.check_circle_rounded : Icons.cancel_rounded,
+              size: 24,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'REP $rep',
+                  style: GoogleFonts.manrope(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.5,
+                    color: Colors.white70,
+                  ),
+                ),
+                Text(
+                  correct ? 'GOOD FORM' : 'BAD FORM',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 16,
+                    height: 1.15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

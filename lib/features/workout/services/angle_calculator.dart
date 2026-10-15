@@ -270,12 +270,18 @@ class PostureResult {
   final double? keyAngle;
   final bool countRep;
 
+  /// The verdict on the rep this frame completed, judged once over the
+  /// whole rep. Only meaningful when [countRep] is true — [isCorrect] is
+  /// this frame's live form, which a fault can override on that same frame.
+  final bool repCorrect;
+
   const PostureResult({
     required this.isCorrect,
     required this.feedback,
     required this.phase,
     this.keyAngle,
     this.countRep = false,
+    this.repCorrect = true,
   });
 }
 
@@ -563,6 +569,7 @@ class SquatAnalyser implements PostureAnalyser {
       phase: phase,
       keyAngle: kneeAngle,
       countRep: rep != null,
+      repCorrect: _lastRepOk,
     );
   }
 
@@ -743,6 +750,7 @@ class PushUpAnalyser implements PostureAnalyser {
       phase: phase,
       keyAngle: elbowAngle,
       countRep: rep != null,
+      repCorrect: _lastRepOk,
     );
   }
 
@@ -861,6 +869,7 @@ class ShoulderPressAnalyser implements PostureAnalyser {
       phase: phase,
       keyAngle: elbowAngle,
       countRep: rep != null,
+      repCorrect: _lastRepOk,
     );
   }
 
@@ -1055,6 +1064,7 @@ class RomanianDeadliftAnalyser implements PostureAnalyser {
       phase: phase,
       keyAngle: hipAngle,
       countRep: rep != null,
+      repCorrect: _lastRepOk,
     );
   }
 
@@ -1177,6 +1187,7 @@ class LungeAnalyser implements PostureAnalyser {
       phase: phase,
       keyAngle: frontKneeAngle,
       countRep: rep != null,
+      repCorrect: _lastRepOk,
     );
   }
 
@@ -1295,6 +1306,7 @@ class BicepCurlAnalyser implements PostureAnalyser {
       phase: phase,
       keyAngle: elbowAngle,
       countRep: rep != null,
+      repCorrect: _lastRepOk,
     );
   }
 

@@ -1,0 +1,20 @@
+==== 11:46:09.21 
+PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
+
+--- 8.8.8.8 ping statistics ---
+2 packets transmitted, 0 received, 100% packet loss, time 1028ms
+
+PING firestore.googleapis.com (173.194.41.95) 56(84) bytes of data.
+
+--- firestore.googleapis.com ping statistics ---
+2 packets transmitted, 0 received, 100% packet loss, time 1034ms
+
+  NetworkAgentInfo{network{100}  handle{432902426637}  ni{MOBILE[LTE] CONNECTED extra: epc.tmobile.com} created=2026-10-15T03:33:10.138Z Score(Policies : TRANSPORT_PRIMARY&EVER_EVALUATED&EVER_VALIDATED&IS_VALIDATED ; KeepConnected : 0)  created 78406 firstValidated 80269 lastValidated 80269  lp{{InterfaceName: eth0 LinkAddresses: [ 10.0.2.15/24 ] DnsAddresses: [ /10.0.2.3 ] Domains: null MTU: 1500 TcpBufferSizes: 2097152,6291456,16777216,512000,2097152,8388608 Routes: [ 0.0.0.0/0 -> 10.0.2.2 eth0 mtu 1500,10.0.2.0/24 -> 0.0.0.0 eth0 mtu 0 ]}}  nc{[ Transports: CELLULAR Capabilities: MMS&SUPL&DUN&FOTA&IMS&CBS&INTERNET&NOT_RESTRICTED&TRUSTED&NOT_VPN&VALIDATED&NOT_ROAMING&FOREGROUND&NOT_CONGESTED&NOT_SUSPENDED&NOT_VCN_MANAGED&NOT_BANDWIDTH_CONSTRAINED LinkUpBandwidth>=15000Kbps LinkDnBandwidth>=30000Kbps Specifier: <TelephonyNetworkSpecifier [mSubId = 1]> SubscriptionIds: {1} UnderlyingNetworks: Null]}  factorySerialNumber=5}
+0
+
+Pinging firestore.googleapis.com [173.194.41.95] with 32 bytes of data:
+Request timed out.
+
+Ping statistics for 173.194.41.95:
+    Packets: Sent = 1, Received = 0, Lost = 1 (100% loss),
+END 

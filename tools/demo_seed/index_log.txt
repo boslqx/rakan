@@ -1,0 +1,28 @@
+C:\Users\User\rakan\backend\venv\Lib\site-packages\google\cloud\firestore_v1\base_collection.py:317: UserWarning: Detected filter using positional arguments. Prefer using the 'filter' keyword argument instead.
+  return query.where(field_path, op_string, value)
+  Account A: plan renamed
+  Account B: plan renamed
+existing: [('status', <Order.ASCENDING: 1>), ('generatedAt', <Order.DESCENDING: 2>), ('__name__', <Order.DESCENDING: 2>)] READY
+create_index: PermissionDenied 403 The caller does not have permission
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]
+states: [(('status', 'generatedAt', '__name__'), 'READY')]

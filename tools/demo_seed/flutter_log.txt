@@ -1,0 +1,27 @@
+--------- beginning of main
+10-15 07:18:01.194  2724  3053 I flutter : [IMPORTANT:flutter/shell/platform/android/android_context_gl_impeller.cc(104)] Using the Impeller rendering backend (OpenGLES).
+10-15 07:18:01.215  2724  3070 I flutter : The Dart VM service is listening on http://127.0.0.1:42613/nt24iox7T-8=/
+10-15 07:31:51.508  2724  2724 I flutter : WorkoutPlanService: loaded active plan cb392b58-2690-448e-b93b-6c744f58abba for uid=EIWSw3b4dsQqVo85sg8vEJczBh82
+10-15 07:31:51.511  2724  2724 I flutter : WorkoutPlanService: loaded active plan cb392b58-2690-448e-b93b-6c744f58abba for uid=EIWSw3b4dsQqVo85sg8vEJczBh82
+10-15 07:31:51.919  2724  2724 I flutter : WorkoutPlanService: loaded active plan cb392b58-2690-448e-b93b-6c744f58abba for uid=EIWSw3b4dsQqVo85sg8vEJczBh82
+10-15 07:31:53.340  2724  2724 I flutter : HomeScreen: current uid=EIWSw3b4dsQqVo85sg8vEJczBh82 activePlanExists=true
+10-15 07:31:54.014  2724  2724 I flutter : WorkoutPlanService: loaded active plan cb392b58-2690-448e-b93b-6c744f58abba for uid=EIWSw3b4dsQqVo85sg8vEJczBh82
+10-15 07:31:54.070  2724  2724 I flutter : Migrated 3 legacy progress photo(s)
+10-15 07:34:25.064  4668  4719 I flutter : [IMPORTANT:flutter/shell/platform/android/android_context_gl_impeller.cc(104)] Using the Impeller rendering backend (OpenGLES).
+10-15 07:34:25.198  4668  4726 I flutter : The Dart VM service is listening on http://127.0.0.1:42953/DGXn15f8dzA=/
+10-15 07:34:33.756  4668  4668 I flutter : WorkoutPlanService: loaded active plan cb392b58-2690-448e-b93b-6c744f58abba for uid=EIWSw3b4dsQqVo85sg8vEJczBh82
+10-15 07:34:33.760  4668  4668 I flutter : WorkoutPlanService: loaded active plan cb392b58-2690-448e-b93b-6c744f58abba for uid=EIWSw3b4dsQqVo85sg8vEJczBh82
+10-15 07:34:34.408  4668  4668 I flutter : WorkoutPlanService: loaded active plan cb392b58-2690-448e-b93b-6c744f58abba for uid=EIWSw3b4dsQqVo85sg8vEJczBh82
+10-15 07:34:36.220  4668  4668 I flutter : HomeScreen: current uid=EIWSw3b4dsQqVo85sg8vEJczBh82 activePlanExists=true
+10-15 07:34:36.870  4668  4668 I flutter : WorkoutPlanService: loaded active plan cb392b58-2690-448e-b93b-6c744f58abba for uid=EIWSw3b4dsQqVo85sg8vEJczBh82
+10-15 07:34:44.410  4668  4668 I flutter : Migrated 3 legacy progress photo(s)
+10-15 07:35:38.474  4668  4668 I flutter : checkAndGenerateWeeklySummary failed for EIWSw3b4dsQqVo85sg8vEJczBh82: TimeoutException after 0:01:00.000000: Future not completed
+10-15 07:35:50.698  4859  4884 I flutter : [IMPORTANT:flutter/shell/platform/android/android_context_gl_impeller.cc(104)] Using the Impeller rendering backend (OpenGLES).
+10-15 07:35:50.820  4859  4891 I flutter : The Dart VM service is listening on http://127.0.0.1:43477/asW4z6-L4rM=/
+10-15 07:35:59.137  4859  4859 I flutter : WorkoutPlanService: loaded active plan cb392b58-2690-448e-b93b-6c744f58abba for uid=EIWSw3b4dsQqVo85sg8vEJczBh82
+10-15 07:35:59.144  4859  4859 I flutter : WorkoutPlanService: loaded active plan cb392b58-2690-448e-b93b-6c744f58abba for uid=EIWSw3b4dsQqVo85sg8vEJczBh82
+10-15 07:35:59.557  4859  4859 I flutter : WorkoutPlanService: loaded active plan cb392b58-2690-448e-b93b-6c744f58abba for uid=EIWSw3b4dsQqVo85sg8vEJczBh82
+10-15 07:36:01.255  4859  4859 I flutter : HomeScreen: current uid=EIWSw3b4dsQqVo85sg8vEJczBh82 activePlanExists=true
+10-15 07:36:01.938  4859  4859 I flutter : WorkoutPlanService: loaded active plan cb392b58-2690-448e-b93b-6c744f58abba for uid=EIWSw3b4dsQqVo85sg8vEJczBh82
+10-15 07:36:01.953  4859  4859 I flutter : Migrated 3 legacy progress photo(s)
+END 

@@ -1,0 +1,39 @@
+==== Thu 10/15/2026 15:16:48.17 
+* daemon not running; starting now at tcp:5037
+* daemon started successfully
+error: no emulator detected
+window.x = 100
+window.y = 100
+window.scale = -1.000000
+resizable.config.id = -1
+posture = 0
+uuid = 1790091018070
+--- new ini 
+window.scale = -1.000000
+resizable.config.id = -1
+posture = 0
+uuid = 1790091018070
+window.x = 80
+window.y = 40
+booted 
+Performing Streamed Install
+Success
+Success
+Bad arguments
+Bad arguments
+  bash arg: -p
+  bash arg: com.example.rakan
+  bash arg: -c
+  bash arg: android.intent.category.LAUNCHER
+  bash arg: 1
+args: [-p, com.example.rakan, -c, android.intent.category.LAUNCHER, 1]
+ arg: "-p"
+ arg: "com.example.rakan"
+ arg: "-c"
+ arg: "android.intent.category.LAUNCHER"
+ arg: "1"
+data="com.example.rakan"
+data="android.intent.category.LAUNCHER"
+Events injected: 1
+## Network stats: elapsed time=97ms (0ms mobile, 0ms wifi, 97ms not connected)
+ALL_DONE 

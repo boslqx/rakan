@@ -1,0 +1,2 @@
+  Account B: latest summary marked unacknowledged
+EXIT 0 

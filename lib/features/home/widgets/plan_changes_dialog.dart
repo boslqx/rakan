@@ -38,7 +38,7 @@ class PlanChangesDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: AppColors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
         child: Column(
@@ -73,11 +73,24 @@ class PlanChangesDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            if (_hasProgressStats) ...[
-              _progressStatsRow(),
-              const SizedBox(height: 20),
-            ],
-            ...changes.map((c) => _changeRow(c as Map<String, dynamic>)),
+            // The change list scrolls on its own so the header and the
+            // GOT IT button stay visible however many muscle groups changed
+            // (a full-body week lists six cards, which overflowed the screen).
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_hasProgressStats) ...[
+                      _progressStatsRow(),
+                      const SizedBox(height: 20),
+                    ],
+                    ...changes.map((c) => _changeRow(c as Map<String, dynamic>)),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,

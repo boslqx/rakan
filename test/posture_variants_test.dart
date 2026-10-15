@@ -169,6 +169,7 @@ void main() {
       expect(a.repCount, 1);
       expect(r.countRep, isTrue);
       expect(r.isCorrect, isTrue);
+      expect(r.repCorrect, isTrue);
     });
 
     test('a deep squat (45°) is correct', () {
@@ -183,7 +184,18 @@ void main() {
       final r = run(a, [squatPose(180, 0), squatPose(95, 30), squatPose(178, 0)]);
       expect(a.repCount, 1);
       expect(r.isCorrect, isFalse);
+      expect(r.repCorrect, isFalse);
       expect(r.feedback, contains('shallow'));
+    });
+
+    test('each rep gets its own verdict — a good rep after a bad one is good', () {
+      final a = SquatAnalyser();
+      final bad = run(a, [squatPose(180, 0), squatPose(95, 30), squatPose(178, 0)]);
+      expect(bad.repCorrect, isFalse);
+      final good = run(a, [squatPose(65, 40), squatPose(178, 0)]);
+      expect(a.repCount, 2);
+      expect(good.countRep, isTrue);
+      expect(good.repCorrect, isTrue);
     });
 
     test('excessive forward lean (70°) is flagged', () {
@@ -223,6 +235,7 @@ void main() {
       final r = run(a, [pushUpPose(170), pushUpPose(115), pushUpPose(170)]);
       expect(a.repCount, 1);
       expect(r.isCorrect, isFalse);
+      expect(r.repCorrect, isFalse);
     });
 
     test('sagging hips (150° body line) are flagged live', () {

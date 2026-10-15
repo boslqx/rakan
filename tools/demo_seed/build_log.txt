@@ -1,0 +1,22 @@
+==== Thu 10/15/2026 15:46:51.57 build start 
+Running Gradle task 'assembleDebug'...                             96.1s
+√ Built build\app\outputs\flutter-apk\app-debug.apk
+BUILD_EXIT 0 
+Performing Streamed Install
+Success
+  bash arg: -p
+  bash arg: com.example.rakan
+  bash arg: -c
+  bash arg: android.intent.category.LAUNCHER
+  bash arg: 1
+args: [-p, com.example.rakan, -c, android.intent.category.LAUNCHER, 1]
+ arg: "-p"
+ arg: "com.example.rakan"
+ arg: "-c"
+ arg: "android.intent.category.LAUNCHER"
+ arg: "1"
+data="com.example.rakan"
+data="android.intent.category.LAUNCHER"
+Events injected: 1
+## Network stats: elapsed time=435ms (0ms mobile, 0ms wifi, 435ms not connected)
+ALL_DONE Thu 10/15/2026 15:48:38.95 
