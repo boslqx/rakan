@@ -1253,7 +1253,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             child: Switch(
               value: enabled,
               onChanged: (value) => _toggleDayReminder(day, value),
-              activeColor: AppColors.primary,
+              activeThumbColor: AppColors.primary,
             ),
           ),
         ],

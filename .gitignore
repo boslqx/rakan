@@ -46,3 +46,9 @@ app.*.map.json
 
 # Firebase deploy cache
 .firebase/
+
+# Local demo/testing scratch (seed scripts, emulator logs, Chapter 5 evidence)
+/tools/demo_seed/
+
+# Local demo/test tooling and evidence (kept on disk, not in git)
+/tools/demo_seed/

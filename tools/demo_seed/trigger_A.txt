@@ -1,6 +1,0 @@
-  Account A: weekly run is now due.
-
-Now: wake the backend (open https://rakan-backend.onrender.com in a browser), then fully close
-and reopen the app on the demo account. Wait about 30 seconds on Home, close and reopen
-the app again, and the weekly summary dialog will appear.
-EXIT 0 

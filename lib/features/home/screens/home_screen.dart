@@ -39,7 +39,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Map<String, dynamic>? _todayDay;
   String? _loadError;
-  String? _debugUid;
   int? _weekNumber;
 
   static const int _calendarLogScanLimit = 30;
@@ -54,8 +53,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadProfile() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-
-    _debugUid = uid;
 
     Map<String, dynamic>? profile;
     List<Map<String, dynamic>> allLogs = [];
@@ -93,7 +90,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       plan = await WorkoutPlanService().getActivePlan(uid);
-      debugPrint('HomeScreen: current uid=$uid activePlanExists=${plan != null}');
     } catch (e, st) {
       debugPrint('HomeScreen: plan load failed for uid=$uid: $e');
       debugPrint(st.toString());

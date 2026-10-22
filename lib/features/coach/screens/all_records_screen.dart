@@ -44,7 +44,7 @@ class AllRecordsScreen extends StatelessWidget {
             : ListView.separated(
                 padding: const EdgeInsets.all(24),
                 itemCount: records.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
                 itemBuilder: (context, i) {
                   final r = records[i];
                   return Container(

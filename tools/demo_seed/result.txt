@@ -1,6 +1,0 @@
-Setting up demo accounts (before state)...
-  Account A: demo.adaptive@rakan-demo.test  (uid EIWSw3b4dsQqVo85sg8vEJczBh82)  plan week 5
-  Account B: demo.deload@rakan-demo.test  (uid otukA3Hu0vUVDLAM2Vv6LeDVKmA2)  plan week 3
-
-Done. Password for both accounts: RakanDemo#2026
-Next: log in on your phone and take the BEFORE screenshots, then run 'trigger'.

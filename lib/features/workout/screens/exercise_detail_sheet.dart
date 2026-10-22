@@ -630,7 +630,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
 
   Widget _buildAddToWorkoutButton(BuildContext context) {
     return ElevatedButton.icon(
-      onPressed: () => _showAddToWorkoutDialog(context),
+      onPressed: () => _showAddToWorkoutDialog(),
       icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
       label: Text(
         'ADD TO WORKOUT',
@@ -652,7 +652,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
     );
   }
 
-  Future<void> _showAddToWorkoutDialog(BuildContext context) async {
+  Future<void> _showAddToWorkoutDialog() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 

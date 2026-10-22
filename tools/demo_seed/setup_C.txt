@@ -1,3 +1,0 @@
-Account C ready: demo.factors@rakan-demo.test (uid Edx2gPeabxPYpyYKY8d7Q0rB8872)
-  Push  Monday (completed), Pull Wednesday (missed), Legs Friday (upcoming)
-EXIT 0 

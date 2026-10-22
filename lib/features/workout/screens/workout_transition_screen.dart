@@ -159,7 +159,7 @@ class _WorkoutTransitionScreenState extends State<WorkoutTransitionScreen>
       PageRouteBuilder(
         // Slightly longer than default for a premium feel
         transitionDuration: const Duration(milliseconds: 500),
-        pageBuilder: (_, __, ___) => WorkoutCompleteScreen(
+        pageBuilder: (_, _, _) => WorkoutCompleteScreen(
           workoutName: widget.workoutName,
           durationMins: widget.durationMins,
           totalVolume: widget.totalVolume,
@@ -173,7 +173,7 @@ class _WorkoutTransitionScreenState extends State<WorkoutTransitionScreen>
           prExerciseNames: widget.prExerciseNames,
         ),
         // Fade + slide up transition into complete screen
-        transitionsBuilder: (_, animation, __, child) {
+        transitionsBuilder: (_, animation, _, child) {
           return FadeTransition(
             opacity: animation,
             child: SlideTransition(
@@ -233,7 +233,7 @@ class _WorkoutTransitionScreenState extends State<WorkoutTransitionScreen>
           // Expanding ring burst behind the trophy
           AnimatedBuilder(
             animation: _ringController,
-            builder: (_, __) => Transform.scale(
+            builder: (_, _) => Transform.scale(
               scale: _ringScale.value,
               child: Opacity(
                 opacity: _ringOpacity.value,
@@ -255,7 +255,7 @@ class _WorkoutTransitionScreenState extends State<WorkoutTransitionScreen>
           // Trophy icon — scales in with overshoot
           AnimatedBuilder(
             animation: _trophyController,
-            builder: (_, __) => Transform.scale(
+            builder: (_, _) => Transform.scale(
               scale: _trophyScale.value,
               child: Container(
                 width: 110,
@@ -280,7 +280,7 @@ class _WorkoutTransitionScreenState extends State<WorkoutTransitionScreen>
   Widget _buildNiceWorkText() {
     return AnimatedBuilder(
       animation: _textController,
-      builder: (_, __) => SlideTransition(
+      builder: (_, _) => SlideTransition(
         position: _textSlide,
         child: FadeTransition(
           opacity: _textOpacity,

@@ -543,7 +543,7 @@ class SquatAnalyser implements PostureAnalyser {
     String feedback;
     bool isCorrect;
     if (leaning && phase != 'standing') {
-      feedback = 'Chest up — you\'re leaning too far forward (${lean!.toStringAsFixed(0)}°)';
+      feedback = 'Chest up — you\'re leaning too far forward (${lean.toStringAsFixed(0)}°)';
       isCorrect = false;
     } else if (phase == 'standing') {
       feedback = _lastRepFeedback ?? 'Stand straight, feet shoulder-width apart';
@@ -1163,7 +1163,7 @@ class LungeAnalyser implements PostureAnalyser {
     String feedback;
     bool isCorrect;
     if (leaning && phase != 'standing') {
-      feedback = 'Keep your torso upright (${lean!.toStringAsFixed(0)}° lean)';
+      feedback = 'Keep your torso upright (${lean.toStringAsFixed(0)}° lean)';
       isCorrect = false;
     } else if (phase == 'standing') {
       feedback = _lastRepFeedback ?? 'Stand tall — lower straight down into your lunge';

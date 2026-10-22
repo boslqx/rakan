@@ -91,8 +91,8 @@ class _OnboardingShellState extends State<OnboardingShell> {
     if (mounted) {
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, animation, __) => PlanGenerationScreen(data: _data),
-          transitionsBuilder: (_, animation, __, child) =>
+          pageBuilder: (_, animation, _) => PlanGenerationScreen(data: _data),
+          transitionsBuilder: (_, animation, _, child) =>
               FadeTransition(opacity: animation, child: child),
           transitionDuration: const Duration(milliseconds: 500),
         ),

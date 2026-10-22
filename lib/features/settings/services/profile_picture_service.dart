@@ -27,7 +27,6 @@ class ProfilePictureService {
           toolbarTitle: 'Adjust Photo',
           toolbarColor: const Color(0xFF0C0E10),
           toolbarWidgetColor: const Color(0xFFE8E8E9),
-          statusBarColor: const Color(0xFF0C0E10),
           backgroundColor: const Color(0xFF0C0E10),
           activeControlsWidgetColor: const Color(0xFFC6C6C7),
           cropStyle: CropStyle.circle,

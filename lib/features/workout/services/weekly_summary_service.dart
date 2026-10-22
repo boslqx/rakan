@@ -164,8 +164,7 @@ class WeeklySummaryService {
         'fatigue_score': fatigueScore,
         'muscle_recovery_score': recoveryScore,
         'trigger': trigger,
-        if (daysSinceLastTrained != null)
-          'days_since_last_trained': daysSinceLastTrained,
+        'days_since_last_trained': ?daysSinceLastTrained,
       });
       proposalRefsById[propDoc.id] = propDoc.reference;
       muscleGroupByProposalId[propDoc.id] = muscleGroup;
@@ -339,7 +338,7 @@ class WeeklySummaryService {
         'reason': reason,
         'adjustment': adjustment,
         'exercisesAffected': exercisesAffected,
-        if (recoveryScore != null) 'recoveryScore': recoveryScore,
+        'recoveryScore': ?recoveryScore,
       });
     }
   }

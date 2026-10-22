@@ -747,7 +747,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : Switch(
                           value: _remindersEnabled,
                           onChanged: _toggleReminders,
-                          activeColor: AppColors.primary,
+                          activeThumbColor: AppColors.primary,
                         ),
                 ],
               ),
@@ -877,7 +877,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : Switch(
                     value: _isPrivate,
                     onChanged: _togglePrivate,
-                    activeColor: AppColors.primary,
+                    activeThumbColor: AppColors.primary,
                   ),
           ],
         ),

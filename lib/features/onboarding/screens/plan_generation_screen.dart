@@ -172,8 +172,8 @@ class _PlanGenerationScreenState extends State<PlanGenerationScreen>
       // pushReplacement would leave two MainShells stacked.
       Navigator.of(context).pushAndRemoveUntil(
         PageRouteBuilder(
-          pageBuilder: (_, animation, __) => const MainShell(),
-          transitionsBuilder: (_, animation, __, child) =>
+          pageBuilder: (_, animation, _) => const MainShell(),
+          transitionsBuilder: (_, animation, _, child) =>
               FadeTransition(opacity: animation, child: child),
           transitionDuration: const Duration(milliseconds: 600),
         ),
