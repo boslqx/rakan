@@ -20,6 +20,30 @@ import '../../../shared/widgets/pressable.dart';
 
 enum _ScreenPhase { ready, active, resting, rpe }
 
+/// One camera frame of pose data, as the camera HUD draws it.
+class _PoseFrame {
+  /// Empty when no body is in view.
+  final List<Landmark> landmarks;
+
+  /// Null while counting down — the analyser isn't run then.
+  final PostureResult? result;
+  final int width;
+  final int height;
+  final int rotation;
+
+  const _PoseFrame({
+    this.landmarks = const [],
+    this.result,
+    this.width = 640,
+    this.height = 480,
+    this.rotation = 0,
+  });
+
+  static const none = _PoseFrame();
+
+  bool get detected => landmarks.isNotEmpty;
+}
+
 /// Guided mode: walks the session one set at a time — brief, set up, do the
 /// set (camera rep-counting where supported), rest, rate, next exercise.
 class AutoLogScreen extends StatefulWidget {
@@ -54,9 +78,11 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
 
   // Camera / pose detection state (mirrors PoseDetectionScreen)
   StreamSubscription? _poseSubscription;
-  List<Landmark> _landmarks = [];
-  bool _poseDetected = false;
-  PostureResult? _lastResult;
+
+  /// The latest camera frame. Updated ~30 times a second, so only the HUD
+  /// parts that show it listen (see _onFrame) — a counted rep is the only
+  /// pose event that rebuilds the whole screen.
+  final ValueNotifier<_PoseFrame> _frame = ValueNotifier(_PoseFrame.none);
   late PostureAnalyser _analyser;
   int _repCount = 0;
 
@@ -67,11 +93,12 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   /// [_repForm] of the set most recently logged, for its summary. Null when
   /// that set wasn't camera-tracked or the camera counted no reps.
   List<bool>? _lastSetForm;
-  int _frameWidth = 640;
-  int _frameHeight = 480;
-  int _frameRotation = 0;
 
   bool _permissionGranted = false;
+
+  /// Set once the camera pipeline fails to start; the rest of this Guided
+  /// session logs sets by hand (re-entering Guided mode tries again).
+  bool _cameraFailed = false;
 
   // Countdown state
   bool _countingDown = true;
@@ -116,6 +143,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   void dispose() {
     _restTicker?.cancel();
     _poseSubscription?.cancel();
+    _frame.dispose();
     super.dispose();
   }
 
@@ -136,8 +164,10 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
     }
   }
 
+  bool get _cameraAvailable => _permissionGranted && !_cameraFailed;
+
   bool get _currentExerciseCanUseCamera =>
-      (_currentExercise.data?.hasPoseDetection ?? false) && _permissionGranted;
+      (_currentExercise.data?.hasPoseDetection ?? false) && _cameraAvailable;
 
   /// Camera set-up lines for an exercise ("Place phone…", "Stand…"), minus
   /// the leading emoji — the UI draws its own icons.
@@ -172,9 +202,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
       _analyser = ExerciseAnalyserFactory.getAnalyser(ex.exerciseName);
       _repCount = 0;
       _repForm.clear();
-      _poseDetected = false;
-      _landmarks = [];
-      _lastResult = null;
+      _frame.value = _PoseFrame.none;
       _countingDown = true; // NEW — every set re-arms the countdown
       _startPoseStream();
     }
@@ -191,10 +219,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
         final detected = data['detected'] as bool? ?? false;
 
         if (!detected) {
-          setState(() {
-            _poseDetected = false;
-            _landmarks = [];
-          });
+          _frame.value = _PoseFrame.none;
           return;
         }
 
@@ -202,17 +227,18 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
         final landmarks = rawLandmarks
             .map((l) => Landmark.fromMap(Map<String, dynamic>.from(l as Map)))
             .toList();
+        final frameWidth = (data['frameWidth'] as int?) ?? 640;
+        final frameHeight = (data['frameHeight'] as int?) ?? 480;
 
         // Same gate as PoseDetectionScreen: show the skeleton, never touch
         // the analyser while counting down.
         if (_countingDown) {
-          setState(() {
-            _poseDetected = true;
-            _landmarks = landmarks;
-            _frameWidth = (data['frameWidth'] as int?) ?? 640;
-            _frameHeight = (data['frameHeight'] as int?) ?? 480;
-            _frameRotation = (data['frameRotation'] as int?) ?? 0;
-          });
+          _frame.value = _PoseFrame(
+            landmarks: landmarks,
+            width: frameWidth,
+            height: frameHeight,
+            rotation: (data['frameRotation'] as int?) ?? 0,
+          );
           return;
         }
 
@@ -220,35 +246,58 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
         // keeps using the normalized `landmarks`, which its painter expects.
         final result = _analyser.analyse(AngleCalculator.toPixelSpace(
           landmarks,
-          frameWidth: (data['frameWidth'] as int?) ?? 640,
-          frameHeight: (data['frameHeight'] as int?) ?? 480,
+          frameWidth: frameWidth,
+          frameHeight: frameHeight,
           // Rotate upright so gravity-referenced checks (trunk lean, shin
           // angle) work. 270 = front camera in portrait, the same
           // orientation SkeletonPainter assumes.
           rotationDegrees: (data['frameRotation'] as int?) ?? 270,
         ));
 
-        setState(() {
-          _poseDetected = true;
-          _landmarks = landmarks;
-          _lastResult = result;
-          _frameWidth = (data['frameWidth'] as int?) ?? 640;
-          _frameHeight = (data['frameHeight'] as int?) ?? 480;
-          _frameRotation = (data['frameRotation'] as int?) ?? 0;
+        _frame.value = _PoseFrame(
+          landmarks: landmarks,
+          result: result,
+          width: frameWidth,
+          height: frameHeight,
+          rotation: (data['frameRotation'] as int?) ?? 0,
+        );
 
-          if (result.countRep) {
+        if (result.countRep) {
+          setState(() {
             _repCount = _analyser.repCount;
             _repForm.add(result.repCorrect);
-            HapticFeedback.lightImpact();
+          });
+          HapticFeedback.lightImpact();
 
-            final target = _currentExercise.sets[_currentExercise.currentSetIndex].reps;
-            if (_repCount >= target) {
-              _finishSet(actualReps: _repCount);
-            }
+          final target = _currentExercise.sets[_currentExercise.currentSetIndex].reps;
+          if (_repCount >= target) {
+            _finishSet(actualReps: _repCount);
           }
-        });
+        }
       },
-      onError: (_) {},
+      onError: _onCameraFailed,
+    );
+  }
+
+  /// The camera pipeline couldn't start (see PoseService). This set moves
+  /// to the hand-logging screen, and later sets skip the camera — retrying
+  /// each one would only show a dead preview first.
+  void _onCameraFailed(Object error) {
+    _poseSubscription?.cancel();
+    debugPrint('Guided camera failed: $error');
+    if (!mounted) return;
+    final message = error is PoseStreamException
+        ? error.message
+        : "The camera couldn't start.";
+    setState(() => _cameraFailed = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          "$message Reps won't be counted — log your sets by hand.",
+          style: GoogleFonts.manrope(color: AppColors.onSurface),
+        ),
+        backgroundColor: AppColors.surfaceContainerHigh,
+      ),
     );
   }
 
@@ -760,7 +809,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   Widget _buildSetupNote(ExerciseSessionState ex) {
     final hasPose = ex.data?.hasPoseDetection ?? false;
 
-    if (hasPose && _permissionGranted) {
+    if (hasPose && _cameraAvailable) {
       final lines = _setupLines(ex.exerciseName);
       return Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
@@ -828,9 +877,11 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              hasPose
-                  ? "Camera access is off, so reps won't be counted — do your set, then log it."
-                  : 'No camera tracking for this exercise — follow the demo, then log your set.',
+              !hasPose
+                  ? 'No camera tracking for this exercise — follow the demo, then log your set.'
+                  : _cameraFailed
+                      ? "The camera couldn't start, so reps won't be counted — do your set, then log it."
+                      : "Camera access is off, so reps won't be counted — do your set, then log it.",
               style: GoogleFonts.manrope(fontSize: 12, height: 1.4, color: Colors.white54),
             ),
           ),
@@ -839,18 +890,20 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
     );
   }
 
+  /// Rebuilds [builder] for each camera frame without rebuilding the screen.
+  Widget _onFrame(Widget Function(_PoseFrame frame) builder) {
+    return ValueListenableBuilder<_PoseFrame>(
+      valueListenable: _frame,
+      builder: (_, frame, _) => builder(frame),
+    );
+  }
+
   // ACTIVE phase (camera). Built to be read from 2–3m away: a big rep ring,
-  // and the whole screen edge glowing with form quality.
+  // and the whole screen edge glowing with form quality. Rebuilt only on
+  // reps and countdown changes; the per-frame parts sit in _onFrame.
   Widget _buildCameraPhase() {
     final ex = _currentExercise;
     final target = ex.sets[ex.currentSetIndex].reps;
-    final tracking = _poseDetected && !_countingDown;
-    final result = tracking ? _lastResult : null;
-    final glow = result == null
-        ? Colors.transparent
-        : (result.isCorrect ? Colors.greenAccent : Colors.redAccent)
-            .withValues(alpha: 0.75);
-    final phaseLabel = result == null ? null : _phaseLabel(result.phase);
 
     return Stack(
       children: [
@@ -861,27 +914,37 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
             creationParamsCodec: const StandardMessageCodec(),
           ),
         ),
-        if (_poseDetected && _landmarks.isNotEmpty)
-          Positioned.fill(
-            child: CustomPaint(
-              painter: SkeletonPainter(
-                landmarks: _landmarks,
-                isCorrect: _lastResult?.isCorrect ?? true,
-                frameWidth: _frameWidth,
-                frameHeight: _frameHeight,
-                rotation: _frameRotation,
-              ),
-            ),
-          ),
-        // Form glow around the whole screen — readable from across the
-        // room, where the feedback text isn't.
         Positioned.fill(
-          child: IgnorePointer(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              decoration: BoxDecoration(border: Border.all(color: glow, width: 6)),
-            ),
-          ),
+          child: _onFrame((frame) {
+            final result = frame.result;
+            final glow = result == null
+                ? Colors.transparent
+                : (result.isCorrect ? Colors.greenAccent : Colors.redAccent)
+                    .withValues(alpha: 0.75);
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                if (frame.detected)
+                  CustomPaint(
+                    painter: SkeletonPainter(
+                      landmarks: frame.landmarks,
+                      isCorrect: result?.isCorrect ?? true,
+                      frameWidth: frame.width,
+                      frameHeight: frame.height,
+                      rotation: frame.rotation,
+                    ),
+                  ),
+                // Form glow around the whole screen — readable from across
+                // the room, where the feedback text isn't.
+                IgnorePointer(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    decoration: BoxDecoration(border: Border.all(color: glow, width: 6)),
+                  ),
+                ),
+              ],
+            );
+          }),
         ),
         // Scrims so the HUD stays legible over a bright room.
         Positioned(
@@ -918,8 +981,11 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
             ),
           ),
         ),
-        if (!_poseDetected && !_countingDown)
-          Positioned.fill(child: _buildFramingGuide(ex)),
+        if (!_countingDown)
+          Positioned.fill(
+            child: _onFrame((frame) =>
+                frame.detected ? const SizedBox.shrink() : _buildFramingGuide(ex)),
+          ),
         if (_countingDown)
           Positioned.fill(
             child: PoseCountdownOverlay(
@@ -945,22 +1011,29 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                   const SizedBox(height: 10),
                   _RepVerdictBox(rep: _repCount, correct: _repForm.last),
                 ],
-                if (phaseLabel != null) ...[
-                  const SizedBox(height: 10),
-                  _pill(
-                    child: Text(phaseLabel,
-                        style: _label(fontSize: 11, letterSpacing: 2, color: Colors.white)),
-                  ),
-                ],
+                _onFrame((frame) {
+                  final result = frame.result;
+                  final phaseLabel = result == null ? null : _phaseLabel(result.phase);
+                  if (phaseLabel == null) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: _pill(
+                      child: Text(phaseLabel,
+                          style: _label(fontSize: 11, letterSpacing: 2, color: Colors.white)),
+                    ),
+                  );
+                }),
               ],
             ),
           ),
-        if (result != null)
-          Positioned(
-            bottom: 96,
-            left: 20,
-            right: 20,
-            child: AnimatedContainer(
+        Positioned(
+          bottom: 96,
+          left: 20,
+          right: 20,
+          child: _onFrame((frame) {
+            final result = frame.result;
+            if (result == null) return const SizedBox.shrink();
+            return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
               decoration: BoxDecoration(
@@ -987,8 +1060,9 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                   ),
                 ],
               ),
-            ),
-          ),
+            );
+          }),
+        ),
         Positioned(
           bottom: 24,
           left: 20,
@@ -1017,25 +1091,27 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   }
 
   Widget _buildTrackingPill() {
-    final tracking = _poseDetected && !_countingDown;
-    final label = _countingDown
-        ? 'GET READY'
-        : tracking
-            ? 'TRACKING'
-            : 'SEARCHING';
-    return _pill(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          LivePulseDot(
-            size: 6,
-            color: tracking ? Colors.greenAccent : Colors.white38,
-          ),
-          const SizedBox(width: 3),
-          Text(label, style: _label(color: Colors.white70)),
-        ],
-      ),
-    );
+    return _onFrame((frame) {
+      final tracking = frame.detected && !_countingDown;
+      final label = _countingDown
+          ? 'GET READY'
+          : tracking
+              ? 'TRACKING'
+              : 'SEARCHING';
+      return _pill(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LivePulseDot(
+              size: 6,
+              color: tracking ? Colors.greenAccent : Colors.white38,
+            ),
+            const SizedBox(width: 3),
+            Text(label, style: _label(color: Colors.white70)),
+          ],
+        ),
+      );
+    });
   }
 
   /// Shown while no body is detected: what to do about it.

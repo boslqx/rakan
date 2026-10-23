@@ -19,6 +19,7 @@ import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
 import io.flutter.plugin.common.EventChannel
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class PoseDetectorHandler(
     private val context: Context,
@@ -35,6 +36,10 @@ class PoseDetectorHandler(
     private var frameHeight: Int = 480
     private var frameRotation: Int = 0
 
+    // Last timestamp handed to MediaPipe, which rejects any that don't
+    // increase. Written on the main thread (setup), read on cameraExecutor.
+    @Volatile private var lastTimestampMs: Long = -1
+
     val previewView: PreviewView = PreviewView(context).apply {
         implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         scaleType = PreviewView.ScaleType.FILL_CENTER
@@ -45,8 +50,7 @@ class PoseDetectorHandler(
     override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
         eventSink = sink
         val exerciseType = arguments as? String ?: "squat"
-        setupMediaPipe()
-        startCamera(exerciseType)
+        if (setupMediaPipe()) startCamera(exerciseType)
     }
 
     override fun onCancel(arguments: Any?) {
@@ -54,7 +58,10 @@ class PoseDetectorHandler(
         eventSink = null
     }
 
-    private fun setupMediaPipe() {
+    /** Loads the pose model. Returns false — after telling Flutter — if it can't. */
+    private fun setupMediaPipe(): Boolean {
+        // A new landmarker accepts any first timestamp.
+        lastTimestampMs = -1
         try {
             val baseOptions = BaseOptions.builder()
                 .setModelAssetPath("pose_landmarker.task")
@@ -78,8 +85,11 @@ class PoseDetectorHandler(
 
             poseLandmarker = PoseLandmarker.createFromOptions(context, options)
             Log.d("PoseDetector", "MediaPipe initialized")
+            return true
         } catch (e: Exception) {
             Log.e("PoseDetector", "Failed to initialize MediaPipe: ${e.message}")
+            sendError("model_unavailable", e.message)
+            return false
         }
     }
 
@@ -113,27 +123,29 @@ class PoseDetectorHandler(
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
         cameraProviderFuture.addListener({
-            cameraProvider = cameraProviderFuture.get()
+            // Getting the provider can fail too (no camera service), not
+            // only binding — both are reported to Flutter below.
+            try {
+                cameraProvider = cameraProviderFuture.get()
 
-            val displayRotation = previewView.display?.rotation ?: Surface.ROTATION_0
+                val displayRotation = previewView.display?.rotation ?: Surface.ROTATION_0
 
-            val preview = Preview.Builder()
-                .setTargetRotation(displayRotation)
-                .build().also {
-                    it.setSurfaceProvider(previewView.surfaceProvider)
+                val preview = Preview.Builder()
+                    .setTargetRotation(displayRotation)
+                    .build().also {
+                        it.setSurfaceProvider(previewView.surfaceProvider)
+                    }
+
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                    .setTargetRotation(displayRotation)
+                    .build()
+
+                imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                    processFrame(imageProxy)
                 }
 
-            val imageAnalysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                .setTargetRotation(displayRotation)
-                .build()
-
-            imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                processFrame(imageProxy)
-            }
-
-            try {
                 cameraProvider?.unbindAll()
                 cameraProvider?.bindToLifecycle(
                     lifecycleOwner,
@@ -144,25 +156,37 @@ class PoseDetectorHandler(
                 Log.d("PoseDetector", "Camera started for: $exerciseType")
             } catch (e: Exception) {
                 Log.e("PoseDetector", "Camera binding failed: ${e.message}")
+                sendError("camera_unavailable", e.message)
             }
-
         }, ContextCompat.getMainExecutor(context))
     }
 
     private fun processFrame(imageProxy: ImageProxy) {
         try {
-            // Record actual frame dimensions and rotation
-            frameWidth = imageProxy.width
-            frameHeight = imageProxy.height
-            frameRotation = imageProxy.imageInfo.rotationDegrees
+            // Record actual frame dimensions and rotation. Logged only when
+            // they change — logging every frame flooded logcat ~30 times a second.
+            val width = imageProxy.width
+            val height = imageProxy.height
+            val rotation = imageProxy.imageInfo.rotationDegrees
+            if (width != frameWidth || height != frameHeight || rotation != frameRotation) {
+                Log.d("PoseDetector", "Frame: ${width}x${height} rotation=${rotation}")
+            }
+            frameWidth = width
+            frameHeight = height
+            frameRotation = rotation
 
-            Log.d("PoseDetector", "Frame: ${frameWidth}x${frameHeight} rotation=${frameRotation}")
+            // detectAsync takes MILLISECONDS; CameraX timestamps are
+            // nanoseconds. Passed raw, frames ~33 ms apart looked ~9 hours
+            // apart to MediaPipe, which switched off its landmark smoothing.
+            val timestampMs = TimeUnit.NANOSECONDS.toMillis(imageProxy.imageInfo.timestamp)
+            if (timestampMs <= lastTimestampMs) return
+            lastTimestampMs = timestampMs
 
             val bitmap = imageProxy.toBitmap()
 
             // Use bitmap as-is - both preview and landmarks in natural coordinates
             val mpImage = BitmapImageBuilder(bitmap).build()
-            poseLandmarker?.detectAsync(mpImage, imageProxy.imageInfo.timestamp)
+            poseLandmarker?.detectAsync(mpImage, timestampMs)
 
         } catch (e: Exception) {
             Log.e("PoseDetector", "Frame error: ${e.message}")
@@ -174,6 +198,17 @@ class PoseDetectorHandler(
     private fun sendEvent(data: Map<String, Any?>) {
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             eventSink?.success(data)
+        }
+    }
+
+    /**
+     * Tells Flutter the pipeline couldn't start. [code] ("model_unavailable",
+     * "camera_unavailable") picks the message the app shows; [details] is
+     * for logs only.
+     */
+    private fun sendError(code: String, details: String?) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            eventSink?.error(code, details, null)
         }
     }
 

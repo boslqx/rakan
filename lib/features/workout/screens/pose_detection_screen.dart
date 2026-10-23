@@ -44,6 +44,10 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
   // Countdown state
   bool _countingDown = true;
 
+  /// Why the camera pipeline couldn't start (see PoseService); shown in
+  /// place of the framing hint. Null while it's working.
+  String? _cameraError;
+
   // Image dimensions from Kotlin (updated field names)
   int _frameWidth = 640;
   int _frameHeight = 480;
@@ -143,8 +147,17 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
           }
         });
       },
-      onError: (error) {
+      onError: (Object error) {
         debugPrint('Pose stream error: $error');
+        _subscription?.cancel();
+        if (!mounted) return;
+        setState(() {
+          _poseDetected = false;
+          _landmarks = [];
+          _cameraError = error is PoseStreamException
+              ? error.message
+              : "The camera couldn't start.";
+        });
       },
     );
   }
@@ -194,16 +207,26 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.accessibility_new_rounded,
-                          color: Colors.white24, size: 80),
+                      Icon(
+                          _cameraError != null
+                              ? Icons.videocam_off_rounded
+                              : Icons.accessibility_new_rounded,
+                          color: Colors.white24,
+                          size: 80),
                       const SizedBox(height: 16),
-                      Text(
-                        _permissionChecked && !_permissionGranted
-                            ? 'Camera permission required'
-                            : 'Point camera at your full body',
-                        style: GoogleFonts.manrope(
-                          color: Colors.white38,
-                          fontSize: 16,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          _cameraError != null
+                              ? '$_cameraError Close the camera and log this set by hand.'
+                              : _permissionChecked && !_permissionGranted
+                                  ? 'Camera permission required'
+                                  : 'Point camera at your full body',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.manrope(
+                            color: Colors.white38,
+                            fontSize: 16,
+                          ),
                         ),
                       ),
                     ],
@@ -212,7 +235,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
               ),
 
             // Countdown overlay — blocks rep counting, not the camera preview itself
-            if (_countingDown && _permissionGranted)
+            if (_countingDown && _permissionGranted && _cameraError == null)
               Positioned.fill(
                 child: PoseCountdownOverlay(
                   onComplete: () => setState(() => _countingDown = false),
@@ -244,7 +267,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
             ),
 
             // Instructions
-            if (!_poseDetected && _permissionGranted)
+            if (!_poseDetected && _permissionGranted && _cameraError == null)
               Positioned(
                 bottom: 200,
                 left: 24,
