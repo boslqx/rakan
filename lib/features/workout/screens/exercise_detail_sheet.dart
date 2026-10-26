@@ -612,6 +612,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
             builder: (_) => PoseDetectionScreen(
               exerciseName: _exercise.name,
               targetReps: 10,
+              showPreview: true,
             ),
           ),
         );

@@ -12,7 +12,9 @@ import '../services/angle_calculator.dart';
 import '../widgets/elapsed_time_text.dart';
 import '../widgets/exercise_media.dart';
 import '../widgets/pose_countdown_overlay.dart';
+import '../widgets/form_check_hud.dart';
 import '../widgets/session_hud.dart';
+import '../widgets/stepper_card.dart';
 import 'pose_detection_screen.dart';
 import '../../../shared/utils/number_format.dart';
 import '../../../shared/widgets/pressable.dart';
@@ -168,15 +170,6 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
 
   bool get _currentExerciseCanUseCamera =>
       (_currentExercise.data?.hasPoseDetection ?? false) && _cameraAvailable;
-
-  /// Camera set-up lines for an exercise ("Place phone…", "Stand…"), minus
-  /// the leading emoji — the UI draws its own icons.
-  static List<String> _setupLines(String exerciseName) =>
-      ExerciseAnalyserFactory.getInstructions(exerciseName)
-          .split('\n')
-          .map((l) => l.replaceFirst(RegExp(r'^[^A-Za-z0-9]+'), '').trim())
-          .where((l) => l.isNotEmpty)
-          .toList();
 
   /// Advances _exerciseIndex forward past any exercises that are already
   /// fully complete (all sets logged via Manual mode). Returns true if a
@@ -365,7 +358,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                       fontSize: 14, height: 1.4, color: AppColors.onSurfaceVariant),
                 ),
                 const SizedBox(height: 20),
-                _StepperCard(
+                StepperCard(
                   label: 'REPS DONE',
                   value: '$reps',
                   onMinus: () => bump(-1),
@@ -763,7 +756,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: _StepperCard(
+                      child: StepperCard(
                         label: 'TARGET REPS',
                         value: '${set.reps}',
                         onMinus: () => _bumpReps(-1),
@@ -773,7 +766,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                     if (ex.tracksWeight) ...[
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _StepperCard(
+                        child: StepperCard(
                           label: 'WEIGHT · KG',
                           value: set.weightKg == 0 ? '—' : formatKg(set.weightKg),
                           onMinus: () => _bumpWeight(-_weightIncrement),
@@ -810,59 +803,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
     final hasPose = ex.data?.hasPoseDetection ?? false;
 
     if (hasPose && _cameraAvailable) {
-      final lines = _setupLines(ex.exerciseName);
-      return Container(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const LivePulseDot(color: Colors.greenAccent, size: 6),
-                const SizedBox(width: 4),
-                Text('FORM CHECK ON', style: _label(color: Colors.white70)),
-                const Spacer(),
-                Flexible(
-                  child: Text('AUTO REP COUNT',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _label(fontSize: 9, color: Colors.white38)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            for (int i = 0; i < lines.length; i++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      i == 0
-                          ? Icons.phone_android_rounded
-                          : Icons.accessibility_new_rounded,
-                      size: 16,
-                      color: Colors.white54,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        lines[i],
-                        style: GoogleFonts.manrope(
-                            fontSize: 12.5, height: 1.4, color: Colors.white70),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      );
+      return CameraSetupNote(exerciseName: ex.exerciseName);
     }
 
     return Container(
@@ -904,6 +845,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   Widget _buildCameraPhase() {
     final ex = _currentExercise;
     final target = ex.sets[ex.currentSetIndex].reps;
+    final good = _repForm.where((ok) => ok).length;
 
     return Stack(
       children: [
@@ -989,7 +931,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
         if (_countingDown)
           Positioned.fill(
             child: PoseCountdownOverlay(
-              hints: _setupLines(ex.exerciseName),
+              hints: cameraSetupLines(ex.exerciseName),
               onComplete: () => setState(() => _countingDown = false),
             ),
           ),
@@ -1007,6 +949,8 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
             child: Column(
               children: [
                 _RepRing(count: _repCount, target: target),
+                const SizedBox(height: 10),
+                RepFormTally(good: good, bad: _repForm.length - good),
                 if (_repForm.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   _RepVerdictBox(rep: _repCount, correct: _repForm.last),
@@ -1116,14 +1060,14 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
 
   /// Shown while no body is detected: what to do about it.
   Widget _buildFramingGuide(ExerciseSessionState ex) {
-    final lines = _setupLines(ex.exerciseName);
+    final lines = cameraSetupLines(ex.exerciseName);
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 120), // clear of the rep ring
+            const SizedBox(height: 160), // clear of the rep ring and tally
             const Icon(Icons.accessibility_new_rounded, color: Colors.white38, size: 64),
             const SizedBox(height: 12),
             Text("Can't see you yet",
@@ -1212,7 +1156,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
               const SizedBox(height: 4),
               Text(target, style: _label(fontSize: 11, letterSpacing: 1.2, color: Colors.white54)),
               const SizedBox(height: 14),
-              _StepperCard(
+              StepperCard(
                 label: 'REPS DONE',
                 value: '$_repsDone',
                 onMinus: () {
@@ -1382,12 +1326,13 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
     );
   }
 
-  /// How the camera judged each rep of the set just logged, one dot per rep
-  /// in order — including the final rep, which ends the set before the HUD
-  /// can show its verdict.
+  /// How the camera judged each rep of the set just logged: the share with
+  /// good form, and one dot per rep in order — including the final rep,
+  /// which ends the set before the HUD can show its verdict.
   Widget _buildFormSummary(ExerciseSessionState ex, int setIndex, List<bool> form) {
     final good = form.where((ok) => ok).length;
     final allGood = good == form.length;
+    final accuracy = formAccuracyPercent(form);
     // Ending a set by hand can log a different count than the camera saw.
     final tracked = form.length != ex.sets[setIndex].reps ? ' tracked' : '';
     final reps = form.length == 1 ? 'rep' : 'reps';
@@ -1438,6 +1383,25 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$accuracy%',
+                semanticsLabel: '$accuracy percent accuracy',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 30,
+                  height: 1.05,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: formAccuracyColor(accuracy),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text('ACCURACY', style: _label(fontSize: 9, color: Colors.white38)),
+            ],
           ),
         ],
       ),
@@ -1490,7 +1454,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
               children: [
                 Text('WEIGHT · KG', style: _label(fontSize: 9, color: Colors.white38)),
                 const Spacer(),
-                _StepButton(icon: Icons.remove_rounded, onTap: () => _bumpWeight(-_weightIncrement)),
+                StepButton(icon: Icons.remove_rounded, onTap: () => _bumpWeight(-_weightIncrement)),
                 SizedBox(
                   width: 72,
                   child: Pressable(
@@ -1507,7 +1471,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
                     ),
                   ),
                 ),
-                _StepButton(icon: Icons.add_rounded, onTap: () => _bumpWeight(_weightIncrement)),
+                StepButton(icon: Icons.add_rounded, onTap: () => _bumpWeight(_weightIncrement)),
               ],
             ),
           ],
@@ -1979,97 +1943,6 @@ class _RestRing extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// A value with −/+ either side; tap the value itself for exact entry when
-/// [onTapValue] is given.
-class _StepperCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final VoidCallback onMinus;
-  final VoidCallback onPlus;
-  final VoidCallback? onTapValue;
-
-  const _StepperCard({
-    required this.label,
-    required this.value,
-    required this.onMinus,
-    required this.onPlus,
-    this.onTapValue,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 12, 8, 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.manrope(
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.5,
-              color: Colors.white38,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _StepButton(icon: Icons.remove_rounded, onTap: onMinus),
-              Expanded(
-                child: Pressable(
-                  onTap: onTapValue,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      value,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              _StepButton(icon: Icons.add_rounded, onTap: onPlus),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _StepButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Pressable(
-      onTap: onTap,
-      pressedScale: 0.9,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: const BoxDecoration(
-          color: Colors.white10,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, size: 18, color: Colors.white70),
       ),
     );
   }

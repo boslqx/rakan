@@ -125,6 +125,20 @@ class _CoachScreenState extends State<CoachScreen> {
 
       final records = await WeightRecordService().getAllRecordsAscending(_uid);
 
+      // The onboarding weight opens the journey, so logging a first weight
+      // adds a second point rather than replacing the starting one.
+      final starting = WeightRecordService().seedStartingRecord(
+        uid: _uid,
+        profile: profileData,
+        existing: records,
+        signedUpAt: FirebaseAuth.instance.currentUser?.metadata.creationTime,
+      );
+      if (starting != null) {
+        records
+          ..add(starting)
+          ..sort((a, b) => a.date.compareTo(b.date));
+      }
+
       if (!mounted) return;
       setState(() {
         _profileHeightCm = (profileData?['heightCm'] as num?)?.toDouble();

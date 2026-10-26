@@ -3,19 +3,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../data/exercise_data.dart';
 import '../services/pose_service.dart';
 import '../services/angle_calculator.dart';
+import '../widgets/exercise_media.dart';
+import '../widgets/form_check_hud.dart';
 import '../widgets/pose_countdown_overlay.dart';
+import '../widgets/stepper_card.dart';
 import '../../../shared/widgets/pressable.dart';
 
 class PoseDetectionScreen extends StatefulWidget {
   final String exerciseName;
   final int targetReps;
 
+  /// Brief the exercise first — demo, target reps, camera set-up — and
+  /// start the camera only when the user is ready, as Guided mode does
+  /// before a set. Off mid-workout, where the exercise is already on show.
+  final bool showPreview;
+
   const PoseDetectionScreen({
     super.key,
     required this.exerciseName,
     required this.targetReps,
+    this.showPreview = false,
   });
 
   @override
@@ -36,6 +46,13 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
   // Rep tracking
   int _repCount = 0;
   bool _workoutComplete = false;
+  late int _targetReps = widget.targetReps;
+
+  /// The form verdict of each rep counted so far, in order.
+  final List<bool> _repForm = [];
+
+  /// False while the preview is up; the camera starts once it's true.
+  late bool _started = !widget.showPreview;
 
   // Camera permission state
   bool _permissionGranted = false;
@@ -64,22 +81,37 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
     const platform = MethodChannel('com.example.rakan/permissions');
     try {
       final granted = await platform.invokeMethod<bool>('requestCamera') ?? false;
+      if (!mounted) return;
       setState(() {
         _permissionGranted = granted;
         _permissionChecked = true;
       });
-      if (granted) {
+      if (granted && _started) {
         _startDetection();
       }
     } catch (e) {
       debugPrint('Permission error: $e');
+      if (!mounted) return;
       // Fallback — try anyway
       setState(() {
         _permissionGranted = true;
         _permissionChecked = true;
       });
-      _startDetection();
+      if (_started) _startDetection();
     }
+  }
+
+  /// Leaves the preview. Detection starts now, or as soon as the camera
+  /// permission request (still pending) comes back granted.
+  void _start() {
+    HapticFeedback.lightImpact();
+    setState(() => _started = true);
+    if (_permissionGranted) _startDetection();
+  }
+
+  void _bumpTarget(int delta) {
+    HapticFeedback.selectionClick();
+    setState(() => _targetReps = (_targetReps + delta).clamp(1, 100));
   }
 
   void _startDetection() {
@@ -141,7 +173,8 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
 
           if (result.countRep) {
             _repCount = _analyser.repCount;
-            if (_repCount >= widget.targetReps) {
+            _repForm.add(result.repCorrect);
+            if (_repCount >= _targetReps) {
               _workoutComplete = true;
             }
           }
@@ -170,6 +203,12 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_started) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(child: _buildPreview()),
+      );
+    }
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -384,35 +423,41 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
   }
 
   Widget _buildRepCounter() {
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.black54,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '$_repCount',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 48,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
+    final good = _repForm.where((ok) => ok).length;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.black54,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$_repCount',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 48,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
               ),
-            ),
-            Text(
-              ' / ${widget.targetReps}',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 24,
-                fontWeight: FontWeight.w400,
-                color: Colors.white38,
+              Text(
+                ' / $_targetReps',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white38,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+        const SizedBox(height: 8),
+        RepFormTally(good: good, bad: _repForm.length - good),
+      ],
     );
   }
 
@@ -481,6 +526,8 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
   }
 
   Widget _buildCompleteOverlay() {
+    final good = _repForm.where((ok) => ok).length;
+    final accuracy = _repForm.isEmpty ? null : formAccuracyPercent(_repForm);
     return Container(
       color: Colors.black87,
       child: Center(
@@ -498,9 +545,34 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
                 color: Colors.white,
               ),
             ),
-            const SizedBox(height: 8),
+            if (accuracy != null) ...[
+              const SizedBox(height: 20),
+              Text(
+                '$accuracy%',
+                semanticsLabel: '$accuracy percent accuracy',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 56,
+                  height: 1,
+                  fontWeight: FontWeight.w700,
+                  color: formAccuracyColor(accuracy),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'FORM ACCURACY',
+                style: GoogleFonts.manrope(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                  color: Colors.white54,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
             Text(
-              '$_repCount reps completed with good form',
+              accuracy != null
+                  ? '$good of ${_repForm.length} reps with good form'
+                  : '$_repCount reps completed',
               style: GoogleFonts.manrope(
                 fontSize: 16,
                 color: Colors.white70,
@@ -509,6 +581,166 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Before the camera starts: the demo, the target, and how to set up the
+  /// phone — the same brief Guided mode gives before a set.
+  Widget _buildPreview() {
+    final data = findExerciseByName(widget.exerciseName);
+    final gif = data?.localGifAsset;
+    final muscles = [
+      if (data != null && data.muscleGroup.isNotEmpty) data.muscleGroup,
+      ...?data?.secondaryMuscles.take(2),
+    ];
+    final cameraOff = _permissionChecked && !_permissionGranted;
+    TextStyle label({double fontSize = 10, Color color = Colors.white54}) =>
+        GoogleFonts.manrope(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.5,
+          color: color,
+        );
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+          child: Row(
+            children: [
+              Pressable(
+                onTap: () => Navigator.of(context).pop(_repCount),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white12,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.close_rounded,
+                      color: Colors.white, size: 18),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Text('FORM CHECK', style: label()),
+            ],
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (gif != null)
+                  ExerciseDemoPanel(
+                    gifAsset: gif,
+                    title: widget.exerciseName,
+                    badge: 'DEMO',
+                    heroTag: 'form-check-demo-${widget.exerciseName}',
+                    height: 210,
+                  )
+                else
+                  Container(
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(Icons.fitness_center_rounded,
+                        size: 40, color: Colors.white24),
+                  ),
+                const SizedBox(height: 20),
+                Text(
+                  'PRACTICE SET',
+                  style: label(fontSize: 12, color: AppColors.primary)
+                      .copyWith(letterSpacing: 2),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.exerciseName,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    height: 1.1,
+                  ),
+                ),
+                if (muscles.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(muscles.join(' · ').toUpperCase(),
+                      style: label(fontSize: 11, color: Colors.white38)),
+                ],
+                const SizedBox(height: 22),
+                StepperCard(
+                  label: 'TARGET REPS',
+                  value: '$_targetReps',
+                  onMinus: () => _bumpTarget(-1),
+                  onPlus: () => _bumpTarget(1),
+                ),
+                const SizedBox(height: 14),
+                if (cameraOff)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.videocam_off_rounded,
+                            size: 16, color: Colors.white54),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Form check needs the camera — allow access to count your reps.',
+                            style: GoogleFonts.manrope(
+                                fontSize: 12, height: 1.4, color: Colors.white54),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  CameraSetupNote(exerciseName: widget.exerciseName),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: cameraOff ? _requestCameraPermission : _start,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.videocam_rounded,
+                      size: 18, color: AppColors.onPrimary),
+                  const SizedBox(width: 8),
+                  Text(
+                    cameraOff ? 'ALLOW CAMERA' : 'START',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
+                      color: AppColors.onPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
