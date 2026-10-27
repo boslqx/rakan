@@ -32,4 +32,60 @@ void main() {
       expect(WorkoutPlanService.estimateDurationMinutes([]), 0);
     });
   });
+
+  group('dayVersion', () {
+    test("keeps a plan day's content but not its bookkeeping, and remembers "
+        'which plan day it came from', () {
+      final version = WorkoutPlanService.dayVersion('2024-01-11', {
+        'id': 'thu',
+        'dayNumber': 4,
+        'dayName': 'Thursday',
+        'reminderEnabled': true,
+        'dayType': 'workout',
+        'workoutName': 'Push',
+        'focusDescription': 'Chest, Shoulders',
+        'exercises': [
+          {'docId': 'x1', 'order': 0, 'exerciseName': 'Push-Up', 'sets': 3, 'restSeconds': 60},
+          {'exerciseName': 'Dips', 'sets': 3, 'restSeconds': 60, 'justThisTime': true},
+        ],
+      });
+
+      expect(version['date'], '2024-01-11');
+      expect(version['planDayId'], 'thu');
+      expect(version['workoutName'], 'Push');
+      expect(version.containsKey('dayNumber'), isFalse);
+      expect(version.containsKey('reminderEnabled'), isFalse);
+      final exercises = (version['exercises'] as List).cast<Map<String, dynamic>>();
+      expect(exercises.first.containsKey('docId'), isFalse);
+      expect(exercises.first.containsKey('order'), isFalse);
+      expect(exercises.last['justThisTime'], isTrue);
+      expect(version['durationMinutes'], WorkoutPlanService.estimateDurationMinutes(exercises));
+    });
+
+    test('a rest day becomes an empty rest version with no plan day', () {
+      final version = WorkoutPlanService.dayVersion('2024-01-11', {
+        'id': 'fri',
+        'dayType': 'rest',
+        'workoutName': 'Rest Day',
+        'exercises': [],
+      });
+
+      expect(version['dayType'], 'rest');
+      expect(version['exercises'], isEmpty);
+      expect(version.containsKey('planDayId'), isFalse);
+    });
+
+    test('carries the missed dates of a rescheduled session it replaces', () {
+      final version = WorkoutPlanService.dayVersion('2024-01-12', {
+        'date': '2024-01-11',
+        'dayType': 'workout',
+        'workoutName': 'Chest (Rescheduled)',
+        'sourceMissedDate': '2024-01-08',
+        'exercises': [],
+      });
+
+      expect(version['date'], '2024-01-12');
+      expect(version['sourceMissedDates'], ['2024-01-08']);
+    });
+  });
 }

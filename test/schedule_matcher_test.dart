@@ -60,6 +60,66 @@ void main() {
         containsAll(['Chest', 'Shoulders']),
       );
     });
+    test('a rest one-time version yields to a session rescheduled onto the '
+        'same date afterwards', () {
+      final overrides = [
+        {'date': '2024-01-11', 'kind': 'version', 'dayType': 'rest', 'exercises': []},
+        {
+          'date': '2024-01-11',
+          'dayType': 'workout',
+          'muscleGroup': 'Chest',
+          'sourceMissedDate': '2024-01-08',
+          'exercises': [
+            {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+          ],
+        },
+      ];
+
+      final result = ScheduleMatcher.overrideForDate(overrides, date);
+
+      expect(result!['dayType'], 'workout');
+      expect(result['muscleGroup'], 'Chest');
+    });
+
+    test('a lone rest one-time version makes the date a rest day', () {
+      final overrides = [
+        {'date': '2024-01-11', 'kind': 'version', 'dayType': 'rest', 'exercises': []},
+      ];
+
+      expect(ScheduleMatcher.overrideForDate(overrides, date)!['dayType'], 'rest');
+    });
+
+    test('a merged day keeps every source missed date', () {
+      final overrides = [
+        {'date': '2024-01-11', 'dayType': 'workout', 'muscleGroup': 'Chest', 'sourceMissedDate': '2024-01-08', 'exercises': []},
+        {'date': '2024-01-11', 'dayType': 'workout', 'muscleGroup': 'Back', 'sourceMissedDate': '2024-01-09', 'exercises': []},
+      ];
+
+      final result = ScheduleMatcher.overrideForDate(overrides, date)!;
+
+      expect(ScheduleMatcher.sourceMissedDates(result), ['2024-01-08', '2024-01-09']);
+    });
+  });
+
+  group('ScheduleMatcher.planDayOf', () {
+    final planDays = [
+      {'id': 'mon', 'dayNumber': 1, 'dayType': 'workout'},
+      {'id': 'wed', 'dayNumber': 3, 'dayType': 'workout'},
+    ];
+
+    test('a plan day is its own plan day', () {
+      expect(ScheduleMatcher.planDayOf(planDays, planDays[0]), same(planDays[0]));
+    });
+
+    test('a one-time version points at the plan day whose workout it holds', () {
+      final version = {'date': '2024-01-12', 'kind': 'version', 'planDayId': 'wed'};
+      expect(ScheduleMatcher.planDayOf(planDays, version)!['id'], 'wed');
+    });
+
+    test('a rescheduled session has no plan day', () {
+      final moved = {'date': '2024-01-12', 'sourceMissedDate': '2024-01-08'};
+      expect(ScheduleMatcher.planDayOf(planDays, moved), isNull);
+    });
   });
 
   group('ScheduleMatcher.resolvedDayForDate', () {

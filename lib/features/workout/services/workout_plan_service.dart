@@ -6,6 +6,13 @@ import 'schedule_matcher.dart';
 class WorkoutPlanService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  /// Bumped when the schedule changes from somewhere other than the screen
+  /// showing it — a reschedule from Home's missed-day popup, an edit from
+  /// a day's detail screen. Home and the Schedule tab both stay alive in
+  /// MainShell's IndexedStack, so they listen and reload rather than keep
+  /// showing the week as it was when they first loaded.
+  static final ValueNotifier<int> scheduleChanges = ValueNotifier(0);
+
   /// Estimated session length for a day's exercises — the same formula the
   /// backend plan generator uses (plan_generator._session_minutes): each set
   /// is 45s under load plus its rest, plus 10 minutes of warm-up and
@@ -451,6 +458,68 @@ class WorkoutPlanService {
           'sourceMissedDate': sourceMissedDate,
           'createdAt': FieldValue.serverTimestamp(),
         });
+    scheduleChanges.value++;
+  }
+
+  /// Gives each date in [contentByDate] its own one-time version of its day
+  /// — an exercise added "just this time", or two days swapped for this
+  /// week only — leaving the recurring plan alone. A version stands for the
+  /// whole day, so it replaces anything else on that date (an earlier
+  /// version, or a rescheduled session, whose content and source dates the
+  /// caller has already folded into the new content); see
+  /// [ScheduleMatcher.overrideForDate] for how it's read back.
+  Future<void> setDaysForDates({
+    required String uid,
+    required Map<DateTime, Map<String, dynamic>> contentByDate,
+  }) async {
+    final overridesRef = _db.collection('users').doc(uid).collection('scheduleOverrides');
+    final batch = _db.batch();
+
+    for (final entry in contentByDate.entries) {
+      final dateStr = ScheduleMatcher.dateKey(entry.key);
+      final versionId = '${dateStr}__version';
+      final existing = await overridesRef.where('date', isEqualTo: dateStr).get();
+      for (final doc in existing.docs) {
+        if (doc.id != versionId) batch.delete(doc.reference);
+      }
+      batch.set(overridesRef.doc(versionId), dayVersion(dateStr, entry.value));
+    }
+
+    await batch.commit();
+  }
+
+  /// The stored shape of a one-time version: the day's content, minus the
+  /// plan's own bookkeeping (slot fields, exercise doc IDs and order).
+  @visibleForTesting
+  static Map<String, dynamic> dayVersion(String dateStr, Map<String, dynamic> content) {
+    final isRest = content['dayType'] == 'rest';
+    final exercises = isRest
+        ? const <Map<String, dynamic>>[]
+        : [
+            for (final ex in (content['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? const [])
+              <String, dynamic>{
+                for (final e in ex.entries)
+                  if (e.key != 'docId' && e.key != 'order') e.key: e.value,
+              },
+          ];
+    final sources = ScheduleMatcher.sourceMissedDates(content);
+    // Which plan day's workout this is ('id' when the content is the plan
+    // day itself), so exercises added to it can still go into the plan.
+    final planDayId = isRest ? null : content['planDayId'] ?? content['id'];
+
+    return {
+      'date': dateStr,
+      'kind': 'version',
+      'dayType': isRest ? 'rest' : 'workout',
+      'workoutName': isRest ? 'Rest Day' : content['workoutName'] as String? ?? 'Workout',
+      'focusDescription': isRest ? '' : content['focusDescription'] as String? ?? '',
+      if (content['muscleGroup'] != null) 'muscleGroup': content['muscleGroup'],
+      'exercises': exercises,
+      'durationMinutes': estimateDurationMinutes(exercises),
+      if (sources.isNotEmpty) 'sourceMissedDates': sources,
+      'planDayId': ?planDayId,
+      'createdAt': FieldValue.serverTimestamp(),
+    };
   }
 
   /// Persists a new exercise order for a day, after the user drags to

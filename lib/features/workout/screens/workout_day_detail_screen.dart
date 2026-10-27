@@ -9,30 +9,40 @@ import '../data/exercise_data.dart';
 import '../services/workout_log_service.dart';
 import '../services/workout_plan_service.dart';
 import '../widgets/exercise_media.dart';
+import '../widgets/scope_choice_sheet.dart';
 import 'workout_active_screen.dart';
 import 'workout_log_detail_screen.dart';
 import '../../../shared/widgets/pressable.dart';
 
-/// Editable version of the "workout preview" layout, opened from the
-/// Schedule tab when a day is tapped (replacing the old bottom sheet).
+const _weekdayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/// Editable view of one workout day: reorder, add, swap, adjust or remove
+/// exercises, then start the session from here when it's today. Opened
+/// from the Schedule tab to plan ahead, and from Home as the pre-workout
+/// preview — the same screen, so the last look before a session can still
+/// change it.
 ///
-/// Deliberately a separate screen from [WorkoutPreviewScreen] rather than
-/// adding editing controls to it: WorkoutPreviewScreen's job is a quick,
-/// read-only "about to start right now" confirmation (used from Home) —
-/// cluttering that moment with add/remove/reorder controls would slow
-/// down the common case. This screen takes over the "browse and plan
-/// ahead" job for the Schedule tab instead, and — since it already shows
-/// everything WorkoutPreviewScreen does — starting a workout from here
-/// jumps straight to WorkoutActiveScreen rather than routing through
-/// WorkoutPreviewScreen a second time.
+/// It edits one of two things. A plan day ([day] has an 'id'): edits change
+/// the recurring plan, except that adding an exercise asks whether it's for
+/// the plan or just this time. Or the date's one-time version — a
+/// rescheduled session, a swap for this week only, or a plan day that had
+/// something added just this time: edits change that date only (see
+/// WorkoutPlanService.setDaysForDates), and an added exercise can still go
+/// into the plan too.
 class WorkoutDayDetailScreen extends StatefulWidget {
+  /// What's on this date: the plan day, or the date's one-time version.
   final Map<String, dynamic> day;
-  final String planId;
+  final String? planId;
+
+  /// The plan day behind a one-time version (ScheduleMatcher.planDayOf),
+  /// so an exercise added there can still go into the plan.
+  final Map<String, dynamic>? planDay;
 
   const WorkoutDayDetailScreen({
     super.key,
     required this.day,
     required this.planId,
+    this.planDay,
   });
 
   @override
@@ -47,22 +57,61 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
   Map<String, dynamic>? _completedLog;
   bool _loadingStatus = true;
 
-  bool get _isToday => widget.day['dayNumber'] == DateTime.now().weekday;
+  /// Whether edits go to this date's one-time version rather than the plan
+  /// day — from the start for a version, or once something is added to a
+  /// plan day "just this time".
+  late bool _oneTime;
 
-  /// This week's actual calendar date for widget.day's weekday (Mon=1..Sun=7,
-  /// same convention as DateTime.weekday) — needed to look up whether that
-  /// occurrence was logged or, if its day already passed, went unlogged.
+  /// The plan day's exercises, kept current while exercises are added to
+  /// the plan from a one-time version (for their order and its duration).
+  late List<Map<String, dynamic>> _planDayExercises;
+
+  /// Set once anything is saved, so Home and the Schedule tab reload on exit.
+  bool _changedSchedule = false;
+
+  Map<String, dynamic>? get _planDay =>
+      widget.planDay ?? (widget.day['id'] is String ? widget.day : null);
+
+  /// Mon=1..Sun=7, as DateTime.weekday. A rescheduled session opened from
+  /// Home has no slot of its own — it's always today's.
+  int get _dayNumber =>
+      widget.day['dayNumber'] as int? ?? _planDay?['dayNumber'] as int? ?? DateTime.now().weekday;
+
+  String get _dayName => widget.day['dayName'] as String? ?? _weekdayNames[_dayNumber - 1];
+
+  /// The one occurrence a one-time change is for.
+  String get _thisOccurrence => _isToday ? 'today' : 'this $_dayName';
+
+  bool get _isToday => _dayNumber == DateTime.now().weekday;
+
+  /// This week's actual calendar date for widget.day's weekday — needed to
+  /// look up whether that occurrence was logged or, if its day already
+  /// passed, went unlogged, and the date a one-time change is saved under.
   DateTime get _scheduledDateThisWeek {
     final today = DateTime.now();
-    final dayNumber = widget.day['dayNumber'] as int? ?? today.weekday;
     return DateTime(today.year, today.month, today.day)
-        .add(Duration(days: dayNumber - today.weekday));
+        .add(Duration(days: _dayNumber - today.weekday));
   }
 
   bool get _isPastThisWeek => _scheduledDateThisWeek
       .isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day));
 
   bool get _isCompleted => _completedLog != null;
+
+  /// A change can apply to this date alone only until it passes or its
+  /// workout is done.
+  bool get _canChangeThisDate => !_isPastThisWeek && !_isCompleted;
+
+  /// A plan day can always be edited (it's every week); a one-time version
+  /// only until its date is over.
+  bool get _canEdit => !_oneTime || _canChangeThisDate;
+
+  /// Whether an exercise can be added to the plan from a one-time version —
+  /// its workout has a plan day (a rescheduled session doesn't).
+  bool get _canAddToPlan =>
+      widget.planId != null && _planDay?['id'] is String && _planDay?['dayType'] == 'workout';
+
+  String get _planId => widget.planId!;
 
   String get _dayId => widget.day['id'] as String;
 
@@ -75,11 +124,22 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _oneTime = widget.day['id'] is! String || widget.planId == null;
     _exercises = List<Map<String, dynamic>>.from(
       (widget.day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [],
     );
-    _durationMinutes = widget.day['durationMinutes'] as int? ?? 0;
+    _planDayExercises = List<Map<String, dynamic>>.from(
+      (_planDay?['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [],
+    );
+    _durationMinutes = widget.day['durationMinutes'] as int? ??
+        WorkoutPlanService.estimateDurationMinutes(_exercises);
     _loadCompletionStatus();
+  }
+
+  @override
+  void dispose() {
+    if (_changedSchedule) WorkoutPlanService.scheduleChanges.value++;
+    super.dispose();
   }
 
   /// Checks whether this week's occurrence of this day was already logged —
@@ -106,6 +166,8 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
   // ── Mutations ─────────────────────────────────────────────────────
   // Each one recomputes the duration estimate (WorkoutPlanService
   // .estimateDurationMinutes) from the edited list and saves it alongside.
+  // On a plan day they write the plan; on a one-time version, each rewrites
+  // that date's version whole (_saveVersion).
 
   /// Runs a write; returns whether it succeeded.
   Future<bool> _runMutation(Future<void> Function() action) async {
@@ -113,6 +175,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
     setState(() => _isMutating = true);
     try {
       await action();
+      _changedSchedule = true;
       return true;
     } catch (_) {
       if (mounted) {
@@ -141,9 +204,48 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
       );
   }
 
+  void _showExercises(List<Map<String, dynamic>> exercises) => setState(() {
+        _exercises = exercises;
+        _durationMinutes = WorkoutPlanService.estimateDurationMinutes(exercises);
+      });
+
+  /// Writes [exercises] as this date's one-time version — built from what's
+  /// shown, so the day's name, focus and plan day carry over.
+  Future<void> _writeVersion(String uid, List<Map<String, dynamic>> exercises) {
+    return WorkoutPlanService().setDaysForDates(uid: uid, contentByDate: {
+      _scheduledDateThisWeek: {
+        ...widget.day,
+        'dayType': 'workout',
+        'planDayId': ?_planDay?['id'],
+        'exercises': exercises,
+      },
+    });
+  }
+
+  /// A one-time version's save for every edit.
+  Future<bool> _saveVersion(List<Map<String, dynamic>> exercises) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
+    return _runMutation(() async {
+      await _writeVersion(uid, exercises);
+      _showExercises(exercises);
+    });
+  }
+
   Future<void> _addExercise(ExerciseData data) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
+
+    // Asked whenever both answers can apply: this date is still to come,
+    // and (on a one-time version) its workout has a plan day to add to.
+    final bool toPlan;
+    if (_canChangeThisDate && (!_oneTime || _canAddToPlan)) {
+      final choice = await _askAddScope(data);
+      if (choice == null || !mounted) return;
+      toPlan = choice;
+    } else {
+      toPlan = !_oneTime;
+    }
 
     final newExercise = <String, dynamic>{
       'exerciseId': DateTime.now().millisecondsSinceEpoch.toString(),
@@ -154,28 +256,71 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
       'restSeconds': 60,
     };
 
-    final updatedExercises = [..._exercises, newExercise];
-    final newDuration = WorkoutPlanService.estimateDurationMinutes(updatedExercises);
-
-    final ok = await _runMutation(() async {
-      final docId = await WorkoutPlanService().addExerciseToDay(
-        uid: uid,
-        planId: widget.planId,
-        dayId: _dayId,
-        exercise: newExercise,
-        order: _exercises.length,
-        newDurationMinutes: newDuration,
-      );
-      // Keep the new doc ID, so the exercise can be edited, removed or
-      // reordered straight away — without it those silently did nothing
-      // until the screen was reopened.
-      newExercise['docId'] = docId;
-      setState(() {
-        _exercises = updatedExercises;
-        _durationMinutes = newDuration;
+    if (toPlan && !_oneTime) {
+      final updatedExercises = [..._exercises, newExercise];
+      final ok = await _runMutation(() async {
+        final docId = await WorkoutPlanService().addExerciseToDay(
+          uid: uid,
+          planId: _planId,
+          dayId: _dayId,
+          exercise: newExercise,
+          order: _exercises.length,
+          newDurationMinutes: WorkoutPlanService.estimateDurationMinutes(updatedExercises),
+        );
+        // Keep the new doc ID, so the exercise can be edited, removed or
+        // reordered straight away — without it those silently did nothing
+        // until the screen was reopened.
+        newExercise['docId'] = docId;
+        _showExercises(updatedExercises);
       });
+      if (ok && mounted) _showSnack('Added ${data.name} to your plan');
+      return;
+    }
+
+    // This date's version gets it either way; from a version it can go into
+    // the plan day as well.
+    if (!_oneTime) _planDayExercises = [..._exercises];
+    final updatedExercises = [
+      ..._exercises,
+      {...newExercise, if (!toPlan) 'justThisTime': true},
+    ];
+    final ok = await _runMutation(() async {
+      if (toPlan) {
+        final planExercises = [..._planDayExercises, newExercise];
+        await WorkoutPlanService().addExerciseToDay(
+          uid: uid,
+          planId: _planId,
+          dayId: _planDay!['id'] as String,
+          exercise: newExercise,
+          order: _planDayExercises.length,
+          newDurationMinutes: WorkoutPlanService.estimateDurationMinutes(planExercises),
+        );
+        _planDayExercises = planExercises;
+      }
+      await _writeVersion(uid, updatedExercises);
+      _oneTime = true;
+      _showExercises(updatedExercises);
     });
-    if (ok && mounted) _showSnack('Added ${data.name}');
+    if (ok && mounted) {
+      _showSnack(toPlan ? 'Added ${data.name} to your plan' : 'Added ${data.name} for $_thisOccurrence only');
+    }
+  }
+
+  /// Plan, or just this time? Null if the sheet is dismissed (nothing is added).
+  Future<bool?> _askAddScope(ExerciseData data) {
+    final planDayName = _planDay?['dayName'] as String? ?? _dayName;
+    return showScopeChoiceSheet(
+      context,
+      leading: ExerciseThumb(asset: data.thumbnailAsset, size: 52),
+      title: 'ADD ${data.name.toUpperCase()}',
+      subtitle: 'Keep it in your plan, or just for this time?',
+      planTitle: 'SAVE TO MY PLAN',
+      planDescription: !_oneTime || planDayName == _dayName
+          ? 'Added to every $planDayName from now on.'
+          : 'Added to every $planDayName from now on, and to $_thisOccurrence.',
+      oneTimeTitle: 'JUST THIS TIME',
+      oneTimeDescription: 'Only for $_thisOccurrence — your plan stays as it is.',
+    );
   }
 
   /// Removes at once, with UNDO instead of a confirm dialog.
@@ -183,25 +328,25 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     final removed = _exercises[index];
-    final docId = removed['docId'] as String?;
-    if (docId == null) return; // safety: nothing to delete server-side
-
     final updatedExercises = [..._exercises]..removeAt(index);
-    final newDuration = WorkoutPlanService.estimateDurationMinutes(updatedExercises);
 
-    final ok = await _runMutation(() async {
-      await WorkoutPlanService().removeExerciseFromDay(
-        uid: uid,
-        planId: widget.planId,
-        dayId: _dayId,
-        exerciseDocId: docId,
-        newDurationMinutes: newDuration,
-      );
-      setState(() {
-        _exercises = updatedExercises;
-        _durationMinutes = newDuration;
+    final bool ok;
+    if (_oneTime) {
+      ok = await _saveVersion(updatedExercises);
+    } else {
+      final docId = removed['docId'] as String?;
+      if (docId == null) return; // safety: nothing to delete server-side
+      ok = await _runMutation(() async {
+        await WorkoutPlanService().removeExerciseFromDay(
+          uid: uid,
+          planId: _planId,
+          dayId: _dayId,
+          exerciseDocId: docId,
+          newDurationMinutes: WorkoutPlanService.estimateDurationMinutes(updatedExercises),
+        );
+        _showExercises(updatedExercises);
       });
-    });
+    }
     if (!ok || !mounted) return;
 
     _showSnack(
@@ -226,31 +371,32 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
     };
     final at = index.clamp(0, _exercises.length);
     final restored = [..._exercises]..insert(at, exercise);
-    final newDuration = WorkoutPlanService.estimateDurationMinutes(restored);
+
+    if (_oneTime) {
+      await _saveVersion(restored);
+      return;
+    }
 
     await _runMutation(() async {
       final docId = await WorkoutPlanService().addExerciseToDay(
         uid: uid,
-        planId: widget.planId,
+        planId: _planId,
         dayId: _dayId,
         exercise: exercise,
         order: at,
-        newDurationMinutes: newDuration,
+        newDurationMinutes: WorkoutPlanService.estimateDurationMinutes(restored),
       );
       exercise['docId'] = docId;
       final docIds = restored.map((e) => e['docId'] as String?).whereType<String>().toList();
       if (docIds.length == restored.length) {
         await WorkoutPlanService().reorderExercisesInDay(
           uid: uid,
-          planId: widget.planId,
+          planId: _planId,
           dayId: _dayId,
           orderedExerciseDocIds: docIds,
         );
       }
-      setState(() {
-        _exercises = restored;
-        _durationMinutes = newDuration;
-      });
+      _showExercises(restored);
     });
   }
 
@@ -258,26 +404,24 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
   Future<bool> _updateExercise(int index, Map<String, dynamic> fields) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return false;
-    final docId = _exercises[index]['docId'] as String?;
-    if (docId == null) return false;
 
     final updatedExercises = [..._exercises];
     updatedExercises[index] = {..._exercises[index], ...fields};
-    final newDuration = WorkoutPlanService.estimateDurationMinutes(updatedExercises);
+    if (_oneTime) return _saveVersion(updatedExercises);
+
+    final docId = _exercises[index]['docId'] as String?;
+    if (docId == null) return false;
 
     return _runMutation(() async {
       await WorkoutPlanService().updateExerciseInDay(
         uid: uid,
-        planId: widget.planId,
+        planId: _planId,
         dayId: _dayId,
         exerciseDocId: docId,
         fields: fields,
-        newDurationMinutes: newDuration,
+        newDurationMinutes: WorkoutPlanService.estimateDurationMinutes(updatedExercises),
       );
-      setState(() {
-        _exercises = updatedExercises;
-        _durationMinutes = newDuration;
-      });
+      _showExercises(updatedExercises);
     });
   }
 
@@ -292,12 +436,17 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
 
     setState(() => _exercises = updated); // optimistic — feels instant while dragging
 
+    if (_oneTime) {
+      await _saveVersion(updated);
+      return;
+    }
+
     final docIds = updated.map((e) => e['docId'] as String?).whereType<String>().toList();
     if (docIds.length != updated.length) return; // some exercise missing a docId — skip persisting
 
     await _runMutation(() => WorkoutPlanService().reorderExercisesInDay(
           uid: uid,
-          planId: widget.planId,
+          planId: _planId,
           dayId: _dayId,
           orderedExerciseDocIds: docIds,
         ));
@@ -643,7 +792,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                   ),
                   const Spacer(),
                   Text(
-                    'TAP TO EDIT · HOLD ≡ TO REORDER',
+                    _canEdit ? 'TAP TO EDIT · HOLD ≡ TO REORDER' : 'TAP AN EXERCISE FOR HOW-TO',
                     style: GoogleFonts.manrope(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
@@ -682,6 +831,16 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                       style: GoogleFonts.spaceGrotesk(
                           fontSize: 34, fontWeight: FontWeight.w700, color: AppColors.onSurface, height: 1.0),
                     ),
+                    if (_oneTime) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        _canEdit
+                            ? '${_thisOccurrence.toUpperCase()} ONLY · EDITS HERE LEAVE YOUR PLAN AS IT IS'
+                            : '${_thisOccurrence.toUpperCase()} ONLY · NO LONGER EDITABLE',
+                        style: GoogleFonts.manrope(
+                            fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: AppColors.primary),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -718,6 +877,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                             style: GoogleFonts.manrope(
                                 fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 2, color: AppColors.onSurfaceVariant)),
                         const Spacer(),
+                        if (_canEdit)
                         Pressable(
                           onTap: _openAddExercisePicker,
                           child: Container(
@@ -821,7 +981,7 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
     final gif = data?.localGifAsset;
 
     return Pressable(
-      onTap: () => _openExerciseEditor(index),
+      onTap: () => _canEdit ? _openExerciseEditor(index) : _openExerciseDetail(name),
       child: Container(
         padding: const EdgeInsets.fromLTRB(10, 10, 4, 10),
         decoration: BoxDecoration(
@@ -873,6 +1033,19 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                     style: GoogleFonts.manrope(
                         fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.2, color: AppColors.onSurfaceVariant),
                   ),
+                  if (ex['justThisTime'] == true) ...[
+                    const SizedBox(height: 5),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(48),
+                      ),
+                      child: Text('JUST THIS TIME',
+                          style: GoogleFonts.manrope(
+                              fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: AppColors.primary)),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -887,13 +1060,16 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                     style: GoogleFonts.manrope(fontSize: 9, letterSpacing: 1, color: AppColors.onSurfaceVariant)),
               ],
             ),
-            ReorderableDragStartListener(
-              index: index,
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-                child: Icon(Icons.drag_handle_rounded, size: 20, color: AppColors.onSurfaceVariant),
-              ),
-            ),
+            if (_canEdit)
+              ReorderableDragStartListener(
+                index: index,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                  child: Icon(Icons.drag_handle_rounded, size: 20, color: AppColors.onSurfaceVariant),
+                ),
+              )
+            else
+              const SizedBox(width: 14),
           ],
         ),
       ),

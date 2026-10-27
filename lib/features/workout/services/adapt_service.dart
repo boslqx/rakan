@@ -129,12 +129,17 @@ class AdaptService {
   /// plan's generation date genuinely isn't known (e.g. an old plan
   /// written before that field existed) — never to intentionally widen
   /// the scan.
+  ///
+  /// Each date is read through [ScheduleMatcher.resolvedDayForDate], so a
+  /// workout swapped away for that week isn't flagged on its old day, and
+  /// one swapped or rescheduled onto a date is flagged there if skipped.
   static List<MissedDay> computeMissedDays({
     required List<Map<String, dynamic>> planDays,
     required List<Map<String, dynamic>> logs,
     required Set<String> resolvedKeys,
     required DateTime today,
     required DateTime? planStartDate,
+    List<Map<String, dynamic>> overrides = const [],
     int scanLimitDays = _scheduleScanLimitDays,
   }) {
     final missed = <MissedDay>[];
@@ -148,7 +153,7 @@ class AdaptService {
       // plan's start, every earlier offset will be too.
       if (startDateOnly != null && date.isBefore(startDateOnly)) break;
 
-      final planDay = ScheduleMatcher.planDayForWeekday(planDays, date.weekday);
+      final planDay = ScheduleMatcher.resolvedDayForDate(planDays, overrides, date);
       if (planDay == null || planDay['dayType'] == 'rest') continue;
 
       final muscleGroups = _muscleGroupsForPlanDay(planDay);
@@ -321,6 +326,7 @@ class AdaptService {
     final logs = await WorkoutLogService()
         .getRecentLogs(uid, limit: _scheduleScanLimitDays);
     final resolvedKeys = await _getResolvedMissedDayKeys(uid);
+    final overrides = await WorkoutPlanService().getScheduleOverrides(uid);
 
     // Bounds the backward scan to when this plan actually came into
     // existence — see computeMissedDays' planStartDate doc. Old plans
@@ -339,6 +345,7 @@ class AdaptService {
       resolvedKeys: resolvedKeys,
       today: DateTime.now(),
       planStartDate: planStartDate,
+      overrides: overrides,
     );
 
     final partition = partitionMissedDaysByExpiry(
@@ -408,7 +415,9 @@ class AdaptService {
     try {
       final plan = await WorkoutPlanService().getActivePlan(uid);
       final planDays = (plan?['days'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final originalDay = ScheduleMatcher.planDayForWeekday(planDays, missedDate.weekday);
+      final overrides = await WorkoutPlanService().getScheduleOverrides(uid);
+      // Same lookup detection used, so what moves is what was missed.
+      final originalDay = ScheduleMatcher.resolvedDayForDate(planDays, overrides, missedDate);
       final allExercises =
           (originalDay?['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final groupExercises = allExercises

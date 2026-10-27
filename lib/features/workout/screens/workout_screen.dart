@@ -10,6 +10,7 @@ import '../services/workout_log_service.dart';
 import '../services/schedule_matcher.dart';
 import '../services/notification_service.dart';
 import '../widgets/exercise_media.dart';
+import '../widgets/scope_choice_sheet.dart';
 import 'workout_day_detail_screen.dart';
 import 'exercise_library_screen.dart';
 import '../data/exercise_data.dart';
@@ -43,25 +44,39 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   /// Recent logs, to mark each day DONE / MISSED for this week.
   List<Map<String, dynamic>> _recentLogs = [];
 
+  /// One-time content for single dates (rescheduled sessions, one-time
+  /// versions) — see [_thisWeek].
+  List<Map<String, dynamic>> _overrides = [];
+
   final ScrollController _scheduleScroll = ScrollController();
   final GlobalKey _scheduleListKey = GlobalKey();
   Timer? _autoScrollTimer;
   double? _dragPointerY;
 
+  Future<void>? _planLoad;
+
   @override
   void initState() {
     super.initState();
     _loadPlan();
+    WorkoutPlanService.scheduleChanges.addListener(_loadPlan);
   }
 
   @override
   void dispose() {
+    WorkoutPlanService.scheduleChanges.removeListener(_loadPlan);
     _autoScrollTimer?.cancel();
     _scheduleScroll.dispose();
     super.dispose();
   }
 
-  Future<void> _loadPlan() async {
+  /// Joins a reload already in flight rather than starting a second —
+  /// a change made here both reloads and bumps scheduleChanges, which this
+  /// screen also listens to.
+  Future<void> _loadPlan() =>
+      _planLoad ??= _fetchPlan().whenComplete(() => _planLoad = null);
+
+  Future<void> _fetchPlan() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
@@ -74,10 +89,18 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       } catch (e) {
         debugPrint('Schedule: recent logs load failed: $e');
       }
+      // Best-effort too: without them the week shows only the template.
+      var overrides = _overrides;
+      try {
+        overrides = await WorkoutPlanService().getScheduleOverrides(uid);
+      } catch (e) {
+        debugPrint('Schedule: schedule overrides load failed: $e');
+      }
       if (mounted) {
         setState(() {
           _plan = plan;
           _recentLogs = logs;
+          _overrides = overrides;
           _isLoading = false;
         });
       }
@@ -378,6 +401,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
   Widget _buildPlan() {
     final days = (_plan!['days'] as List).cast<Map<String, dynamic>>();
+    // Edit mode rearranges the recurring plan, so it works on the template;
+    // the normal view shows this week as it will actually run.
+    final week = _thisWeek(days);
 
     return RefreshIndicator(
       onRefresh: _loadPlan,
@@ -408,15 +434,16 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                child: _buildPlanOverview(days),
+                child: _buildPlanOverview(days, week),
               ),
             ),
           SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
-              final day = days[index];
               return Padding(
                 padding: EdgeInsets.fromLTRB(24, 0, 24, _isEditMode ? 8 : 12),
-                child: _isEditMode ? _buildEditDayRow(day) : _buildDayCard(day),
+                child: _isEditMode
+                    ? _buildEditDayRow(days[index])
+                    : _buildDayCard(week[index]),
               );
             }, childCount: days.length),
           ),
@@ -446,6 +473,58 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       ) !=
       null;
 
+  /// This week as it will actually run: each template day, unless that
+  /// date has one-time content — a missed session rescheduled onto it, or
+  /// its own version (something added just this time, a swap for this week
+  /// only) — shown in the template day's calendar slot. That content
+  /// carries no plan-day 'id', so its detail screen edits that date only
+  /// instead of the recurring day underneath.
+  List<Map<String, dynamic>> _thisWeek(List<Map<String, dynamic>> days) {
+    return [
+      for (final day in days)
+        if (ScheduleMatcher.overrideForDate(
+              _overrides,
+              _dateThisWeek(day['dayNumber'] as int),
+            )
+            case final oneTime?)
+          {
+            ...oneTime,
+            'dayNumber': day['dayNumber'],
+            'dayName': day['dayName'],
+            'durationMinutes':
+                oneTime['durationMinutes'] as int? ??
+                WorkoutPlanService.estimateDurationMinutes(
+                  _exercisesOf(oneTime),
+                ),
+            'isOneTime': true,
+          }
+        else
+          day,
+    ];
+  }
+
+  /// "Moved here from Monday." for a rescheduled session, else its focus.
+  String _focusOf(Map<String, dynamic> day, List<Map<String, dynamic>> days) {
+    final sources = ScheduleMatcher.sourceMissedDates(day);
+    final from = sources.isEmpty ? null : DateTime.tryParse(sources.first);
+    if (from == null) return day['focusDescription'] as String? ?? '';
+    final fromDay = ScheduleMatcher.planDayForWeekday(days, from.weekday);
+    return fromDay == null
+        ? 'Rescheduled from a missed day.'
+        : 'Moved here from ${fromDay['dayName']}.';
+  }
+
+  /// The day a missed session on [date] was rescheduled to, if it was.
+  DateTime? _movedTo(DateTime date) {
+    final key = ScheduleMatcher.dateKey(date);
+    for (final o in _overrides) {
+      if (ScheduleMatcher.sourceMissedDates(o).contains(key)) {
+        return DateTime.tryParse(o['date'] as String);
+      }
+    }
+    return null;
+  }
+
   static List<Map<String, dynamic>> _exercisesOf(Map<String, dynamic> day) =>
       (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
@@ -458,8 +537,12 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   /// The week at a glance — how the load is spread across days, and how
   /// many sets each muscle group gets. The second is what to check when
   /// adjusting the plan: it shows at once if a muscle is over- or
-  /// under-served.
-  Widget _buildPlanOverview(List<Map<String, dynamic>> days) {
+  /// under-served. Those totals describe the plan ([days]); the chart shows
+  /// this [week], rescheduled sessions included.
+  Widget _buildPlanOverview(
+    List<Map<String, dynamic>> days,
+    List<Map<String, dynamic>> week,
+  ) {
     final planName = _plan!['planName'] as String? ?? '7-Day Plan';
     final weekNumber = _plan!['weekNumber'] as int?;
     final workoutDays = days.where((d) => d['dayType'] == 'workout').toList();
@@ -510,7 +593,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          _buildWeekLoadChart(days),
+          _buildWeekLoadChart(week),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -700,15 +783,23 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final dayNumber = day['dayNumber'] as int;
     final dayName = day['dayName'] as String;
     final workoutName = day['workoutName'] as String;
-    final focusDescription = day['focusDescription'] as String? ?? '';
+    final focusDescription = _focusOf(
+      day,
+      (_plan!['days'] as List).cast<Map<String, dynamic>>(),
+    );
     final durationMinutes = day['durationMinutes'] as int? ?? 0;
     final exercises = _exercisesOf(day);
     final sets = _setsOf(day);
+    final isOneTime = day['isOneTime'] == true;
+    // One-time content has no plan day of its own to hang a weekly
+    // reminder on, so its card closes without the reminder row.
+    final hasReminderRow = !isRest && !isOneTime;
 
     final date = _dateThisWeek(dayNumber);
     final isToday = date == _today;
     final isDone = !isRest && _isDoneThisWeek(day);
     final isMissed = !isRest && !isDone && date.isBefore(_today);
+    final movedTo = isMissed ? _movedTo(date) : null;
 
     final card = Pressable(
       onTap: isRest ? null : () => _openDayDetail(day),
@@ -721,8 +812,8 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(20),
             topRight: const Radius.circular(20),
-            bottomLeft: Radius.circular(isRest ? 20 : 6),
-            bottomRight: Radius.circular(isRest ? 20 : 6),
+            bottomLeft: Radius.circular(hasReminderRow ? 6 : 20),
+            bottomRight: Radius.circular(hasReminderRow ? 6 : 20),
           ),
           border: Border.all(
             color: isToday
@@ -755,8 +846,20 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 ],
                 if (isDone)
                   _statusChip('DONE', icon: Icons.check_rounded)
+                else if (movedTo != null)
+                  _statusChip(
+                    'MOVED → ${const ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'][movedTo.weekday - 1]}',
+                    icon: Icons.redo_rounded,
+                    color: AppColors.onSurfaceVariant,
+                  )
                 else if (isMissed)
                   _statusChip('MISSED', color: AppColors.error)
+                else if (isOneTime)
+                  _statusChip(
+                    'THIS WEEK ONLY',
+                    icon: Icons.event_rounded,
+                    color: AppColors.onSurfaceVariant,
+                  )
                 else if (isRest)
                   _statusChip('REST', color: AppColors.onSurfaceVariant),
               ],
@@ -840,7 +943,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [card, if (!isRest) _buildDayReminderRow(day)],
+      children: [card, if (hasReminderRow) _buildDayReminderRow(day)],
     );
   }
 
@@ -1120,23 +1223,97 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     _dragPointerY = null;
   }
 
-  /// Swaps two days' content, at once on screen (then confirmed by the
-  /// reload) — with UNDO rather than a confirm dialog: a swap is fully
-  /// reversible, so asking first only slows it down.
+  /// Swaps two days — in the plan, or for this week only (asked each
+  /// time; cancelling a workout is always for good, so it isn't). Comes
+  /// with UNDO rather than a confirm dialog: a swap is fully reversible, so
+  /// asking whether to go ahead only slows it down. [inPlan] is given only
+  /// by that UNDO, which repeats the same kind of swap.
   Future<void> _swapDays(
     Map<String, dynamic> dayA,
     Map<String, dynamic> dayB, {
-    bool offerUndo = true,
+    bool? inPlan,
   }) async {
     HapticFeedback.mediumImpact();
+    final isUndo = inPlan != null;
+    inPlan ??= await _askSwapScope(dayA, dayB);
+    if (inPlan == null || !mounted) return;
 
+    final ok = inPlan
+        ? await _swapInPlan(dayA, dayB)
+        : await _swapThisWeek(dayA, dayB);
+    if (!mounted || !ok || isUndo) return;
+
+    final swapped = inPlan;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            swapped
+                ? 'Swapped ${dayA['dayName']} and ${dayB['dayName']} in your plan'
+                : 'Swapped ${dayA['dayName']} and ${dayB['dayName']} for this week only',
+            style: GoogleFonts.manrope(color: AppColors.onSurface),
+          ),
+          backgroundColor: AppColors.surfaceContainerHigh,
+          action: SnackBarAction(
+            label: 'UNDO',
+            textColor: AppColors.primary,
+            onPressed: () => _swapDays(dayA, dayB, inPlan: swapped),
+          ),
+        ),
+      );
+  }
+
+  /// Every week, or just this one? Resolves true for the plan, null if
+  /// dismissed. Just this week isn't offered once either day has passed or
+  /// had its workout done this week.
+  Future<bool?> _askSwapScope(
+    Map<String, dynamic> dayA,
+    Map<String, dynamic> dayB,
+  ) {
+    final nameA = dayA['dayName'] as String;
+    final nameB = dayB['dayName'] as String;
+    String? unavailable;
+    for (final day in [dayA, dayB]) {
+      if (_dateThisWeek(day['dayNumber'] as int).isBefore(_today)) {
+        unavailable = '${day['dayName']} has already passed this week.';
+        break;
+      }
+      if (_isDoneThisWeek(day)) {
+        unavailable = "${day['dayName']}'s workout is already done this week.";
+        break;
+      }
+    }
+
+    return showScopeChoiceSheet(
+      context,
+      title: 'SWAP ${nameA.toUpperCase()} AND ${nameB.toUpperCase()}',
+      subtitle: 'Change your plan, or just this week?',
+      planTitle: 'EVERY WEEK',
+      planDescription:
+          '$nameA and $nameB trade workouts in your plan from now on.',
+      oneTimeTitle: 'JUST THIS WEEK',
+      oneTimeDescription:
+          "Only this week's $nameA and $nameB — your plan stays as it is.",
+      oneTimeUnavailable: unavailable == null
+          ? null
+          : 'Not available — $unavailable',
+    );
+  }
+
+  /// Swaps the two plan days' content, at once on screen (then confirmed by
+  /// the reload).
+  Future<bool> _swapInPlan(
+    Map<String, dynamic> dayA,
+    Map<String, dynamic> dayB,
+  ) async {
     // Optimistic: mirror WorkoutPlanService.swapDays — content moves, the
     // calendar slot (dayNumber/dayName/dayOfWeek, doc id) stays put.
     const slotFields = {'id', 'dayNumber', 'dayName', 'dayOfWeek'};
     final days = (_plan!['days'] as List).cast<Map<String, dynamic>>();
     final ia = days.indexWhere((d) => d['id'] == dayA['id']);
     final ib = days.indexWhere((d) => d['id'] == dayB['id']);
-    if (ia == -1 || ib == -1) return;
+    if (ia == -1 || ib == -1) return false;
     Map<String, dynamic> withContent(
       Map<String, dynamic> slot,
       Map<String, dynamic> content,
@@ -1152,7 +1329,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       days[ib] = withContent(b, a);
     });
 
-    final ok = await _runMutation(
+    return _runMutation(
       () => WorkoutPlanService().swapDays(
         uid: FirebaseAuth.instance.currentUser!.uid,
         planId: _plan!['id'] as String,
@@ -1160,24 +1337,29 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         dayIdB: dayB['id'] as String,
       ),
     );
-    if (!mounted || !ok || !offerUndo) return;
+  }
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            'Swapped ${dayA['dayName']} and ${dayB['dayName']}',
-            style: GoogleFonts.manrope(color: AppColors.onSurface),
-          ),
-          backgroundColor: AppColors.surfaceContainerHigh,
-          action: SnackBarAction(
-            label: 'UNDO',
-            textColor: AppColors.primary,
-            onPressed: () => _swapDays(dayA, dayB, offerUndo: false),
-          ),
-        ),
-      );
+  /// Trades what's on the two days' dates this week — as they'll actually
+  /// run, one-time changes included — by giving both dates a one-time
+  /// version, so the plan stays as it is.
+  Future<bool> _swapThisWeek(
+    Map<String, dynamic> dayA,
+    Map<String, dynamic> dayB,
+  ) {
+    final week = _thisWeek((_plan!['days'] as List).cast<Map<String, dynamic>>());
+    Map<String, dynamic> onDateOf(Map<String, dynamic> day) =>
+        week.firstWhere((d) => d['dayNumber'] == day['dayNumber']);
+    final contentA = onDateOf(dayA), contentB = onDateOf(dayB);
+
+    return _runMutation(
+      () => WorkoutPlanService().setDaysForDates(
+        uid: FirebaseAuth.instance.currentUser!.uid,
+        contentByDate: {
+          _dateThisWeek(dayA['dayNumber'] as int): contentB,
+          _dateThisWeek(dayB['dayNumber'] as int): contentA,
+        },
+      ),
+    );
   }
 
   // ── Per-day "start workout at X" reminder row ─────────────────────────
@@ -2146,6 +2328,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     setState(() => _isMutating = true);
     try {
       await action();
+      // Tells Home too; this screen's own listener starts the reload
+      // awaited here.
+      WorkoutPlanService.scheduleChanges.value++;
       await _loadPlan();
       return true;
     } catch (e) {
@@ -2171,12 +2356,17 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   /// Opens the full-screen, editable day view (WorkoutDayDetailScreen)
   /// instead of the old bottom sheet — lets the user reorder, add/remove
   /// exercises, and view exercise details, then start the workout
-  /// directly from there if it's today.
+  /// directly from there if it's today. A date's one-time content
+  /// ([_thisWeek]) opens there too, with its edits kept to that date.
   Future<void> _openDayDetail(Map<String, dynamic> day) async {
+    final days = (_plan!['days'] as List).cast<Map<String, dynamic>>();
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            WorkoutDayDetailScreen(day: day, planId: _plan!['id'] as String),
+        builder: (_) => WorkoutDayDetailScreen(
+          day: day,
+          planId: _plan!['id'] as String,
+          planDay: ScheduleMatcher.planDayOf(days, day),
+        ),
       ),
     );
     // Always refresh on return — cheap, and correctly reflects any

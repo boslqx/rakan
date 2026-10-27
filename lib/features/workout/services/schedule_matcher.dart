@@ -45,13 +45,19 @@ class ScheduleMatcher {
       '${date.day.toString().padLeft(2, '0')}';
 
   /// Finds the one-time schedule override(s) for [date], if any, merged
-  /// into a single synthetic day. An override represents content moved
-  /// onto this calendar date via the Phase 25 reschedule flow — it does
-  /// not touch the recurring weekly template. Several muscle groups from
-  /// the same missed day can each be rescheduled independently and land
-  /// on the same date (see WorkoutPlanService.addScheduleOverride), so
-  /// this merges every matching override's exercises rather than
+  /// into a single synthetic day. An override is content for this one
+  /// calendar date that leaves the recurring weekly template alone: a
+  /// missed session moved here (Phase 25 reschedule), or the date's own
+  /// one-time version (an exercise added "just this time", a swap for this
+  /// week only — see WorkoutPlanService.setDaysForDates). Several muscle
+  /// groups from the same missed day can each be rescheduled independently
+  /// and land on the same date (see WorkoutPlanService.addScheduleOverride),
+  /// so this merges every matching override's exercises rather than
   /// returning just one and silently dropping the rest.
+  ///
+  /// A one-time version that's a rest day (a workout swapped away for the
+  /// week) leaves the date empty, so a missed session can be rescheduled
+  /// onto it later — when that happens, the moved session wins.
   static Map<String, dynamic>? overrideForDate(
     List<Map<String, dynamic>> overrides,
     DateTime date,
@@ -59,11 +65,13 @@ class ScheduleMatcher {
     final key = dateKey(date);
     final matches = overrides.where((o) => o['date'] == key).toList();
     if (matches.isEmpty) return null;
-    if (matches.length == 1) return matches.first;
+    final workouts = matches.where((o) => o['dayType'] != 'rest').toList();
+    if (workouts.isEmpty) return matches.first;
+    if (workouts.length == 1) return workouts.first;
 
     final exercises = <Map<String, dynamic>>[];
     final muscleGroups = <String>[];
-    for (final override in matches) {
+    for (final override in workouts) {
       exercises.addAll(
           (override['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? []);
       final group = override['muscleGroup'] as String?;
@@ -76,8 +84,33 @@ class ScheduleMatcher {
       'workoutName': '${muscleGroups.join(' + ')} (Rescheduled)',
       'muscleGroup': muscleGroups.join(', '),
       'exercises': exercises,
+      'sourceMissedDates': [for (final o in workouts) ...sourceMissedDates(o)],
     };
   }
+
+  /// The recurring plan day behind [day]: itself for a plan day, the day
+  /// whose workout a one-time version holds ('planDayId'), or null when
+  /// there's none (e.g. a rescheduled session).
+  static Map<String, dynamic>? planDayOf(
+    List<Map<String, dynamic>> planDays,
+    Map<String, dynamic> day,
+  ) {
+    if (day['id'] is String) return day;
+    final id = day['planDayId'];
+    if (id == null) return null;
+    for (final planDay in planDays) {
+      if (planDay['id'] == id) return planDay;
+    }
+    return null;
+  }
+
+  /// The missed dates whose sessions an override carries — one for a
+  /// rescheduled session ('sourceMissedDate'), any number for a merged day
+  /// or a one-time version built from one ('sourceMissedDates').
+  static List<String> sourceMissedDates(Map<String, dynamic> override) => [
+        ?override['sourceMissedDate'] as String?,
+        ...(override['sourceMissedDates'] as List?)?.cast<String>() ?? const [],
+      ];
 
   /// Resolves the plan day that actually applies on [date]: a one-time
   /// override when one exists, otherwise the recurring weekday template.

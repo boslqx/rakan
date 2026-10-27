@@ -8,7 +8,7 @@ import '../../social/services/public_profile_service.dart';
 import '../../social/widgets/activity_log_card.dart';
 import '../../workout/data/exercise_data.dart';
 import '../../workout/services/workout_plan_service.dart';
-import '../../workout/screens/workout_preview_screen.dart';
+import '../../workout/screens/workout_day_detail_screen.dart';
 import '../../workout/screens/workout_log_detail_screen.dart';
 import '../../workout/services/workout_log_service.dart';
 import '../../workout/services/weekly_summary_service.dart';
@@ -36,6 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _allLogs = [];
   List<Map<String, dynamic>> _planDays = [];
   List<Map<String, dynamic>> _scheduleOverrides = [];
+  String? _planId;
 
   Map<String, dynamic>? _todayDay;
   String? _loadError;
@@ -48,6 +49,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadProfile();
+    WorkoutPlanService.scheduleChanges.addListener(_refreshSchedule);
+  }
+
+  @override
+  void dispose() {
+    WorkoutPlanService.scheduleChanges.removeListener(_refreshSchedule);
+    super.dispose();
   }
 
   Future<void> _loadProfile() async {
@@ -121,6 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _allLogs = allLogs;
         _planDays = planDays;
         _scheduleOverrides = scheduleOverrides;
+        _planId = plan?['id'] as String?;
         _todayDay = todayDay;
         _loadError = loadError;
         _weekNumber = plan?['weekNumber'] as int?;
@@ -158,28 +167,34 @@ class _HomeScreenState extends State<HomeScreen> {
         autoSkipped: swept.autoSkipped,
       ),
     );
-
-    // A reschedule may have added a schedule override that affects what's
-    // shown today/this week — refresh just that state (not the full
-    // _loadProfile, which would re-queue the missed-day/plan-changes
-    // checks and could double-show the plan changes dialog).
-    if (mounted) await _refreshScheduleOverrides();
+    // A reschedule adds a schedule override, which bumps
+    // WorkoutPlanService.scheduleChanges — _refreshSchedule picks it up.
   }
 
-  Future<void> _refreshScheduleOverrides() async {
+  /// Reloads just the plan and schedule overrides when the schedule changes
+  /// elsewhere (a reschedule, or edits from a day's detail screen) — not the
+  /// full _loadProfile, which would re-queue the missed-day/plan-changes
+  /// checks and could double-show the plan changes dialog.
+  Future<void> _refreshSchedule() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
     try {
+      final plan = await WorkoutPlanService().getActivePlan(uid);
       final scheduleOverrides = await WorkoutPlanService().getScheduleOverrides(uid);
       if (!mounted) return;
+      final planDays = (plan?['days'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       setState(() {
+        _planDays = planDays;
+        _planId = plan?['id'] as String?;
         _scheduleOverrides = scheduleOverrides;
-        _todayDay = ScheduleMatcher.resolvedDayForDate(
-            _planDays, scheduleOverrides, DateTime.now());
+        _todayDay = plan == null
+            ? null
+            : ScheduleMatcher.resolvedDayForDate(
+                planDays, scheduleOverrides, DateTime.now());
       });
     } catch (e, st) {
-      debugPrint('HomeScreen: schedule overrides refresh failed for uid=$uid: $e');
+      debugPrint('HomeScreen: schedule refresh failed for uid=$uid: $e');
       debugPrint(st.toString());
     }
   }
@@ -258,7 +273,13 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       } else {
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => WorkoutPreviewScreen(day: day)),
+          MaterialPageRoute(
+            builder: (_) => WorkoutDayDetailScreen(
+              day: day,
+              planId: _planId,
+              planDay: ScheduleMatcher.planDayOf(_planDays, day),
+            ),
+          ),
         );
       }
       return;
@@ -454,7 +475,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => WorkoutPreviewScreen(day: todayDay),
+          builder: (_) => WorkoutDayDetailScreen(
+            day: todayDay,
+            planId: plan['id'] as String,
+            planDay: ScheduleMatcher.planDayOf(days, todayDay),
+          ),
         ),
       );
     }

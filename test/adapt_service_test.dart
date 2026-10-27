@@ -209,6 +209,62 @@ void main() {
       expect(result, isEmpty);
     });
 
+    test('a workout swapped away for that week is not flagged on its old day', () {
+      final planDays = [
+        {
+          'dayNumber': daysAgo(1).weekday,
+          'dayType': 'workout',
+          'exercises': [
+            {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+          ],
+        },
+      ];
+
+      final result = AdaptService.computeMissedDays(
+        planDays: planDays,
+        logs: const [],
+        resolvedKeys: const {},
+        today: today,
+        planStartDate: null,
+        overrides: [
+          {'date': _dateKey(daysAgo(1)), 'kind': 'version', 'dayType': 'rest', 'exercises': []},
+        ],
+        scanLimitDays: 1,
+      );
+
+      expect(result, isEmpty);
+    });
+
+    test('a workout swapped onto a rest day for that week is flagged there '
+        'if skipped', () {
+      final planDays = [
+        {'dayNumber': daysAgo(1).weekday, 'dayType': 'rest', 'exercises': []},
+      ];
+
+      final result = AdaptService.computeMissedDays(
+        planDays: planDays,
+        logs: const [],
+        resolvedKeys: const {},
+        today: today,
+        planStartDate: null,
+        overrides: [
+          {
+            'date': _dateKey(daysAgo(1)),
+            'kind': 'version',
+            'dayType': 'workout',
+            'exercises': [
+              {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+            ],
+          },
+        ],
+        scanLimitDays: 1,
+      );
+
+      expect(result, hasLength(1));
+      expect(result.single.muscleGroup, 'Chest');
+      expect(result.single.date, daysAgo(1));
+    });
+
     test('never flags a date before the plan was generated, even if the '
         'weekday recurs within the scan window (regression: brand-new user, '
         'plan just generated, must not show phantom missed days from before '
