@@ -91,8 +91,14 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
     setState(() => _isResending = true);
     try {
-      await _authService.resendVerificationEmail();
+      final sent = await _authService.resendVerificationEmail();
       if (!mounted) return;
+      if (!sent) {
+        // Already verified (or signed out): nothing to send — move on
+        // instead of claiming an email went out.
+        unawaited(_checkVerified(silent: true));
+        return;
+      }
       _showMessage('Verification email sent.');
       _startCooldown();
     } catch (e) {

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -87,32 +88,53 @@ class AuthService {
   // Whether the CURRENTLY CACHED user object is verified
   bool get isEmailVerified => _auth.currentUser?.emailVerified ?? false;
 
-  // Forces Firebase to re-fetch the user's current verification status
+  // Forces Firebase to re-fetch the user's current verification status.
+  // A check that fails to reach Firebase (a flaky first request at launch,
+  // no connection) keeps the last known status, so a verified user isn't
+  // sent to the verification screen over a network blip.
   Future<bool> reloadAndCheckVerified() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    final lastKnown = user.emailVerified;
     try {
-      await _auth.currentUser?.reload();
-      final verified = _auth.currentUser?.emailVerified ?? false;
-      // Refresh the ID token so the emailVerified claim used by Firestore
-      // security rules is up to date.
-      if (verified) await _auth.currentUser?.getIdToken(true);
-      return verified;
+      await user.reload();
     } on FirebaseAuthException catch (e) {
       // Account deleted/disabled elsewhere: end the session.
       if (e.code == 'user-not-found' ||
           e.code == 'user-disabled' ||
           e.code == 'user-token-expired') {
         await signOut();
+        return false;
       }
-      return false;
+      debugPrint('Verification check failed (${e.code}), using last known status');
+      return lastKnown;
+    } catch (e) {
+      debugPrint('Verification check failed ($e), using last known status');
+      return lastKnown;
     }
+
+    final verified = _auth.currentUser?.emailVerified ?? false;
+    if (verified) {
+      // Refresh the ID token so the emailVerified claim used by Firestore
+      // security rules is up to date. Failing here doesn't make the user
+      // unverified — the token refreshes itself within the hour.
+      try {
+        await _auth.currentUser?.getIdToken(true);
+      } catch (e) {
+        debugPrint('ID token refresh failed: $e');
+      }
+    }
+    return verified;
   }
 
-  // Resend the verification email
-  Future<void> resendVerificationEmail() async {
+  // Sends the verification email. Returns false, sending nothing, when
+  // there's no signed-in user or the account is already verified.
+  Future<bool> resendVerificationEmail() async {
     final user = _auth.currentUser;
-    if (user == null || user.emailVerified) return;
+    if (user == null || user.emailVerified) return false;
     try {
       await user.sendEmailVerification();
+      return true;
     } on FirebaseAuthException catch (e) {
       if (e.code == 'too-many-requests') {
         throw 'An email was sent recently. Check your inbox and spam folder, '
