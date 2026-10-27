@@ -275,6 +275,11 @@ class PostureResult {
   /// this frame's live form, which a fault can override on that same frame.
   final bool repCorrect;
 
+  /// The message judging the rep this frame completed ("Rep 3: too shallow
+  /// …"). Only set when [countRep] is true, by analysers that judge reps —
+  /// [feedback] can show a live fault instead on that same frame.
+  final String? repFeedback;
+
   const PostureResult({
     required this.isCorrect,
     required this.feedback,
@@ -282,6 +287,7 @@ class PostureResult {
     this.keyAngle,
     this.countRep = false,
     this.repCorrect = true,
+    this.repFeedback,
   });
 }
 
@@ -570,6 +576,7 @@ class SquatAnalyser implements PostureAnalyser {
       keyAngle: kneeAngle,
       countRep: rep != null,
       repCorrect: _lastRepOk,
+      repFeedback: rep != null ? _lastRepFeedback : null,
     );
   }
 
@@ -751,6 +758,7 @@ class PushUpAnalyser implements PostureAnalyser {
       keyAngle: elbowAngle,
       countRep: rep != null,
       repCorrect: _lastRepOk,
+      repFeedback: rep != null ? _lastRepFeedback : null,
     );
   }
 
@@ -870,6 +878,7 @@ class ShoulderPressAnalyser implements PostureAnalyser {
       keyAngle: elbowAngle,
       countRep: rep != null,
       repCorrect: _lastRepOk,
+      repFeedback: rep != null ? _lastRepFeedback : null,
     );
   }
 
@@ -1065,6 +1074,7 @@ class RomanianDeadliftAnalyser implements PostureAnalyser {
       keyAngle: hipAngle,
       countRep: rep != null,
       repCorrect: _lastRepOk,
+      repFeedback: rep != null ? _lastRepFeedback : null,
     );
   }
 
@@ -1188,6 +1198,7 @@ class LungeAnalyser implements PostureAnalyser {
       keyAngle: frontKneeAngle,
       countRep: rep != null,
       repCorrect: _lastRepOk,
+      repFeedback: rep != null ? _lastRepFeedback : null,
     );
   }
 
@@ -1307,6 +1318,7 @@ class BicepCurlAnalyser implements PostureAnalyser {
       keyAngle: elbowAngle,
       countRep: rep != null,
       repCorrect: _lastRepOk,
+      repFeedback: rep != null ? _lastRepFeedback : null,
     );
   }
 

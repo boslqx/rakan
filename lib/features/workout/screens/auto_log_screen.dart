@@ -9,6 +9,7 @@ import '../data/exercise_data.dart';
 import '../models/active_session_state.dart';
 import '../services/pose_service.dart';
 import '../services/angle_calculator.dart';
+import '../services/voice_coach.dart';
 import '../widgets/elapsed_time_text.dart';
 import '../widgets/exercise_media.dart';
 import '../widgets/pose_countdown_overlay.dart';
@@ -112,6 +113,13 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   /// Fixed step size for the weight +/- buttons (same as Manual mode).
   static const double _weightIncrement = 2.5;
 
+  /// Spoken cues for when the phone is propped up out of reading distance.
+  final VoiceCoach _voice = VoiceCoach();
+
+  /// Said when the camera loses the user mid-set.
+  static const _lostSightCue =
+      "Can't see you — step back so your whole body is in frame";
+
   ExerciseSessionState get _currentExercise => widget.exercises[_exerciseIndex];
 
   /// The next exercise after this one that still has sets to do, if any.
@@ -133,6 +141,12 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
       return;
     }
 
+    _voice.loadEnabled().then((_) {
+      if (!mounted) return;
+      setState(() {}); // the mute toggle
+      _announceSet();
+    });
+
     // Only bother asking for camera permission if at least one exercise
     final anyNeedsCamera =
         widget.exercises.any((ex) => ex.data?.hasPoseDetection ?? false);
@@ -146,6 +160,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
     _restTicker?.cancel();
     _poseSubscription?.cancel();
     _frame.dispose();
+    _voice.dispose();
     super.dispose();
   }
 
@@ -191,6 +206,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
     final ex = _currentExercise;
     _setStartedAt = DateTime.now();
     _repsDone = ex.sets[ex.currentSetIndex].reps;
+    _voice.resetForSet();
     if (_currentExerciseCanUseCamera) {
       _analyser = ExerciseAnalyserFactory.getAnalyser(ex.exerciseName);
       _repCount = 0;
@@ -198,6 +214,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
       _frame.value = _PoseFrame.none;
       _countingDown = true; // NEW — every set re-arms the countdown
       _startPoseStream();
+      _voice.say('Get in position.');
     }
     HapticFeedback.lightImpact();
     setState(() => _phase = _ScreenPhase.active);
@@ -213,6 +230,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
 
         if (!detected) {
           _frame.value = _PoseFrame.none;
+          if (!_countingDown) _voice.fault(_lostSightCue);
           return;
         }
 
@@ -254,6 +272,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
           height: frameHeight,
           rotation: (data['frameRotation'] as int?) ?? 0,
         );
+        _voice.fault(result.isCorrect ? null : result.feedback);
 
         if (result.countRep) {
           setState(() {
@@ -264,7 +283,10 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
 
           final target = _currentExercise.sets[_currentExercise.currentSetIndex].reps;
           if (_repCount >= target) {
-            _finishSet(actualReps: _repCount);
+            _finishSet(actualReps: _repCount); // announces the set instead
+          } else {
+            _voice.rep(_repCount,
+                good: result.repCorrect, verdict: result.repFeedback);
           }
         }
       },
@@ -310,6 +332,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
         ? List.of(_repForm)
         : null;
     HapticFeedback.mediumImpact();
+    _announceSetDone(ex, setIndex);
 
     if (!ex.isFullyComplete) {
       _startRest(ex.restSeconds);
@@ -408,8 +431,12 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
       final left = _currentExercise.timerSecondsLeft;
       if (left <= 0) {
         HapticFeedback.heavyImpact();
+        _announceSet('Rest over.');
       } else if (left <= 3) {
         HapticFeedback.selectionClick();
+        _voice.say('$left');
+      } else if (left == 10 && _restTotal > 15) {
+        _voice.say('10 seconds.');
       }
     });
   }
@@ -424,7 +451,57 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
 
   void _skipRest() {
     _restTicker?.cancel();
+    _voice.stop();
     setState(() => _phase = _ScreenPhase.ready);
+  }
+
+  /// "Squats. Set 2 of 3, 10 reps at 40 kilos." — as each set comes up,
+  /// after [lead] ("Rest over.").
+  void _announceSet([String lead = '']) {
+    final ex = _currentExercise;
+    final set = ex.sets[ex.currentSetIndex];
+    final weight = ex.tracksWeight && set.weightKg > 0
+        ? ' at ${formatKg(set.weightKg)} kilos'
+        : '';
+    _voice.say('$lead ${ex.exerciseName}. '
+        'Set ${ex.currentSetIndex + 1} of ${ex.sets.length}, ${set.reps} reps$weight.');
+  }
+
+  /// "Set 2 done. 8 of 10 reps with good form. Rest 90 seconds."
+  void _announceSetDone(ExerciseSessionState ex, int setIndex) {
+    final form = _lastSetForm;
+    final parts = ['Set ${setIndex + 1} done.'];
+    if (form != null) {
+      final good = form.where((ok) => ok).length;
+      final reps = form.length == 1 ? 'rep' : 'reps';
+      parts.add(good == form.length && form.length > 1
+          ? 'All ${form.length} reps with good form.'
+          : '$good of ${form.length} $reps with good form.');
+    }
+    if (!ex.isFullyComplete) {
+      if (ex.restSeconds > 0) parts.add('Rest ${_spokenSeconds(ex.restSeconds)}.');
+    } else {
+      parts.add('${ex.exerciseName} complete. How hard was that?');
+    }
+    _voice.say(parts.join(' '));
+  }
+
+  /// 90 → "1 minute 30 seconds".
+  static String _spokenSeconds(int seconds) {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return [
+      if (m > 0) m == 1 ? '1 minute' : '$m minutes',
+      if (s > 0) '$s seconds',
+    ].join(' ');
+  }
+
+  void _toggleVoice() {
+    HapticFeedback.selectionClick();
+    final on = !_voice.enabled;
+    unawaited(_voice.setEnabled(on));
+    setState(() {});
+    if (on) _voice.say('Voice on.');
   }
 
   void _confirmRpeAndAdvance() {
@@ -445,6 +522,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
     setState(() {
       _phase = _ScreenPhase.ready;
     });
+    _announceSet('Next up:');
   }
 
   Future<void> _quit() async {
@@ -678,11 +756,38 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
               ],
             ),
           ),
+          const SizedBox(width: 14),
+          _buildVoiceToggle(),
           if (trailing != null) ...[
-            const SizedBox(width: 14),
+            const SizedBox(width: 10),
             trailing,
           ],
         ],
+      ),
+    );
+  }
+
+  /// Mutes or unmutes the voice coach; remembered for later sessions.
+  Widget _buildVoiceToggle() {
+    final on = _voice.enabled;
+    return Semantics(
+      button: true,
+      label: on ? 'Mute voice coach' : 'Unmute voice coach',
+      child: Pressable(
+        onTap: _toggleVoice,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: Colors.white12,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            on ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+            color: on ? Colors.white : Colors.white38,
+            size: 18,
+          ),
+        ),
       ),
     );
   }
@@ -932,7 +1037,13 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
           Positioned.fill(
             child: PoseCountdownOverlay(
               hints: cameraSetupLines(ex.exerciseName),
-              onComplete: () => setState(() => _countingDown = false),
+              onTick: (left) {
+                if (left <= 3) _voice.say('$left');
+              },
+              onComplete: () {
+                _voice.say('Go!');
+                setState(() => _countingDown = false);
+              },
             ),
           ),
         Positioned(

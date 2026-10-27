@@ -13,11 +13,15 @@ class PoseCountdownOverlay extends StatefulWidget {
   final VoidCallback onComplete;
   final List<String> hints;
 
+  /// Called with the seconds left after each tick, until [onComplete].
+  final ValueChanged<int>? onTick;
+
   const PoseCountdownOverlay({
     super.key,
     this.seconds = 7,
     required this.onComplete,
     this.hints = const [],
+    this.onTick,
   });
 
   @override
@@ -37,6 +41,8 @@ class _PoseCountdownOverlayState extends State<PoseCountdownOverlay> {
       if (_remaining <= 0) {
         t.cancel();
         widget.onComplete();
+      } else {
+        widget.onTick?.call(_remaining);
       }
     });
   }
