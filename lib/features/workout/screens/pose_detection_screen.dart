@@ -6,10 +6,12 @@ import '../../../../core/theme/app_colors.dart';
 import '../data/exercise_data.dart';
 import '../services/pose_service.dart';
 import '../services/angle_calculator.dart';
+import '../services/voice_coach.dart';
 import '../widgets/exercise_media.dart';
 import '../widgets/form_check_hud.dart';
 import '../widgets/pose_countdown_overlay.dart';
 import '../widgets/stepper_card.dart';
+import '../widgets/voice_toggle_button.dart';
 import '../../../shared/widgets/pressable.dart';
 
 class PoseDetectionScreen extends StatefulWidget {
@@ -70,11 +72,17 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
   int _frameHeight = 480;
   int _frameRotation = 0;
 
+  /// Spoken rep counts and form cues, as in Guided mode.
+  final VoiceCoach _voice = VoiceCoach();
+
   @override
   void initState() {
     super.initState();
     _analyser = ExerciseAnalyserFactory.getAnalyser(widget.exerciseName);
     _requestCameraPermission();
+    _voice.loadEnabled().then((_) {
+      if (mounted) setState(() {}); // the mute toggle
+    });
   }
 
   Future<void> _requestCameraPermission() async {
@@ -115,6 +123,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
   }
 
   void _startDetection() {
+    _voice.say('Get in position.');
     _subscription = PoseService.getLandmarkStream(widget.exerciseName).listen(
       (data) {
         if (!mounted) return;
@@ -126,6 +135,9 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
             _poseDetected = false;
             _landmarks = [];
           });
+          if (!_countingDown && !_workoutComplete) {
+            _voice.fault(VoiceCoach.lostSightCue);
+          }
           return;
         }
 
@@ -163,6 +175,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
           rotationDegrees: (data['frameRotation'] as int?) ?? 270,
         ));
 
+        final wasComplete = _workoutComplete;
         setState(() {
           _poseDetected = true;
           _landmarks = landmarks;
@@ -179,6 +192,17 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
             }
           }
         });
+
+        // Quiet once the set is complete — the summary was the last word.
+        if (wasComplete) return;
+        _voice.fault(result.isCorrect ? null : result.feedback);
+        if (!result.countRep) return;
+        if (_workoutComplete) {
+          _voice.say('Set complete. ${VoiceCoach.formSummary(_repForm)}');
+        } else {
+          _voice.rep(_repCount,
+              good: result.repCorrect, verdict: result.repFeedback);
+        }
       },
       onError: (Object error) {
         debugPrint('Pose stream error: $error');
@@ -198,6 +222,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
   @override
   void dispose() {
     _subscription?.cancel();
+    _voice.dispose();
     super.dispose();
   }
 
@@ -277,7 +302,13 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
             if (_countingDown && _permissionGranted && _cameraError == null)
               Positioned.fill(
                 child: PoseCountdownOverlay(
-                  onComplete: () => setState(() => _countingDown = false),
+                  onTick: (left) {
+                    if (left <= 3) _voice.say('$left');
+                  },
+                  onComplete: () {
+                    _voice.say('Go!');
+                    setState(() => _countingDown = false);
+                  },
                 ),
               ),
 
@@ -384,6 +415,9 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
               ),
             ),
           ),
+          const SizedBox(width: 10),
+          VoiceToggleButton(coach: _voice),
+          const SizedBox(width: 10),
           // Detection indicator
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -623,6 +657,8 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
               ),
               const SizedBox(width: 14),
               Text('FORM CHECK', style: label()),
+              const Spacer(),
+              VoiceToggleButton(coach: _voice),
             ],
           ),
         ),

@@ -75,6 +75,19 @@ class VoiceCoach {
   static const holdBeforeSpeaking = Duration(seconds: 1);
   static const repeatCooldown = Duration(seconds: 5);
 
+  /// Said when the camera loses the user mid-set.
+  static const lostSightCue =
+      "Can't see you — step back so your whole body is in frame";
+
+  /// A set's form verdicts in a sentence: "8 of 10 reps with good form."
+  static String formSummary(List<bool> form) {
+    final good = form.where((ok) => ok).length;
+    final reps = form.length == 1 ? 'rep' : 'reps';
+    return good == form.length && form.length > 1
+        ? 'All ${form.length} reps with good form.'
+        : '$good of ${form.length} $reps with good form.';
+  }
+
   final CueSpeaker _speaker;
   final DateTime Function() _now;
 

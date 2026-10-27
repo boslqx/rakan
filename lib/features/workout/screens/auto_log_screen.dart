@@ -16,6 +16,7 @@ import '../widgets/pose_countdown_overlay.dart';
 import '../widgets/form_check_hud.dart';
 import '../widgets/session_hud.dart';
 import '../widgets/stepper_card.dart';
+import '../widgets/voice_toggle_button.dart';
 import 'pose_detection_screen.dart';
 import '../../../shared/utils/number_format.dart';
 import '../../../shared/widgets/pressable.dart';
@@ -115,10 +116,6 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
 
   /// Spoken cues for when the phone is propped up out of reading distance.
   final VoiceCoach _voice = VoiceCoach();
-
-  /// Said when the camera loses the user mid-set.
-  static const _lostSightCue =
-      "Can't see you — step back so your whole body is in frame";
 
   ExerciseSessionState get _currentExercise => widget.exercises[_exerciseIndex];
 
@@ -230,7 +227,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
 
         if (!detected) {
           _frame.value = _PoseFrame.none;
-          if (!_countingDown) _voice.fault(_lostSightCue);
+          if (!_countingDown) _voice.fault(VoiceCoach.lostSightCue);
           return;
         }
 
@@ -470,14 +467,10 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
   /// "Set 2 done. 8 of 10 reps with good form. Rest 90 seconds."
   void _announceSetDone(ExerciseSessionState ex, int setIndex) {
     final form = _lastSetForm;
-    final parts = ['Set ${setIndex + 1} done.'];
-    if (form != null) {
-      final good = form.where((ok) => ok).length;
-      final reps = form.length == 1 ? 'rep' : 'reps';
-      parts.add(good == form.length && form.length > 1
-          ? 'All ${form.length} reps with good form.'
-          : '$good of ${form.length} $reps with good form.');
-    }
+    final parts = [
+      'Set ${setIndex + 1} done.',
+      if (form != null) VoiceCoach.formSummary(form),
+    ];
     if (!ex.isFullyComplete) {
       if (ex.restSeconds > 0) parts.add('Rest ${_spokenSeconds(ex.restSeconds)}.');
     } else {
@@ -494,14 +487,6 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
       if (m > 0) m == 1 ? '1 minute' : '$m minutes',
       if (s > 0) '$s seconds',
     ].join(' ');
-  }
-
-  void _toggleVoice() {
-    HapticFeedback.selectionClick();
-    final on = !_voice.enabled;
-    unawaited(_voice.setEnabled(on));
-    setState(() {});
-    if (on) _voice.say('Voice on.');
   }
 
   void _confirmRpeAndAdvance() {
@@ -757,37 +742,12 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
             ),
           ),
           const SizedBox(width: 14),
-          _buildVoiceToggle(),
+          VoiceToggleButton(coach: _voice),
           if (trailing != null) ...[
             const SizedBox(width: 10),
             trailing,
           ],
         ],
-      ),
-    );
-  }
-
-  /// Mutes or unmutes the voice coach; remembered for later sessions.
-  Widget _buildVoiceToggle() {
-    final on = _voice.enabled;
-    return Semantics(
-      button: true,
-      label: on ? 'Mute voice coach' : 'Unmute voice coach',
-      child: Pressable(
-        onTap: _toggleVoice,
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: Colors.white12,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(
-            on ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-            color: on ? Colors.white : Colors.white38,
-            size: 18,
-          ),
-        ),
       ),
     );
   }
