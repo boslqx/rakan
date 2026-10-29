@@ -9,6 +9,12 @@ class WeightRecordService {
   /// Doc id of the entry seeded from the onboarding weight.
   static const startingRecordId = 'onboarding-start';
 
+  /// Whether a weight saved in Personal Stats differs from the one it
+  /// replaced enough to log (V-21). The 0.05 kg margin ignores the
+  /// rounding of a kg → lbs → kg round trip.
+  static bool isWeightChange(double? before, double after) =>
+      before == null || (after - before).abs() >= 0.05;
+
   CollectionReference<Map<String, dynamic>> _collection(String uid) => _db
       .collection('users')
       .doc(uid)

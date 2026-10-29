@@ -110,7 +110,7 @@ class ActivityLogCard extends StatelessWidget {
             // Stats row
             Row(
               children: [
-                Expanded(child: _buildLogStat('VOLUME', _formatVolume(totalVolume))),
+                Expanded(child: _buildLogStat('KG LIFTED', _formatVolume(totalVolume))),
                 Expanded(child: _buildLogStat('TIME', '${durationMins}m')),
                 Expanded(
                   child: _buildLogStat('SETS', totalSets != null ? '$totalSets' : '—'),

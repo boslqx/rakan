@@ -61,9 +61,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isUpdatingPrivacy = false;
 
   // SharedPreferences keys
-  static const _kRemindersEnabled = 'reminders_enabled';
-  static const _kReminderHour = 'reminder_hour';
-  static const _kReminderMinute = 'reminder_minute';
+  static const _kRemindersEnabled = NotificationService.kRemindersEnabledKey;
+  static const _kReminderHour = NotificationService.kReminderHourKey;
+  static const _kReminderMinute = NotificationService.kReminderMinuteKey;
 
   @override
   void initState() {

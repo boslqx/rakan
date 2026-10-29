@@ -302,6 +302,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
             if (_countingDown && _permissionGranted && _cameraError == null)
               Positioned.fill(
                 child: PoseCountdownOverlay(
+                  bodyVisible: _poseDetected,
                   onTick: (left) {
                     if (left <= 3) _voice.say('$left');
                   },

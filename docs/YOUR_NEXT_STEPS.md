@@ -1,8 +1,68 @@
 # Your next steps (29 Oct 2026)
 
-Do these in order. Steps 2–4 must stay in this order: the new backend
-refuses calls without an ID token, so the phones need the new app first.
 Details of every change: `CHANGELOG_CH5.md`.
+
+## Round 3 (your decisions a–m) — do this first
+
+This round changed **only the app** (no backend, no Firestore rules), so
+there is nothing to deploy to Render or Firebase.
+
+**R1 · Commit** (check `git status` first, as before):
+
+```
+feat: decisions a-m (deload restore, weekly changes on every day, reminders, stats checks, countdown, Arnold Press, terms step)
+
+V-09 deload restored the week after; V-10 weekly changes reach every plan
+day (past days kept for this week); V-20 reminders follow plan changes, no
+rest-day reminders, Schedule refreshes after injury rebuilds (L-05); V-21
+body stat ranges + weight record; V-22 countdown waits for the user;
+V-23 Arnold Press form check (31 exercises); V-17 "kg lifted" labels;
+one-time terms step for new accounts without agreement (b).
+Flutter 190 passed, backend 46 passed. See CHANGELOG_CH5.md.
+```
+
+**R2 · Rebuild and install the app** on every phone (same as Step 2 below:
+`flutter build apk --release`, then `flutter install`).
+
+**R3 · Retest on the phone** (record results in `CHANGELOG_CH5.md`):
+
+| # | Test | Do | Expect |
+|---|---|---|---|
+| R-a | (b) terms step | Sign in with a **new** Google account from the **Login** screen | BEFORE YOU START screen → I AGREE → onboarding. Firestore profile has `termsAcceptedAt` |
+| R-b | V-22 / UT-GDE-03 | Start a camera set while standing out of view; step in after 10 s | STEP INTO VIEW and the count stays at 7 until you're in view; leaving mid-count starts it over |
+| R-c | V-23 | Exercise library → Arnold Press | Form check available and counts reps |
+| R-d | V-21 | Settings → Personal Stats: height 1750 → save; then change the weight | 1750 rejected with a message; after the weight change, Coach shows the new weight |
+| R-e | V-20 | Settings → reminders on; make a workout day a rest day (Schedule) | No reminder on that day any more (check the next reminder time shown in Settings) |
+| R-f | V-20 / L-05 | Log an injury, wait ~1 min on the Schedule tab | Schedule updates by itself, without restarting |
+| R-g | V-10 | On a Sunday (or late in the week), let a weekly run happen (`demo.adaptive`) | Earlier days' sessions this week look as they were; the plan's days change from next week |
+| R-h | V-09 | `demo.deload` through the week-4 deload, then the week-5 run | Sets/reps go down in week 4 and come back in week 5 |
+| R-i | V-17 | Finish a workout; open Coach → Stats | Tiles say KG LIFTED / LIFTED instead of VOLUME |
+
+**R4 · Report changes for this round** (you edit the .docx):
+
+- Test counts: **Flutter 190 passed, backend 46 passed, 29 Oct 2026**
+  (replaces the 172/46 from earlier).
+- 4.5: "only workout days after today are changed" is no longer true. Now:
+  each weekly run changes every workout day of the plan; this week's days
+  that are already over keep the session they had, so the change shows from
+  next week. Also say the scheduled deload lasts one week: the sets/reps it
+  cut are restored at the next weekly run.
+- 4.5.7 and E2E-03 (you chose to keep the current design): describe it as
+  one card per missed session (the whole day, whatever it trained). "Move to
+  a rest day" offers the free rest days from today up to 7 days ahead and
+  before that same workout comes round again; a missed session not handled
+  within 7 days is skipped automatically. There is no 48-hour rule and no
+  per-muscle card, so remove the Curovic (2025) 48-hour citation there.
+- 5.3.7 UT-GDE-03: the countdown now does wait until the body is visible,
+  so the test as written can pass (retest R-b).
+- Form check: **31** exercises, not 30 (4.12 "30 of the 627" → "31 of the
+  627", and wherever else 30 appears).
+- Screens/tables showing VOLUME: now KG LIFTED (workout screen, Coach stats).
+- Personal stats (Table 4.13.1): a changed weight now also appears in Coach.
+
+**R5 · Still to do from the first rounds** (below): Step 3 (rules deploy)
+if you haven't yet, the rules test (Step 5, after deleting `demo.ch5b`),
+Step 6 (backfill), Step 7 (retests) and Step 8 (report).
 
 ---
 
@@ -137,27 +197,14 @@ Use `*@rakan-demo.test` accounts. Write pass/fail in the Result column of
 
 Ask me if you want draft sentences for any of these.
 
-## Step 9 · Decisions I need from you
+## Step 9 · Decisions
 
-Answer these in chat (one line each is enough); I'll implement them.
-
-| # | Question | Options |
-|---|---|---|
-| a | Neck injury: should it pause Back? (Now it pauses nothing, and the card agrees.) | Keep as is / pause Back |
-| b | A brand-new Google account made from the **Login** screen never sees the terms box. | Show a one-time agreement dialog / send new Google users to Register |
-| c | Email accounts' `termsAcceptedAt` is the onboarding time, not sign-up time. | Fine as is / add a narrow rules exception to save it at sign-up |
-| d | New plans already exceed the weekly max (6-day, 90-min plan: ~45 chest sets vs 20). Cap generation too? Changes the plans/durations the report describes. | Leave generation / cap it |
-| e | V-09 deload never undone (3×10 → 2×6 forever). | Store pre-deload sets/reps and restore them the week after (my proposal) / other |
-| f | V-10 weekly changes only touch days after today's weekday (Sunday run changes nothing). | Apply to every day of the template / keep and fix the report |
-| g | V-14 reschedule: the 48-hour rule was removed in `7cc7fad`. | Restore the 48-hour floor / keep and update report 4.5.7, E2E-03 |
-| h | V-17 two "volume" rules (workout screen counts bodyweight as 0). | Label the tile "kg lifted" / unify (changes Tier 2 trend) |
-| i | V-20 reminders after plan changes: should rest days still get a "Rest Day" reminder? | Yes / no |
-| j | V-21 Personal Stats: should a weight change also add a weight record (so Coach shows it)? | Yes / no |
-| k | V-22 countdown: wait until the whole body is visible (as UT-GDE-03 expects)? | Yes / keep and update the report |
-| l | V-23 Arnold Press: enable form check (31 exercises) or remove the mapping (stays 30)? | Enable / remove |
-| m | V-25 posture: glitch filter + "almost there" message for 81–89° squats (80° stays)? | Yes / no |
+All answered on 29 Oct 2026 and implemented in Round 3 (see the table in
+`CHANGELOG_CH5.md` → "Bos's decisions"). For (a), the research found that
+guidelines recommend strengthening the shoulders and upper back for neck
+pain, so a neck injury still pauses nothing.
 
 ## What's still open (I can continue on request)
 
-V-20, V-21 (range checks), V-24 (store form results), CH5 P1-2, P1-3,
-P1-4, P1-8 to P1-12, P3-3 `/version`, P3-4 warm-up ping.
+V-24 (store camera form results), CH5 P1-2, P1-3, P1-4, P1-8 to P1-12,
+P3-3 `/version`, P3-4 warm-up ping.

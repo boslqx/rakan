@@ -303,7 +303,9 @@ class _StatsReportTabState extends State<StatsReportTab> {
             Expanded(
               child: _buildKpiTile(
                 icon: Icons.stacked_bar_chart_rounded,
-                label: 'VOLUME',
+                // Sum of each workout's reps × kg (bodyweight sets add
+                // nothing), so named for what it counts (V-17).
+                label: 'KG LIFTED',
                 value: _compactNumber(s.volume),
                 unit: ' kg',
                 delta: _percentDelta(s.volume, prev.volume),
@@ -488,7 +490,7 @@ class _StatsReportTabState extends State<StatsReportTab> {
           Wrap(
             runSpacing: 6,
             children: [
-              for (final (i, name) in const ['WORKOUTS', 'VOLUME', 'TIME'].indexed)
+              for (final (i, name) in const ['WORKOUTS', 'KG LIFTED', 'TIME'].indexed)
                 _chip(name, selected: _trendMetric == i, onTap: () => setState(() => _trendMetric = i)),
             ],
           ),

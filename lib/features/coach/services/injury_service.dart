@@ -5,6 +5,7 @@ import 'dart:convert';
 import '../../../core/utils/backend_headers.dart';
 import '../../onboarding/services/user_profile_service.dart';
 import '../../workout/services/notification_service.dart';
+import '../../workout/services/workout_plan_service.dart';
 
 /// Maps a BodyRegion (stored as its raw .name string, e.g. "rightShoulder")
 /// to the app muscle groups an injury there pauses. The single source for
@@ -112,13 +113,16 @@ class InjuryService {
 
     // Deliberately NOT re-thrown to the caller
     try {
-      await http
+      final response = await http
           .post(
             Uri.parse('$_baseUrl/regenerate-plan'),
             headers: await backendHeaders(),
             body: body,
           )
           .timeout(const Duration(seconds: 90));
+      // The rebuild runs in the background: tell Home, the Schedule tab
+      // and the weekly reminders that the plan changed (L-05, V-20).
+      if (response.statusCode == 200) WorkoutPlanService.scheduleChanges.value++;
     } catch (e) {
       // Swallow — regeneration is best-effort.
     }

@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:uuid/uuid.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/validators.dart';
+import '../../coach/models/weight_record.dart';
+import '../../coach/services/weight_record_service.dart';
 import '../../onboarding/models/onboarding_data.dart';
 import '../../onboarding/services/user_profile_service.dart';
 import '../../../shared/widgets/pressable.dart';
@@ -23,6 +27,8 @@ class _EditStatsScreenState extends State<EditStatsScreen> {
   bool _isMetric = true;
   int? _age;
   ActivityLevel? _activityLevel;
+  // Weight as loaded, to tell whether the user changed it.
+  double? _loadedWeightKg;
 
   final _ageController = TextEditingController();
   final _cmController = TextEditingController();
@@ -68,6 +74,7 @@ class _EditStatsScreenState extends State<EditStatsScreen> {
       _ageController.text = _age?.toString() ?? '';
       _applyHeight(heightCm);
       _applyWeight(weightKg);
+      _loadedWeightKg = weightKg;
       _isLoading = false;
     });
   }
@@ -138,14 +145,14 @@ class _EditStatsScreenState extends State<EditStatsScreen> {
     final heightCm = _currentHeightCm();
     final weightKg = _currentWeightKg();
 
-    if (age == null ||
-        heightCm == null ||
-        weightKg == null ||
-        _activityLevel == null) {
+    // Same ranges as onboarding (V-21).
+    final invalid = _activityLevel == null
+        ? 'Please choose an activity level'
+        : Validators.bodyStats(age: age, heightCm: heightCm, weightKg: weightKg);
+    if (invalid != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Please fill in all fields',
-              style: GoogleFonts.manrope()),
+          content: Text(invalid, style: GoogleFonts.manrope()),
           backgroundColor: AppColors.error,
         ),
       );
@@ -159,12 +166,26 @@ class _EditStatsScreenState extends State<EditStatsScreen> {
     try {
       await _profileService.updateStats(
         uid: uid,
-        age: age,
-        heightCm: heightCm,
-        weightKg: weightKg,
+        age: age!,
+        heightCm: heightCm!,
+        weightKg: weightKg!,
         activityLevel: _activityLevel!,
         isMetric: _isMetric,
       );
+      // Coach shows the newest weight record, so a changed weight is also
+      // logged there (V-21) — otherwise Coach kept the old one.
+      if (WeightRecordService.isWeightChange(_loadedWeightKg, weightKg)) {
+        await WeightRecordService().addRecord(
+          uid: uid,
+          record: WeightRecord(
+            id: const Uuid().v4(),
+            date: DateTime.now(),
+            weightKg: weightKg,
+            description: 'Updated in Personal Stats',
+          ),
+        );
+        _loadedWeightKg = weightKg;
+      }
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(

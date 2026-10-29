@@ -311,6 +311,18 @@ void main() {
       expect(unmapped, isEmpty);
     });
 
+    // V-23: the mapping and the library agree exactly — no mapped exercise
+    // without form check in the app (Arnold Press was), and none missing.
+    test('mapped names are exactly the pose-enabled exercises', () {
+      final poseEnabled = kExercises
+          .where((e) => e.hasPoseDetection)
+          .map((e) => e.name.toLowerCase())
+          .toSet();
+      expect(ExerciseAnalyserFactory.explicitNames, poseEnabled);
+      expect(poseEnabled, contains('arnold press'));
+      expect(poseEnabled.length, 31);
+    });
+
     test('variants route to the right analyser', () {
       expect(ExerciseAnalyserFactory.getAnalyser('Dumbbell Goblet Squat'), isA<SquatAnalyser>());
       expect(ExerciseAnalyserFactory.getAnalyser('Bulgarian Split Squat'), isA<LungeAnalyser>());

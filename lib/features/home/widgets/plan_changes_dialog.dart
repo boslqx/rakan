@@ -142,7 +142,7 @@ class PlanChangesDialog extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: _statTile('VOLUME', _formatVolume(totalVolume)),
+            child: _statTile('KG LIFTED', _formatVolume(totalVolume)),
           ),
         ],
       ),

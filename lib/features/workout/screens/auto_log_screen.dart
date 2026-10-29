@@ -995,16 +995,17 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
           ),
         if (_countingDown)
           Positioned.fill(
-            child: PoseCountdownOverlay(
-              hints: cameraSetupLines(ex.exerciseName),
-              onTick: (left) {
-                if (left <= 3) _voice.say('$left');
-              },
-              onComplete: () {
-                _voice.say('Go!');
-                setState(() => _countingDown = false);
-              },
-            ),
+            child: _onFrame((frame) => PoseCountdownOverlay(
+                  bodyVisible: frame.detected,
+                  hints: cameraSetupLines(ex.exerciseName),
+                  onTick: (left) {
+                    if (left <= 3) _voice.say('$left');
+                  },
+                  onComplete: () {
+                    _voice.say('Go!');
+                    setState(() => _countingDown = false);
+                  },
+                )),
           ),
         Positioned(
           top: 0,

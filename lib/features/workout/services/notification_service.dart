@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tzdata;
+import 'workout_plan_service.dart';
 
 /// Handles scheduling of local workout reminder notifications, plus the
 /// one-time injury recovery check-ins (IDs 1000+).
@@ -33,6 +35,11 @@ class NotificationService {
   // (Monday=101 ... Sunday=107). Fixed IDs let us cancel/replace
   // a specific day's reminder without touching others.
   static const int _baseNotificationId = 100;
+
+  // Where Settings keeps the weekly-reminder choice (on this device).
+  static const String kRemindersEnabledKey = 'reminders_enabled';
+  static const String kReminderHourKey = 'reminder_hour';
+  static const String kReminderMinuteKey = 'reminder_minute';
 
   // Notification IDs 201-207 reserved for per-day "start workout at X"
   // reminders set directly on a workout day card (Schedule tab). Kept in
@@ -176,12 +183,28 @@ class NotificationService {
     return '${isToday ? 'Today' : days[t.weekday - 1]} $h12:$mm $ampm';
   }
 
-  /// Schedules weekly reminders for each day in the user's 7-day plan.
+  /// The weekly reminders a plan gets: one per workout day (weekday 1–7 =
+  /// Mon–Sun). Rest days get none (V-20).
+  static List<({int weekday, String title, String body})> weeklyReminderContent(
+    List<Map<String, dynamic>> days,
+  ) =>
+      [
+        for (final day in days)
+          if (day['dayType'] == 'workout')
+            (
+              weekday: day['dayNumber'] as int? ?? 1,
+              title: 'Time to train 💪',
+              body: "Today's session: ${day['workoutName'] as String? ?? 'Workout'}. "
+                  "Let's get it done.",
+            ),
+      ];
+
+  /// Schedules weekly reminders for each workout day in the user's plan.
   /// [hour] and [minute] define the reminder time (e.g. 8, 0 = 8:00 AM).
-  /// dayNumber 1–7 maps directly to weekday 1–7 (Mon–Sun).
   ///
-  /// Returns the soonest scheduled fire time (null if [days] is empty), so
-  /// the caller can tell the user exactly when the next reminder arrives.
+  /// Returns the soonest scheduled fire time (null if there are no workout
+  /// days), so the caller can tell the user exactly when the next reminder
+  /// arrives.
   Future<tz.TZDateTime?> scheduleWeeklyReminders({
     required List<Map<String, dynamic>> days,
     required int hour,
@@ -189,31 +212,17 @@ class NotificationService {
   }) async {
     await init();
     // Cancel existing reminders before rescheduling to avoid duplicates
+    // (this also clears a day that has become a rest day).
     await cancelAllReminders();
 
     tz.TZDateTime? soonest;
 
-    for (final day in days) {
-      final dayNumber = day['dayNumber'] as int? ?? 1;
-      final dayType = day['dayType'] as String? ?? 'rest';
-      final workoutName = day['workoutName'] as String? ?? 'Workout';
-
-      final String title;
-      final String body;
-
-      if (dayType == 'workout') {
-        title = 'Time to train 💪';
-        body = "Today's session: $workoutName. Let's get it done.";
-      } else {
-        title = 'Rest Day 🧘';
-        body = 'Recovery is part of the plan — take it easy today.';
-      }
-
+    for (final reminder in weeklyReminderContent(days)) {
       final at = await _scheduleWeekly(
-        id: _baseNotificationId + dayNumber,
-        title: title,
-        body: body,
-        weekday: dayNumber, // dayNumber 1-7 = Mon-Sun
+        id: _baseNotificationId + reminder.weekday,
+        title: reminder.title,
+        body: reminder.body,
+        weekday: reminder.weekday,
         hour: hour,
         minute: minute,
       );
@@ -221,6 +230,26 @@ class NotificationService {
     }
     await _logPending();
     return soonest;
+  }
+
+  /// V-20: re-schedules the weekly reminders from the current plan when
+  /// they're turned on, so they follow plan changes (generation, reset,
+  /// injury rebuilds, swaps, cancellations, rest-day conversions). Called
+  /// when the app opens and whenever the schedule changes. Never throws.
+  Future<void> refreshWeeklyReminders(String uid) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool(kRemindersEnabledKey) ?? false)) return;
+      final plan = await WorkoutPlanService().getActivePlan(uid);
+      if (plan == null) return;
+      await scheduleWeeklyReminders(
+        days: (plan['days'] as List).cast<Map<String, dynamic>>(),
+        hour: prefs.getInt(kReminderHourKey) ?? 8,
+        minute: prefs.getInt(kReminderMinuteKey) ?? 0,
+      );
+    } catch (e) {
+      debugPrint('[Notif] refreshWeeklyReminders failed: $e');
+    }
   }
 
   /// Schedules a single notification that repeats every week on

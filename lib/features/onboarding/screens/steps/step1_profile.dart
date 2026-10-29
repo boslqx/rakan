@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/validators.dart';
 import '../../../social/services/public_profile_service.dart';
 import '../../models/onboarding_data.dart';
 import '../../../../shared/widgets/pressable.dart';
@@ -179,6 +180,22 @@ class _Step1ProfileState extends State<Step1Profile> {
             'Please fill in all fields',
             style: GoogleFonts.manrope(),
           ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    // Same ranges as Settings → Personal Stats (V-21).
+    final rangeError = Validators.bodyStats(
+      age: widget.data.age,
+      heightCm: widget.data.heightCm,
+      weightKg: widget.data.weightKg,
+    );
+    if (rangeError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(rangeError, style: GoogleFonts.manrope()),
           backgroundColor: AppColors.error,
         ),
       );

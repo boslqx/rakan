@@ -45,6 +45,48 @@ class Validators {
     return allMet ? null : 'Password does not meet all requirements';
   }
 
+  // Body stats, shared by onboarding and Settings → Personal Stats (V-21).
+  // Age matches the onboarding picker (13–80; the Terms require 13+);
+  // height and weight only catch typos (e.g. 1750 cm, 7 kg).
+  static const int minAge = 13;
+  static const int maxAge = 80;
+  static const double minHeightCm = 100;
+  static const double maxHeightCm = 250;
+  static const double minWeightKg = 30;
+  static const double maxWeightKg = 300;
+
+  static String? age(int? value) {
+    if (value == null) return 'Enter your age';
+    if (value < minAge || value > maxAge) {
+      return 'Age must be between $minAge and $maxAge';
+    }
+    return null;
+  }
+
+  static String? heightCm(double? value) {
+    if (value == null) return 'Enter your height';
+    if (value < minHeightCm || value > maxHeightCm) {
+      return 'Height must be between ${minHeightCm.round()} and '
+          '${maxHeightCm.round()} cm (about 3\'3" to 8\'2")';
+    }
+    return null;
+  }
+
+  static String? weightKg(double? value) {
+    if (value == null) return 'Enter your weight';
+    if (value < minWeightKg || value > maxWeightKg) {
+      return 'Weight must be between ${minWeightKg.round()} and '
+          '${maxWeightKg.round()} kg (66 to 661 lbs)';
+    }
+    return null;
+  }
+
+  /// The first problem with a set of body stats, or null when all are fine.
+  static String? bodyStats({int? age, double? heightCm, double? weightKg}) =>
+      Validators.age(age) ??
+      Validators.heightCm(heightCm) ??
+      Validators.weightKg(weightKg);
+
   /// Confirm-password match check.
   static String? confirmPassword(String? value, String original) {
     if (value == null || value.isEmpty) return 'Please confirm your password';

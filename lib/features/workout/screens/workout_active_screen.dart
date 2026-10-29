@@ -783,7 +783,9 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
                       child: _exerciseStates.any((ex) => ex.tracksWeight)
                           ? _buildStatTile(
                               icon: Icons.fitness_center_rounded,
-                              label: 'VOLUME',
+                              // reps × kg; bodyweight sets add nothing, so
+                              // it's named for what it counts (V-17).
+                              label: 'KG LIFTED',
                               value: AnimatedCount(
                                 value: _totalVolume,
                                 format: (v) => formatThousands(v),

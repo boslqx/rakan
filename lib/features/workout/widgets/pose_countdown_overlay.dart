@@ -8,6 +8,11 @@ import '../../../core/theme/app_colors.dart';
 /// The backdrop is see-through at the edges, so the camera feed and
 /// skeleton stay visible while the user checks their framing. [hints] —
 /// where to put the phone, how to stand — are listed under the count.
+///
+/// The count only runs while [bodyVisible] (the camera detects a pose).
+/// Whenever the user is out of view it goes back to [seconds] and waits,
+/// so counting never starts before the user has been in view for the whole
+/// countdown (UT-GDE-03, V-22).
 class PoseCountdownOverlay extends StatefulWidget {
   final int seconds;
   final VoidCallback onComplete;
@@ -16,13 +21,22 @@ class PoseCountdownOverlay extends StatefulWidget {
   /// Called with the seconds left after each tick, until [onComplete].
   final ValueChanged<int>? onTick;
 
+  /// Whether the camera currently detects the user.
+  final bool bodyVisible;
+
   const PoseCountdownOverlay({
     super.key,
     this.seconds = 7,
     required this.onComplete,
     this.hints = const [],
     this.onTick,
+    this.bodyVisible = true,
   });
+
+  /// Seconds left after one more second: one fewer while the user is in
+  /// view, back to [total] while they aren't.
+  static int nextRemaining(int remaining, {required bool visible, required int total}) =>
+      visible ? remaining - 1 : total;
 
   @override
   State<PoseCountdownOverlay> createState() => _PoseCountdownOverlayState();
@@ -37,14 +51,29 @@ class _PoseCountdownOverlayState extends State<PoseCountdownOverlay> {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
-      setState(() => _remaining--);
+      final next = PoseCountdownOverlay.nextRemaining(
+        _remaining,
+        visible: widget.bodyVisible,
+        total: widget.seconds,
+      );
+      final restarted = next >= _remaining;
+      setState(() => _remaining = next);
       if (_remaining <= 0) {
         t.cancel();
         widget.onComplete();
-      } else {
+      } else if (!restarted) {
         widget.onTick?.call(_remaining);
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(PoseCountdownOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Lost from view: show the full count again straight away.
+    if (oldWidget.bodyVisible && !widget.bodyVisible) {
+      setState(() => _remaining = widget.seconds);
+    }
   }
 
   @override
@@ -78,7 +107,7 @@ class _PoseCountdownOverlayState extends State<PoseCountdownOverlay> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'GET IN POSITION',
+                widget.bodyVisible ? 'GET IN POSITION' : 'STEP INTO VIEW',
                 style: GoogleFonts.manrope(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -126,7 +155,10 @@ class _PoseCountdownOverlayState extends State<PoseCountdownOverlay> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Rep counting starts automatically',
+                widget.bodyVisible
+                    ? 'Rep counting starts automatically'
+                    : 'The countdown starts once the camera can see you',
+                textAlign: TextAlign.center,
                 style: GoogleFonts.manrope(fontSize: 13, color: Colors.white38),
               ),
               if (widget.hints.isNotEmpty) ...[

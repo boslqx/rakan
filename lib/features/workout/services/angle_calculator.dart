@@ -1389,6 +1389,10 @@ class ExerciseAnalyserFactory {
   static bool hasExplicitMapping(String exerciseName) =>
       _byName.containsKey(exerciseName.trim().toLowerCase());
 
+  /// Every explicitly mapped name (lower case). A test checks this is
+  /// exactly the library's pose-enabled set (V-23).
+  static Set<String> get explicitNames => _byName.keys.toSet();
+
   static _Family _familyOf(String exerciseName) {
     final name = exerciseName.trim().toLowerCase();
     final exact = _byName[name];

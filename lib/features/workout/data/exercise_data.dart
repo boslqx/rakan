@@ -996,6 +996,9 @@ const List<ExerciseData> kExercises = [
     difficulty: 'Intermediate',
     equipment: 'Dumbbells',
     youtubeId: '90PYXT3kH7Q',
+    // Checked by ShoulderPressAnalyser: the palm rotation doesn't change
+    // the elbow-extension and arm-symmetry checks (V-23).
+    hasPoseDetection: true,
     setsRepsGuide: '3 sets × 8–12 reps',
     steps: [
       'Hold dumbbells at chin level, palms facing you.',

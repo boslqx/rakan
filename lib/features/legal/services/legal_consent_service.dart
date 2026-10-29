@@ -58,4 +58,27 @@ class LegalConsentService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('$_kPendingPrefix$uid');
   }
+
+  /// Whether agreement is on record: kept on this device (not yet
+  /// written), or already on the profile.
+  static bool acceptedFrom({
+    required bool pendingOnDevice,
+    required Map<String, dynamic>? profile,
+  }) =>
+      pendingOnDevice || profile?['termsAcceptedAt'] != null;
+
+  /// Checked before onboarding (AuthNavigationService): an account that
+  /// never ticked the box on Register — a new Google account from the
+  /// Login screen, or an email account first opened on another phone —
+  /// is asked once (TermsAgreementScreen).
+  Future<bool> hasAccepted(String uid) async {
+    if ((await pendingFields(uid)).isNotEmpty) return true;
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('profile')
+        .doc('data')
+        .get();
+    return acceptedFrom(pendingOnDevice: false, profile: doc.data());
+  }
 }

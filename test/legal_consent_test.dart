@@ -33,4 +33,26 @@ void main() {
     await service.clearPending('uid-1');
     expect(await service.pendingFields('uid-1'), isEmpty);
   });
+
+  // Decision (b): accounts with no agreement on record are asked once.
+  test('agreement counts if kept on the device or stored on the profile', () {
+    expect(
+      LegalConsentService.acceptedFrom(pendingOnDevice: true, profile: null),
+      isTrue,
+    );
+    expect(
+      LegalConsentService.acceptedFrom(
+          pendingOnDevice: false, profile: {'termsAcceptedAt': DateTime(2026, 10, 29)}),
+      isTrue,
+    );
+    // A new Google account from the Login screen: nothing anywhere.
+    expect(
+      LegalConsentService.acceptedFrom(pendingOnDevice: false, profile: null),
+      isFalse,
+    );
+    expect(
+      LegalConsentService.acceptedFrom(pendingOnDevice: false, profile: {'name': 'A'}),
+      isFalse,
+    );
+  });
 }

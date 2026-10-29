@@ -5,7 +5,17 @@ import 'dart:convert';
 
 import '../../../core/utils/backend_headers.dart';
 import '../data/exercise_data.dart';
+import 'schedule_matcher.dart';
 import 'workout_log_service.dart';
+import 'workout_plan_service.dart';
+
+/// One exercise doc on a plan workout day, as read at the start of a run.
+class _PlanExercise {
+  final DocumentReference<Map<String, dynamic>> ref;
+  final Map<String, dynamic> data;
+
+  const _PlanExercise(this.ref, this.data);
+}
 
 class WeeklySummaryService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -243,6 +253,11 @@ class WeeklySummaryService {
       batch.update(planRef, {'weekNumber': newWeekNumber});
     }
 
+    // The plan's exercises, read once for every adjustment below.
+    final planExercises =
+        planId == null ? <_PlanExercise>[] : await _loadPlanExercises(uid, planId);
+    final touchedPaths = <String>{};
+
     if (commitResult != null) {
       final resolvedProposals = commitResult['resolved_proposals'] as List<dynamic>;
 
@@ -254,18 +269,17 @@ class WeeklySummaryService {
         final muscleGroup = muscleGroupByProposalId[proposalId]!;
         final recoveryScore = recoveryScoreByProposalId[proposalId];
 
-        // Apply to every future exercise whose primary muscleGroup matches
-        await _applyAdjustmentToMuscleGroup(
+        // Apply to every exercise whose primary muscleGroup matches
+        _applyAdjustmentToMuscleGroup(
           batch: batch,
-          uid: uid,
-          planId: planId,
+          planExercises: planExercises,
           muscleGroup: muscleGroup,
           adjustment: finalAdjustment,
           tier: tier,
           reason: reason,
           recoveryScore: recoveryScore,
-          todayWeekday: now.weekday,
           changesOut: weeklyChanges,
+          touchedPaths: touchedPaths,
         );
 
         // Mark this proposal committed
@@ -277,6 +291,20 @@ class WeeklySummaryService {
         });
       }
     }
+
+    // V-09: exercises a scheduled deload cut last time and that no
+    // adjustment touched this run go back to their pre-deload sets/reps.
+    for (final ex in planExercises) {
+      if (touchedPaths.contains(ex.ref.path)) continue;
+      final update = exerciseUpdate(exercise: ex.data, adjustment: 0, tier: '');
+      if (update == null) continue;
+      batch.update(ex.ref, update);
+      touchedPaths.add(ex.ref.path);
+    }
+
+    // V-10: changes now reach every plan day, so this week's days that are
+    // already over keep the session they had (shown from next week).
+    if (touchedPaths.isNotEmpty) await _keepThisWeeksPastDays(uid, now);
 
     // Existing summary write, now with trend fields added
     final summaryRef = _db
@@ -302,24 +330,8 @@ class WeeklySummaryService {
     await batch.commit();
   }
 
-  /// Finds every exercise in every future workout day whose primary
-  /// muscle group matches [muscleGroup], applies [adjustment], and records
-  /// a summary entry only when at least one exercise actually changes.
-  Future<void> _applyAdjustmentToMuscleGroup({
-    required WriteBatch batch,
-    required String uid,
-    required String? planId,
-    required String muscleGroup,
-    required double adjustment,
-    required String tier,
-    required String reason,
-    required double? recoveryScore,
-    required int todayWeekday,
-    required List<Map<String, dynamic>> changesOut,
-  }) async {
-    // planId is resolved once, up in _generateSummary, and threaded 
-    if (planId == null) return;
-
+  /// Every exercise on the plan's workout days, with its day.
+  Future<List<_PlanExercise>> _loadPlanExercises(String uid, String planId) async {
     final daysSnap = await _db
         .collection('users')
         .doc(uid)
@@ -327,42 +339,64 @@ class WeeklySummaryService {
         .doc(planId)
         .collection('days')
         .get();
+    final workoutDays =
+        daysSnap.docs.where((d) => d.data()['dayType'] != 'rest').toList();
+    final exerciseSnaps = await Future.wait(
+        workoutDays.map((d) => d.reference.collection('exercises').get()));
+    return [
+      for (var i = 0; i < workoutDays.length; i++)
+        for (final exDoc in exerciseSnaps[i].docs)
+          _PlanExercise(exDoc.reference, exDoc.data()),
+    ];
+  }
 
+  /// Applies [adjustment] to every exercise on the plan's workout days
+  /// whose primary muscle group matches [muscleGroup], and records a
+  /// summary entry only when at least one exercise actually changes.
+  ///
+  /// Every workout day of the weekly template is changed, not only the
+  /// weekdays still to come this week (V-10): before, a run on a Sunday
+  /// changed nothing although its proposals were marked committed. This
+  /// week's days that are already over are kept as they were
+  /// (_keepThisWeeksPastDays).
+  void _applyAdjustmentToMuscleGroup({
+    required WriteBatch batch,
+    required List<_PlanExercise> planExercises,
+    required String muscleGroup,
+    required double adjustment,
+    required String tier,
+    required String reason,
+    required double? recoveryScore,
+    required List<Map<String, dynamic>> changesOut,
+    required Set<String> touchedPaths,
+  }) {
     int exercisesAffected = 0;
 
-    for (final dayDoc in daysSnap.docs) {
-      final dayData = dayDoc.data();
-      final int dayNumber = dayData['dayNumber'] as int? ?? 0;
-      final bool isRestDay = dayData['dayType'] == 'rest';
-      if (dayNumber <= todayWeekday || isRestDay) continue;
+    for (final ex in planExercises) {
+      final exerciseName = ex.data['exerciseName'] as String?;
+      if (exerciseName == null) continue;
 
-      final exercisesSnap = await dayDoc.reference.collection('exercises').get();
+      final exerciseInfo = findExerciseByName(exerciseName);
+      if (exerciseInfo == null || exerciseInfo.muscleGroup != muscleGroup) continue;
 
-      for (final exDoc in exercisesSnap.docs) {
-        final exData = exDoc.data();
-        final exerciseName = exData['exerciseName'] as String?;
-        if (exerciseName == null) continue;
+      final update = exerciseUpdate(
+        exercise: ex.data,
+        adjustment: adjustment,
+        tier: tier,
+      );
+      if (update == null) continue;
 
-        final exerciseInfo = findExerciseByName(exerciseName);
-        if (exerciseInfo == null || exerciseInfo.muscleGroup != muscleGroup) continue;
-
-        final currentSets = exData['sets'] as int? ?? 3;
-        final currentReps = exData['reps'] as int? ?? 10;
-
-        final newSets = _clampInt((currentSets * (1 + adjustment)).round(), min: 1, max: 6);
-        final newReps = _clampInt((currentReps * (1 + adjustment)).round(), min: 3, max: 20);
-
-        if (newSets != currentSets || newReps != currentReps) {
-          batch.update(exDoc.reference, {
-            'sets': newSets,
-            'reps': newReps,
-            'adaptedAt': FieldValue.serverTimestamp(),
-            'fatigueLevel': tier,
-            'adaptationSource': 'engine_v2',
-          });
-          exercisesAffected++;
-        }
-      }
+      // Each adjustment starts from the values read at the start of the
+      // run; with several proposals for one group, the last one written
+      // wins (unchanged from before).
+      batch.update(ex.ref, {
+        ...update,
+        'adaptedAt': FieldValue.serverTimestamp(),
+        'fatigueLevel': tier,
+        'adaptationSource': 'engine_v2',
+      });
+      touchedPaths.add(ex.ref.path);
+      exercisesAffected++;
     }
 
     // Capture the diff here, while both the pre- and post-adjustment values
@@ -379,10 +413,99 @@ class WeeklySummaryService {
     }
   }
 
-  int _clampInt(int value, {required int min, required int max}) {
+  static int _clampInt(int value, {required int min, required int max}) {
     if (value < min) return min;
     if (value > max) return max;
     return value;
+  }
+
+  static const String kScheduledDeloadTier = 'scheduled_deload';
+
+  /// The fields a weekly [adjustment] changes on one plan [exercise], or
+  /// null when nothing changes.
+  ///
+  /// V-09: a scheduled deload (tier `scheduled_deload`, −42.5%) stores the
+  /// sets/reps it cut from as `preDeloadSets` / `preDeloadReps`. The next
+  /// weekly run starts from those values again, applies its own adjustment
+  /// and clears them. Without this, 3 × 10 became 2 × 6 for good: +10%
+  /// steps can never take 2 sets back to 3 ((2 × 1.10).round() == 2).
+  /// Pass adjustment 0 to only restore.
+  static Map<String, dynamic>? exerciseUpdate({
+    required Map<String, dynamic> exercise,
+    required double adjustment,
+    required String tier,
+  }) {
+    final currentSets = exercise['sets'] as int? ?? 3;
+    final currentReps = exercise['reps'] as int? ?? 10;
+    final preSets = exercise['preDeloadSets'] as int?;
+    final preReps = exercise['preDeloadReps'] as int?;
+    final restoring = preSets != null || preReps != null;
+    final baseSets = preSets ?? currentSets;
+    final baseReps = preReps ?? currentReps;
+
+    final newSets = _clampInt((baseSets * (1 + adjustment)).round(), min: 1, max: 6);
+    final newReps = _clampInt((baseReps * (1 + adjustment)).round(), min: 3, max: 20);
+    final unchanged = newSets == currentSets && newReps == currentReps;
+    if (unchanged && !restoring) return null;
+
+    final deload = tier == kScheduledDeloadTier;
+    return {
+      'sets': newSets,
+      'reps': newReps,
+      if (deload && !unchanged) ...{
+        'preDeloadSets': baseSets,
+        'preDeloadReps': baseReps,
+      } else if (restoring) ...{
+        'preDeloadSets': FieldValue.delete(),
+        'preDeloadReps': FieldValue.delete(),
+      },
+    };
+  }
+
+  /// Whether this week's session on plan day [dayNumber] is already over
+  /// when the weekly run happens on [todayWeekday]: its day has passed, or
+  /// it's today and today's workout is logged.
+  static bool keepsThisWeeksDay({
+    required int dayNumber,
+    required int todayWeekday,
+    required bool loggedToday,
+  }) =>
+      dayNumber < todayWeekday || (dayNumber == todayWeekday && loggedToday);
+
+  /// V-10: the weekly changes reach every plan day, so this week's workout
+  /// days that are already over keep the session they had — the same
+  /// "kept for this week" version the Schedule tab writes before a plan
+  /// change — and the change shows from next week. Days that already have
+  /// their own version this week keep it. Runs before the changes are
+  /// committed, so it reads the plan as it was.
+  Future<void> _keepThisWeeksPastDays(String uid, DateTime now) async {
+    final plan = await WorkoutPlanService().getActivePlan(uid);
+    if (plan == null) return;
+    final overrides = await WorkoutPlanService().getScheduleOverrides(uid);
+    final loggedToday =
+        await WorkoutLogService().getLogForDate(uid: uid, date: now) != null;
+
+    final kept = <DateTime, Map<String, dynamic>>{};
+    for (final day in (plan['days'] as List).cast<Map<String, dynamic>>()) {
+      if (day['dayType'] != 'workout') continue;
+      final dayNumber = day['dayNumber'] as int? ?? 0;
+      if (!keepsThisWeeksDay(
+        dayNumber: dayNumber,
+        todayWeekday: now.weekday,
+        loggedToday: loggedToday,
+      )) {
+        continue;
+      }
+      final date = DateTime(now.year, now.month, now.day + dayNumber - now.weekday);
+      if (ScheduleMatcher.overrideForDate(overrides, date) != null) continue;
+      kept[date] = day;
+    }
+    if (kept.isEmpty) return;
+    await WorkoutPlanService().setDaysForDates(
+      uid: uid,
+      contentByDate: kept,
+      keptForThisWeek: true,
+    );
   }
 
   /// Reads recent weekly summaries, most recent first.

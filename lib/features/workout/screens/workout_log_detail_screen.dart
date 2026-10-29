@@ -149,7 +149,7 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
                         Expanded(child: _statBlock('DURATION', '${durationMins}min')),
                         Expanded(
                           child: _statBlock(
-                            'VOLUME',
+                            'KG LIFTED',
                             totalVolume > 0 ? '${totalVolume.toStringAsFixed(0)}kg' : '—',
                           ),
                         ),

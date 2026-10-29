@@ -6,6 +6,8 @@ import '../../features/coach/screens/coach_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/workout/screens/workout_screen.dart';
 import '../../features/workout/services/notification_service.dart';
+import '../../features/workout/services/workout_plan_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class MainShell extends StatefulWidget{
   const MainShell({super.key});
@@ -36,12 +38,22 @@ class _MainShellState extends State<MainShell> {
     NotificationService().handleNotificationTaps().catchError(
       (Object e) => debugPrint('MainShell notification tap setup failed: $e'),
     );
+    // Weekly reminders follow the plan (V-20): once on opening — a new or
+    // reset plan always lands here — and after every schedule change.
+    _refreshReminders();
+    WorkoutPlanService.scheduleChanges.addListener(_refreshReminders);
   }
 
   @override
   void dispose() {
     NotificationService().recoveryMapRequests.removeListener(_openCoachTab);
+    WorkoutPlanService.scheduleChanges.removeListener(_refreshReminders);
     super.dispose();
+  }
+
+  void _refreshReminders() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) NotificationService().refreshWeeklyReminders(uid);
   }
 
   void _openCoachTab() {

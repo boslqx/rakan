@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'auth_service.dart';
 import '../screens/email_verification_screen.dart';
 import '../screens/login_screen.dart';
+import '../../legal/screens/terms_agreement_screen.dart';
+import '../../legal/services/legal_consent_service.dart';
 import '../../onboarding/screens/onboarding_shell.dart';
 import '../../onboarding/services/user_profile_service.dart';
 import '../../social/screens/choose_username_screen.dart';
@@ -27,7 +29,14 @@ class AuthNavigationService {
     }
 
     final hasProfile = await _profileService.hasCompletedOnboarding(user.uid);
-    if (!hasProfile) return const OnboardingShell();
+    if (!hasProfile) {
+      // New accounts that never ticked the Register box (e.g. Google from
+      // the Login screen) agree once before onboarding.
+      if (!await LegalConsentService().hasAccepted(user.uid)) {
+        return const TermsAgreementScreen();
+      }
+      return const OnboardingShell();
+    }
 
     // Accounts that completed onboarding before the social feature shipped
     // won't have a username yet — gate them into claiming one once.

@@ -416,8 +416,9 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
           children: [
             _buildStat('DURATION', '${widget.durationMins}', 'MIN'),
             _buildDivider(),
+            // reps × kg — bodyweight sets add nothing (V-17).
             _buildStat(
-                'VOLUME', widget.totalVolume.toStringAsFixed(0), 'KG'),
+                'LIFTED', widget.totalVolume.toStringAsFixed(0), 'KG'),
             _buildDivider(),
             _buildStat('EXERCISES', '${widget.exerciseCount}', 'DONE'),
           ],
