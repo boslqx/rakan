@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/onboarding_data.dart';
 import '../../social/services/public_profile_service.dart';
+import '../../legal/services/legal_consent_service.dart';
 
 class UserProfileService {
   // Get a reference to Firestore
@@ -12,12 +13,18 @@ class UserProfileService {
     required String uid,
     required OnboardingData data,
   }) async {
+    // Terms acceptance from sign-up that couldn't be written while the
+    // email was unverified goes in with the profile (see LegalConsentService).
+    final consent = LegalConsentService();
+    final consentFields = await consent.pendingFields(uid);
+
     await _db
         .collection('users')
         .doc(uid)
         .collection('profile')
         .doc('data')
-        .set(data.toMap(), SetOptions(merge: true));
+        .set({...data.toMap(), ...consentFields}, SetOptions(merge: true));
+    if (consentFields.isNotEmpty) await consent.clearPending(uid);
 
     // Public index doc for search/follow — username is already claimed by
     // Step1Profile at this point, this just syncs name/photo alongside it.

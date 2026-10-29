@@ -2,26 +2,47 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../../../core/utils/backend_headers.dart';
 import '../../onboarding/services/user_profile_service.dart';
 import '../../workout/services/notification_service.dart';
 
 /// Maps a BodyRegion (stored as its raw .name string, e.g. "rightShoulder")
-const Map<String, List<String>> kBodyRegionToMuscleGroups = {
-  'leftShoulder': ['shoulders', 'arms'],
-  'rightShoulder': ['shoulders', 'arms'],
-  'chest': ['chest'],
-  'upperBack': ['back'],
-  'leftArm': ['arms'],
-  'rightArm': ['arms'],
-  'core': ['abs'],
-  'lowerBack': ['back', 'abs'],
-  'leftHip': ['legs', 'glutes'],
-  'rightHip': ['legs', 'glutes'],
-  'leftKnee': ['legs'],
-  'rightKnee': ['legs'],
-  'leftAnkle': ['legs'],
-  'rightAnkle': ['legs'],
+/// to the app muscle groups an injury there pauses. The single source for
+/// both the plan rebuild and the Coach readiness card, so the two always
+/// agree (L-07 / V-16).
+const Map<String, List<String>> kBodyRegionToAppMuscleGroups = {
+  'leftShoulder': ['Shoulders', 'Arms'],
+  'rightShoulder': ['Shoulders', 'Arms'],
+  'chest': ['Chest'],
+  'upperBack': ['Back'],
+  'leftArm': ['Arms'],
+  'rightArm': ['Arms'],
+  'core': ['Core'],
+  'lowerBack': ['Back', 'Core'],
+  'leftHip': ['Legs', 'Glutes'],
+  'rightHip': ['Legs', 'Glutes'],
+  'leftKnee': ['Legs'],
+  'rightKnee': ['Legs'],
+  'leftAnkle': ['Legs'],
+  'rightAnkle': ['Legs'],
   // 'head' and 'neck' deliberately omitted
+};
+
+/// App muscle group → the backend's name for it (/regenerate-plan).
+const Map<String, String> kAppGroupToBackendGroup = {
+  'Chest': 'chest',
+  'Back': 'back',
+  'Shoulders': 'shoulders',
+  'Arms': 'arms',
+  'Core': 'abs',
+  'Legs': 'legs',
+  'Glutes': 'glutes',
+};
+
+/// [kBodyRegionToAppMuscleGroups] in the backend's vocabulary.
+final Map<String, List<String>> kBodyRegionToMuscleGroups = {
+  for (final entry in kBodyRegionToAppMuscleGroups.entries)
+    entry.key: [for (final g in entry.value) kAppGroupToBackendGroup[g]!],
 };
 
 class InjuryService {
@@ -31,19 +52,35 @@ class InjuryService {
   CollectionReference<Map<String, dynamic>> _injuries(String uid) =>
       _db.collection('users').doc(uid).collection('injuries');
 
-  /// Computes the union of excluded muscle groups
-  static Set<String> excludedGroupsFor(List<Map<String, dynamic>> injuries) {
-    final excluded = <String>{};
+  /// App muscle groups paused by every injury that isn't recovered yet.
+  static Set<String> pausedAppGroupsFor(List<Map<String, dynamic>> injuries) {
+    final paused = <String>{};
     for (final injury in injuries) {
       final status = injury['status'] as String?;
       if (status == 'recovered') continue;
       final region = injury['region'] as String?;
       if (region == null) continue;
-      final groups = kBodyRegionToMuscleGroups[region];
-      if (groups != null) excluded.addAll(groups);
+      final groups = kBodyRegionToAppMuscleGroups[region];
+      if (groups != null) paused.addAll(groups);
     }
-    return excluded;
+    return paused;
   }
+
+  /// Computes the union of excluded muscle groups, in the backend's names
+  static Set<String> excludedGroupsFor(List<Map<String, dynamic>> injuries) =>
+      pausedAppGroupsFor(injuries)
+          .map((g) => kAppGroupToBackendGroup[g]!)
+          .toSet();
+
+  /// Whether going from [before] to [after] changes the paused muscle
+  /// groups. When it doesn't (Active → Recovering, or another injury in an
+  /// area that's already paused) the plan rebuild is skipped, so the plan
+  /// isn't reshuffled for nothing (D-27).
+  static bool changesPausedGroups(
+    List<Map<String, dynamic>> before,
+    List<Map<String, dynamic>> after,
+  ) =>
+      !setEquals(excludedGroupsFor(before), excludedGroupsFor(after));
 
   /// Fetches current injuries fresh from Firestore
   Future<void> triggerRegeneration({
@@ -78,7 +115,7 @@ class InjuryService {
       await http
           .post(
             Uri.parse('$_baseUrl/regenerate-plan'),
-            headers: {'Content-Type': 'application/json'},
+            headers: await backendHeaders(),
             body: body,
           )
           .timeout(const Duration(seconds: 90));

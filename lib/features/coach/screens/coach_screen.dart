@@ -8,6 +8,7 @@ import 'package:flutter_body_heatmap/flutter_body_heatmap.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../../workout/services/notification_service.dart';
+import '../../workout/services/workout_log_service.dart';
 import '../services/injury_service.dart';
 import '../../workout/data/exercise_data.dart';
 import 'dart:convert';
@@ -387,6 +388,18 @@ class _CoachScreenState extends State<CoachScreen> {
           .collection('injuries')
           .get();
 
+      // Scores are stored when a workout is saved; recompute them for
+      // today's 7-day window so a muscle stops showing "fatigued" days
+      // after its last session (V-11). Bounded so a slow or offline
+      // connection doesn't hold the tab — the stored scores show instead.
+      try {
+        await WorkoutLogService()
+            .updateMuscleRecovery(_uid)
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        debugPrint('CoachScreen recovery refresh skipped: $e');
+      }
+
       final muscleRecoverySnap = await _db
           .collection('users')
           .doc(_uid)
@@ -408,6 +421,7 @@ class _CoachScreenState extends State<CoachScreen> {
               .doc(_uid)
               .collection('injuries')
               .get();
+          if (!mounted) return;
           setState(() {
             _injuries = reloaded.docs
                 .map((d) => {'id': d.id, ...d.data()})
@@ -419,6 +433,7 @@ class _CoachScreenState extends State<CoachScreen> {
         }
       }
 
+      if (!mounted) return;
       setState(() {
         _injuries = injurySnap.docs
             .map((d) => {'id': d.id, ...d.data()})
@@ -431,6 +446,7 @@ class _CoachScreenState extends State<CoachScreen> {
       InjuryService().backfillRecoveryReminders(_uid, _injuries);
     } catch (e) {
       debugPrint('CoachScreen recovery error: $e');
+      if (!mounted) return;
       setState(() => _recoveryLoading = false);
     }
   }
@@ -1284,29 +1300,13 @@ class _CoachScreenState extends State<CoachScreen> {
 
   // Readiness — which muscle groups are fresh to train, from the same
   // muscleRecovery data (and injuries) that colour the body map below.
-  static const _injuryRegionGroup = {
-    'chest': 'Chest',
-    'upperBack': 'Back',
-    'lowerBack': 'Back',
-    'neck': 'Back',
-    'leftShoulder': 'Shoulders',
-    'rightShoulder': 'Shoulders',
-    'leftArm': 'Arms',
-    'rightArm': 'Arms',
-    'core': 'Core',
-    'leftHip': 'Glutes',
-    'rightHip': 'Glutes',
-    'leftKnee': 'Legs',
-    'rightKnee': 'Legs',
-    'leftAnkle': 'Legs',
-    'rightAnkle': 'Legs',
-  };
+  // An injury marks the same groups the plan pauses for it
+  // (kBodyRegionToAppMuscleGroups).
 
   /// (state, days since trained) — state is one of ready, recovering,
   /// fatigued, injured, unknown.
   (String, int?) _readinessOf(String group) {
-    final injured = _injuries.any((i) =>
-        i['status'] != 'recovered' && _injuryRegionGroup[i['region']] == group);
+    final injured = InjuryService.pausedAppGroupsFor(_injuries).contains(group);
     final doc = _muscleRecoveryData[group];
     final lastTrained = DateTime.tryParse(doc?['lastTrained'] as String? ?? '');
     final daysAgo = lastTrained == null
@@ -1594,11 +1594,11 @@ class _CoachScreenState extends State<CoachScreen> {
     if (activeInjuries.isNotEmpty) {
       final labels = activeInjuries.map((i) => i['label']).join(', ');
       insight =
-          'Active injury detected: $labels. Your next workout plan will avoid exercises that stress this area. Rest and ice if needed.';
+          'Active injury detected: $labels. Your plan pauses the muscle groups linked to this area until it recovers. Rakan is not medical advice (see the Terms); if pain persists, see a doctor or physiotherapist.';
     } else if (recoveringInjuries.isNotEmpty) {
       final labels = recoveringInjuries.map((i) => i['label']).join(', ');
       insight =
-          'You are recovering from: $labels. Light mobility and rehab exercises will be prioritised in your plan.';
+          'You are recovering from: $labels. The linked muscle groups stay paused until you mark it recovered. Rakan is not medical advice (see the Terms); follow your doctor\'s or physiotherapist\'s guidance on returning to training.';
     } else {
       insight =
           'No active injuries. Your plan is running at full intensity. Keep monitoring how your body feels after each session.';
@@ -1656,6 +1656,10 @@ class _CoachScreenState extends State<CoachScreen> {
 
   Future<void> _updateInjuryStatus(String injuryId, String newStatus) async {
     if (_uid == null) return;
+    final pausedGroupsChange = InjuryService.changesPausedGroups(_injuries, [
+      for (final i in _injuries)
+        i['id'] == injuryId ? {...i, 'status': newStatus} : i,
+    ]);
     await _db
         .collection('users')
         .doc(_uid)
@@ -1684,7 +1688,10 @@ class _CoachScreenState extends State<CoachScreen> {
       }
     }
 
-    final plan = await WorkoutPlanService().getActivePlan(_uid);
+    // Active → Recovering keeps the same groups paused: nothing to rebuild.
+    final plan = pausedGroupsChange
+        ? await WorkoutPlanService().getActivePlan(_uid)
+        : null;
     if (plan != null) {
       await InjuryService().triggerRegeneration(
         uid: _uid,

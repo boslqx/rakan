@@ -2,8 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../core/utils/validators.dart';
+import '../../../shared/widgets/password_checklist.dart';
 
 class ChangePasswordDialog {
+  /// Form check run before contacting Firebase. The new password must meet
+  /// the same rules as sign-up (`Validators.registerPassword`), so an
+  /// account can't be weakened after it is created. Returns null if valid.
+  static String? validate({
+    required String current,
+    required String newPassword,
+    required String confirm,
+  }) {
+    if (current.isEmpty || newPassword.isEmpty || confirm.isEmpty) {
+      return 'All fields are required';
+    }
+    if (Validators.registerPassword(newPassword) != null) {
+      return 'New password does not meet all requirements';
+    }
+    if (newPassword != confirm) return 'Passwords do not match';
+    return null;
+  }
+
   static Future<void> show(BuildContext context) async {
     final currentPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
@@ -51,7 +71,12 @@ class ChangePasswordDialog {
                   _buildField(
                     controller: newPasswordController,
                     label: 'New Password',
+                    onChanged: (_) => setState(() {}),
                   ),
+                  if (newPasswordController.text.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    PasswordChecklist(password: newPasswordController.text),
+                  ],
                   const SizedBox(height: 12),
                   _buildField(
                     controller: confirmPasswordController,
@@ -87,16 +112,13 @@ class ChangePasswordDialog {
                         final newPass = newPasswordController.text;
                         final confirm = confirmPasswordController.text;
 
-                        if (current.isEmpty || newPass.isEmpty || confirm.isEmpty) {
-                          setState(() => errorText = 'All fields are required');
-                          return;
-                        }
-                        if (newPass.length < 6) {
-                          setState(() => errorText = 'New password must be at least 6 characters');
-                          return;
-                        }
-                        if (newPass != confirm) {
-                          setState(() => errorText = 'Passwords do not match');
+                        final invalid = validate(
+                          current: current,
+                          newPassword: newPass,
+                          confirm: confirm,
+                        );
+                        if (invalid != null) {
+                          setState(() => errorText = invalid);
                           return;
                         }
 
@@ -173,9 +195,11 @@ class ChangePasswordDialog {
   static Widget _buildField({
     required TextEditingController controller,
     required String label,
+    ValueChanged<String>? onChanged,
   }) {
     return TextField(
       controller: controller,
+      onChanged: onChanged,
       obscureText: true,
       style: GoogleFonts.manrope(fontSize: 14, color: AppColors.onSurface),
       decoration: InputDecoration(

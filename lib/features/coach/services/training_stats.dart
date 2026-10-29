@@ -52,6 +52,15 @@ class StatsWindow {
 
   bool contains(DateTime date) => !date.isBefore(start) && date.isBefore(end);
 
+  /// The part of this window from [planStart] on (the whole window when
+  /// null), so a plan isn't measured on days before it existed (V-15).
+  StatsWindow since(DateTime? planStart) {
+    if (planStart == null) return this;
+    final from = dateOnly(planStart);
+    if (!from.isAfter(start)) return this;
+    return StatsWindow(from.isAfter(end) ? end : from, end);
+  }
+
   StatsWindow shift(int days) => StatsWindow(addDays(start, days), addDays(end, days));
 }
 
@@ -91,39 +100,52 @@ class PeriodSummary {
   final int minutes;
   final double volume;
 
-  /// Workouts the plan scheduled in the period, up to today.
+  /// Workouts the plan scheduled in the period, from the plan's start up
+  /// to today.
   final int scheduled;
+
+  /// Workouts completed in the same days as [scheduled] (from the plan's
+  /// start), which is what adherence compares against.
+  final int planWorkouts;
 
   const PeriodSummary({
     required this.workouts,
     required this.minutes,
     required this.volume,
     required this.scheduled,
+    required this.planWorkouts,
   });
 
   /// Completed vs scheduled so far (capped at 1), or null with no plan.
-  double? get adherence =>
-      scheduled == 0 ? null : (workouts / scheduled).clamp(0.0, 1.0).toDouble();
+  double? get adherence => scheduled == 0
+      ? null
+      : (planWorkouts / scheduled).clamp(0.0, 1.0).toDouble();
 }
 
+/// [planStart] is the active plan's `generatedAt`: scheduled sessions are
+/// counted from then, so a new plan doesn't start far behind (V-15). Null
+/// counts the whole window.
 PeriodSummary summarize(
   List<Map<String, dynamic>> logs,
   List<Map<String, dynamic>> planDays,
-  StatsWindow window,
-) {
-  var workouts = 0, minutes = 0;
+  StatsWindow window, {
+  DateTime? planStart,
+}) {
+  final planWindow = window.since(planStart);
+  var workouts = 0, minutes = 0, planWorkouts = 0;
   var volume = 0.0;
   for (final log in logs) {
     final date = logDate(log);
     if (date == null || !isCompletedLog(log) || !window.contains(date)) continue;
     workouts++;
+    if (planWindow.contains(date)) planWorkouts++;
     minutes += (log['totalDurationMins'] as num?)?.toInt() ?? 0;
     volume += (log['totalVolume'] as num?)?.toDouble() ?? 0;
   }
 
   final byWeekday = workoutDaysByWeekday(planDays);
   var scheduled = 0;
-  for (var d = window.start; d.isBefore(window.end); d = addDays(d, 1)) {
+  for (var d = planWindow.start; d.isBefore(planWindow.end); d = addDays(d, 1)) {
     if (byWeekday.containsKey(d.weekday)) scheduled++;
   }
 
@@ -132,6 +154,7 @@ PeriodSummary summarize(
     minutes: minutes,
     volume: volume,
     scheduled: scheduled,
+    planWorkouts: planWorkouts,
   );
 }
 
@@ -215,15 +238,16 @@ List<Map<String, dynamic>> completedSetsOf(Map<String, dynamic> exerciseLog) =>
         .toList();
 
 /// Completed sets per muscle group in [window] vs the plan's scheduled sets
-/// for the same days. Volume uses the same per-set rule as
-/// WorkoutLogService.updateMuscleRecovery: reps × kg, or reps alone for
-/// bodyweight sets.
+/// for the same days (counted from [planStart], as in [summarize]). Volume
+/// uses the same per-set rule as WorkoutLogService.updateMuscleRecovery:
+/// reps × kg, or reps alone for bodyweight sets.
 List<MuscleBalance> muscleBalance(
   List<Map<String, dynamic>> logs,
   Map<String, List<Map<String, dynamic>>> exerciseLogsByLog,
   List<Map<String, dynamic>> planDays,
-  StatsWindow window,
-) {
+  StatsWindow window, {
+  DateTime? planStart,
+}) {
   final sets = <String, int>{}, sessions = <String, Set<String>>{};
   final volume = <String, double>{};
   final exercises = <String, Set<String>>{};
@@ -250,7 +274,8 @@ List<MuscleBalance> muscleBalance(
 
   final targets = <String, int>{};
   final byWeekday = workoutDaysByWeekday(planDays);
-  for (var d = window.start; d.isBefore(window.end); d = addDays(d, 1)) {
+  final planWindow = window.since(planStart);
+  for (var d = planWindow.start; d.isBefore(planWindow.end); d = addDays(d, 1)) {
     final day = byWeekday[d.weekday];
     if (day == null) continue;
     for (final ex in (day['exercises'] as List? ?? const []).cast<Map<String, dynamic>>()) {

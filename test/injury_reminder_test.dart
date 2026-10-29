@@ -139,6 +139,71 @@ void main() {
     });
   });
 
+  // V-16 / L-07: the Coach readiness card and the plan rebuild use one map.
+  group('region to muscle groups', () {
+    test('every region marks the same groups in both places', () {
+      const regions = [
+        'head', 'neck', 'chest', 'upperBack', 'lowerBack', 'core',
+        'leftShoulder', 'rightShoulder', 'leftArm', 'rightArm',
+        'leftHip', 'rightHip', 'leftKnee', 'rightKnee',
+        'leftAnkle', 'rightAnkle',
+      ];
+      for (final region in regions) {
+        final injury = [
+          {'region': region, 'status': 'active'},
+        ];
+        final card = InjuryService.pausedAppGroupsFor(injury);
+        final plan = InjuryService.excludedGroupsFor(injury);
+        expect(card.map((g) => kAppGroupToBackendGroup[g]).toSet(), plan,
+            reason: region);
+      }
+    });
+
+    test('shoulder, lower back and hip mark every paused group', () {
+      Set<String> card(String region) => InjuryService.pausedAppGroupsFor([
+            {'region': region, 'status': 'active'},
+          ]);
+      expect(card('leftShoulder'), {'Shoulders', 'Arms'});
+      expect(card('lowerBack'), {'Back', 'Core'});
+      expect(card('rightHip'), {'Legs', 'Glutes'});
+    });
+
+    // P0-4 / D-27: no rebuild when the paused groups stay the same.
+    test('Active to Recovering does not change the paused groups', () {
+      final before = [
+        {'id': 'a', 'region': 'leftShoulder', 'status': 'active'},
+      ];
+      final recovering = [
+        {'id': 'a', 'region': 'leftShoulder', 'status': 'recovering'},
+      ];
+      final recovered = [
+        {'id': 'a', 'region': 'leftShoulder', 'status': 'recovered'},
+      ];
+      expect(InjuryService.changesPausedGroups(before, recovering), isFalse);
+      expect(InjuryService.changesPausedGroups(recovering, recovered), isTrue);
+      // A second injury in an already paused area changes nothing either.
+      expect(
+        InjuryService.changesPausedGroups(before, [
+          ...before,
+          {'region': 'rightShoulder', 'status': 'active'},
+        ]),
+        isFalse,
+      );
+      expect(
+        InjuryService.changesPausedGroups(before, [
+          ...before,
+          {'region': 'leftKnee', 'status': 'active'},
+        ]),
+        isTrue,
+      );
+    });
+
+    test('app groups are the Coach muscle groups', () {
+      expect(kAppGroupToBackendGroup.keys.toSet(),
+          {'Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Glutes', 'Core'});
+    });
+  });
+
   test('onboarding injuries seed with the same shape as the profile', () {
     const entry = InjuryEntry(
       region: BodyRegion.rightShoulder,

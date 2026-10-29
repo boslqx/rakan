@@ -49,11 +49,11 @@ class ScheduleMatcher {
   /// calendar date that leaves the recurring weekly template alone: a
   /// missed session moved here (Phase 25 reschedule), or the date's own
   /// one-time version (an exercise added "just this time", a swap for this
-  /// week only — see WorkoutPlanService.setDaysForDates). Several muscle
-  /// groups from the same missed day can each be rescheduled independently
-  /// and land on the same date (see WorkoutPlanService.addScheduleOverride),
-  /// so this merges every matching override's exercises rather than
-  /// returning just one and silently dropping the rest.
+  /// week only — see WorkoutPlanService.setDaysForDates). A missed session
+  /// now moves whole, as one version; older data can still hold several
+  /// per-muscle-group moves on one date, so this merges every matching
+  /// override's exercises rather than returning just one and silently
+  /// dropping the rest.
   ///
   /// A one-time version that's a rest day (a workout swapped away for the
   /// week) leaves the date empty, so a missed session can be rescheduled

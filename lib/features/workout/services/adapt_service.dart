@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
+import '../../../core/utils/backend_headers.dart';
 import '../data/exercise_data.dart';
 import 'schedule_matcher.dart';
 import 'workout_log_service.dart';
@@ -14,20 +16,28 @@ class LoggedExerciseInfo {
   LoggedExerciseInfo({required this.exerciseName});
 }
 
-/// A scheduled occurrence of [muscleGroup] on [date] that passed with no
-/// completed log and hasn't been shown to the user yet (Phase 25 missed-day
-/// popup — see [AdaptService.findMissedDays]).
+/// A scheduled session on [date] that passed with no completed log and
+/// hasn't been resolved yet (Phase 25 missed-day popup — see
+/// [AdaptService.findMissedDays]). The whole day, whatever it trained: it's
+/// moved or skipped as one session.
 class MissedDay {
-  final String muscleGroup;
   final DateTime date;
+  final String workoutName;
 
-  MissedDay({required this.muscleGroup, required this.date});
+  /// Every muscle group the session trains — a skip records a break for each.
+  final List<String> muscleGroups;
 
-  /// Stable identity for this missed occurrence — muscle group + date, the
-  /// same pairing that keys its Firestore resolution doc. Use this (not a
-  /// list index) for any UI or map/set keying: list positions shift when
-  /// items resolve out of order, but this doesn't.
-  String get key => '$muscleGroup|${ScheduleMatcher.dateKey(date)}';
+  MissedDay({
+    required this.date,
+    required this.workoutName,
+    required this.muscleGroups,
+  });
+
+  /// Stable identity for this missed session — its date, which also keys
+  /// its Firestore resolution doc. Use this (not a list index) for any UI
+  /// or map/set keying: list positions shift when items resolve out of
+  /// order, but this doesn't.
+  String get key => ScheduleMatcher.dateKey(date);
 }
 
 class AdaptService {
@@ -42,10 +52,12 @@ class AdaptService {
 
   // A missed day stops being reschedulable this many days after it was
   // missed — past this, it's automatically resolved as skipped (see
-  // partitionMissedDaysByExpiry). Independent of the reschedule-day-finding
-  // constraints in computeValidRescheduleDays — this gates whether that
-  // search is even attempted, not a competing window within it.
+  // partitionMissedDaysByExpiry). Independent of which days it can move to
+  // (computeRescheduleDays) — this gates whether moving is offered at all.
   static const int _rescheduleExpiryDays = 7;
+
+  // How far ahead a missed session can be moved — see computeRescheduleDays.
+  static const int _rescheduleWindowDays = 7;
 
   /// Builds one proposal payload per unique primary muscle group
   static List<Map<String, dynamic>> buildSessionProposals({
@@ -111,12 +123,13 @@ class AdaptService {
     };
   }
 
-  /// Scans backward from yesterday for scheduled occurrences that passed
-  /// with no completed log and have no resolution recorded yet (neither
-  /// rescheduled nor skipped — see [resolveMissedDayAsRescheduled] /
-  /// [resolveMissedDayAsSkipped]). This is purely detection for the
-  /// popup — it does not create proposals or gate on a streak length;
-  /// Phase 25 replaced streak-counting with the user's explicit choice.
+  /// Scans backward from yesterday for scheduled sessions that passed with
+  /// no completed log and have no resolution recorded yet (neither moved
+  /// nor skipped — see [resolveMissedDayAsRescheduled] /
+  /// [resolveMissedDayAsSkipped]). One [MissedDay] per date: the whole
+  /// session, whatever it trained. This is purely detection for the popup
+  /// — it does not create proposals or gate on a streak length; Phase 25
+  /// replaced streak-counting with the user's explicit choice.
   ///
   /// [planStartDate] bounds how far back the scan can go: a plan's
   /// `days` are a recurring weekday template with no calendar anchor of
@@ -130,9 +143,17 @@ class AdaptService {
   /// written before that field existed) — never to intentionally widen
   /// the scan.
   ///
+  /// [checkedThrough] is the last date an earlier scan settled — everything
+  /// up to it was logged, resolved, or not a workout when it was checked —
+  /// so the scan stops there. Without it a later plan change (a rest day
+  /// swapped into a workout, say) would turn an old date into a newly
+  /// "missed" one.
+  ///
   /// Each date is read through [ScheduleMatcher.resolvedDayForDate], so a
   /// workout swapped away for that week isn't flagged on its old day, and
-  /// one swapped or rescheduled onto a date is flagged there if skipped.
+  /// one swapped or moved onto a date is flagged there if skipped.
+  /// [resolvedKeys] are resolution doc IDs: a date key, or a legacy
+  /// per-muscle-group 'Chest|date' — either settles that date.
   static List<MissedDay> computeMissedDays({
     required List<Map<String, dynamic>> planDays,
     required List<Map<String, dynamic>> logs,
@@ -140,108 +161,82 @@ class AdaptService {
     required DateTime today,
     required DateTime? planStartDate,
     List<Map<String, dynamic>> overrides = const [],
+    DateTime? checkedThrough,
     int scanLimitDays = _scheduleScanLimitDays,
   }) {
     final missed = <MissedDay>[];
     final startDateOnly = planStartDate != null ? _dateOnly(planStartDate) : null;
+    final checkedOnly = checkedThrough != null ? _dateOnly(checkedThrough) : null;
+    final resolvedDates = {for (final key in resolvedKeys) key.split('|').last};
 
     for (int offset = 1; offset <= scanLimitDays; offset++) {
       final date = DateTime(today.year, today.month, today.day)
           .subtract(Duration(days: offset));
 
       // Scanning strictly backward in time — once a date is before the
-      // plan's start, every earlier offset will be too.
+      // plan's start, or already settled, every earlier offset will be too.
       if (startDateOnly != null && date.isBefore(startDateOnly)) break;
+      if (checkedOnly != null && !date.isAfter(checkedOnly)) break;
 
-      final planDay = ScheduleMatcher.resolvedDayForDate(planDays, overrides, date);
-      if (planDay == null || planDay['dayType'] == 'rest') continue;
+      final day = ScheduleMatcher.resolvedDayForDate(planDays, overrides, date);
+      if (day == null || day['dayType'] == 'rest') continue;
 
-      final muscleGroups = _muscleGroupsForPlanDay(planDay);
+      final muscleGroups = _muscleGroupsForPlanDay(day);
       if (muscleGroups.isEmpty) continue;
 
       if (ScheduleMatcher.logForDate(logs, date) != null) continue; // completed, not missed
+      if (resolvedDates.contains(ScheduleMatcher.dateKey(date))) continue;
 
-      for (final group in muscleGroups) {
-        if (resolvedKeys.contains(_missedDayKey(group, date))) continue;
-        missed.add(MissedDay(muscleGroup: group, date: date));
-      }
+      missed.add(MissedDay(
+        date: date,
+        workoutName: day['workoutName'] as String? ?? 'Workout',
+        muscleGroups: muscleGroups.toList(),
+      ));
     }
 
     return missed;
   }
 
-  /// Finds every valid empty day to move [muscleGroup]'s [missedDate]
-  /// session to (Part A). Forward-scanning mirror of the old backward
-  /// streak scan. A candidate date must be:
-  ///   1. Strictly after [missedDate], and after today if [missedDate] is
-  ///      in the past.
-  ///   2. At least 48 hours after [lastTrainedDate] — the muscle group's
-  ///      actual last completed session, not the missed scheduled date.
-  ///   3. Strictly before the next already-scheduled occurrence of
-  ///      [muscleGroup] in the plan.
-  ///   4. An empty day — no plan day or a rest day, and no existing
-  ///      override already occupying it.
-  /// Returns every date in [candidateStart, nextOccurrence) satisfying
-  /// constraint 4, in order — possibly empty, including when constraint 2
-  /// pushes at or past constraint 3 (no valid window at all). This is a
-  /// separate axis from the missed-day reschedule-eligibility expiry (see
-  /// [_rescheduleExpiryDays]/[partitionMissedDaysByExpiry]) — no "within N
-  /// days" cutoff is applied here; the four constraints above are the
-  /// complete window definition.
-  static List<DateTime> computeValidRescheduleDays({
+  /// Every rest day a missed session can be moved to: from today, up to
+  /// [windowDays] ahead, and before that same workout (the same plan day)
+  /// comes round again — so it's never doubled up with its own next
+  /// session. A day counts as rest when nothing is scheduled on it (a rest
+  /// day, or a workout swapped away that week) and nothing was logged on
+  /// it. Possibly empty, leaving only a skip.
+  static List<DateTime> computeRescheduleDays({
     required List<Map<String, dynamic>> planDays,
     required List<Map<String, dynamic>> overrides,
-    required String muscleGroup,
+    required List<Map<String, dynamic>> logs,
     required DateTime missedDate,
-    required DateTime? lastTrainedDate,
     required DateTime today,
-    int scanLimitDays = _scheduleScanLimitDays,
+    int windowDays = _rescheduleWindowDays,
   }) {
-    final missedDay = _dateOnly(missedDate);
+    final missedOnly = _dateOnly(missedDate);
     final todayOnly = _dateOnly(today);
+    final missedSession = ScheduleMatcher.resolvedDayForDate(planDays, overrides, missedOnly);
+    final workoutId = missedSession == null ? null : _planDayIdOf(missedSession);
 
-    // Constraint 1.
-    final afterMissed = missedDay.add(const Duration(days: 1));
-    final afterToday = todayOnly.add(const Duration(days: 1));
-    var candidateStart = afterMissed.isAfter(afterToday) ? afterMissed : afterToday;
+    final days = <DateTime>[];
+    for (int offset = 0; offset <= windowDays; offset++) {
+      final date = todayOnly.add(Duration(days: offset));
+      if (!date.isAfter(missedOnly)) continue;
 
-    // Constraint 3: next already-scheduled occurrence of the same muscle
-    // group, scanning forward from the missed day.
-    DateTime? nextOccurrence;
-    for (int offset = 1; offset <= scanLimitDays; offset++) {
-      final date = missedDay.add(Duration(days: offset));
-      final resolvedDay = ScheduleMatcher.resolvedDayForDate(planDays, overrides, date);
-      if (resolvedDay == null || resolvedDay['dayType'] == 'rest') continue;
-      if (_muscleGroupsForPlanDay(resolvedDay).contains(muscleGroup)) {
-        nextOccurrence = date;
-        break;
+      final day = ScheduleMatcher.resolvedDayForDate(planDays, overrides, date);
+      if (day != null && day['dayType'] != 'rest') {
+        if (workoutId != null && _planDayIdOf(day) == workoutId) break; // its next session
+        continue;
       }
-    }
-    if (nextOccurrence == null) return const []; // no known bound — can't confirm a safe window
-
-    // Constraint 2.
-    if (lastTrainedDate != null) {
-      final floor = _dateOnly(lastTrainedDate).add(const Duration(days: 2));
-      if (floor.isAfter(candidateStart)) candidateStart = floor;
+      if (ScheduleMatcher.logForDate(logs, date) != null) continue;
+      days.add(date);
     }
 
-    if (!candidateStart.isBefore(nextOccurrence)) {
-      return const []; // constraint 2 pushed at/past constraint 3 — no window, not even same-day
-    }
-
-    // Constraint 4: every empty day in [candidateStart, nextOccurrence).
-    final validDays = <DateTime>[];
-    for (DateTime date = candidateStart;
-        date.isBefore(nextOccurrence);
-        date = date.add(const Duration(days: 1))) {
-      final resolvedDay = ScheduleMatcher.resolvedDayForDate(planDays, overrides, date);
-      if (resolvedDay == null || resolvedDay['dayType'] == 'rest') {
-        validDays.add(date);
-      }
-    }
-
-    return validDays;
+    return days;
   }
+
+  /// The plan day a scheduled day's workout belongs to: a plan day's own
+  /// 'id', or the one a one-time version was made from.
+  static String? _planDayIdOf(Map<String, dynamic> day) =>
+      (day['id'] ?? day['planDayId']) as String?;
 
   /// Splits already-detected, still-unresolved [missedDays] into those
   /// still within the [_rescheduleExpiryDays]-day reschedule-eligible
@@ -296,9 +291,7 @@ class AdaptService {
 
   /// Resolves a single plan-stored exercise's muscle group — direct field
   /// first, falling back to the static exercise table for older plans
-  /// written before that field existed. Shared by
-  /// [_muscleGroupsForPlanDay] and [resolveMissedDayAsRescheduled] so both
-  /// use the same one resolution rule (Decision #46).
+  /// written before that field existed (Decision #46).
   static String? _exerciseMuscleGroup(Map<String, dynamic> exercise) {
     final name = exercise['exerciseName'] as String?;
     return exercise['muscleGroup'] as String? ??
@@ -309,10 +302,10 @@ class AdaptService {
   /// missed days, runs [computeMissedDays] over them, then sweeps the
   /// result through [partitionMissedDaysByExpiry]: anything past the
   /// [_rescheduleExpiryDays]-day window is auto-resolved as skipped right
-  /// here (same [resolveMissedDayAsSkipped] path an explicit "Skip
-  /// entirely" tap uses) before this returns, so the caller never has to
-  /// separately remember to do it. [actionable] is what the popup should
-  /// show as live cards; [autoSkipped] is what it should show read-only.
+  /// here (same [resolveMissedDayAsSkipped] path an explicit "Skip" tap
+  /// uses) before this returns, so the caller never has to separately
+  /// remember to do it. [actionable] is what the popup should show as live
+  /// cards; [autoSkipped] is what it should show read-only.
   Future<({List<MissedDay> actionable, List<MissedDay> autoSkipped})>
       findMissedDays(String uid) async {
     final plan = await WorkoutPlanService().getActivePlan(uid);
@@ -325,7 +318,7 @@ class AdaptService {
 
     final logs = await WorkoutLogService()
         .getRecentLogs(uid, limit: _scheduleScanLimitDays);
-    final resolvedKeys = await _getResolvedMissedDayKeys(uid);
+    final resolutions = await _getResolutions(uid);
     final overrides = await WorkoutPlanService().getScheduleOverrides(uid);
 
     // Bounds the backward scan to when this plan actually came into
@@ -339,77 +332,98 @@ class AdaptService {
         // day for plans generated before 8am Malaysia time.
         generatedAtStr != null ? DateTime.tryParse(generatedAtStr)?.toLocal() : null;
 
+    final today = DateTime.now();
     final allMissed = computeMissedDays(
       planDays: planDays,
       logs: logs,
-      resolvedKeys: resolvedKeys,
-      today: DateTime.now(),
+      resolvedKeys: resolutions.keys,
+      today: today,
       planStartDate: planStartDate,
       overrides: overrides,
+      checkedThrough: resolutions.checkedThrough,
     );
 
     final partition = partitionMissedDaysByExpiry(
       missedDays: allMissed,
-      today: DateTime.now(),
+      today: today,
     );
 
     for (final expired in partition.expired) {
-      await resolveMissedDayAsSkipped(
-        uid: uid,
-        muscleGroup: expired.muscleGroup,
-        missedDate: expired.date,
-      );
+      await resolveMissedDayAsSkipped(uid: uid, missed: expired);
     }
+
+    // Everything before the oldest session still awaiting a choice is now
+    // settled — logged, resolved, or not a workout.
+    final oldestOpen = partition.actionable.isEmpty
+        ? _dateOnly(today)
+        : partition.actionable.map((m) => m.date).reduce((a, b) => a.isBefore(b) ? a : b);
+    await _missedDayResolutions(uid).doc(_scanDocId).set({
+      'checkedThrough': ScheduleMatcher.dateKey(oldestOpen.subtract(const Duration(days: 1))),
+    });
 
     return (actionable: partition.actionable, autoSkipped: partition.expired);
   }
 
-  /// Fetches this user's active plan + overrides + [muscleGroup]'s actual
-  /// last-trained date, and runs [computeValidRescheduleDays] over them.
-  Future<List<DateTime>> findValidRescheduleDays({
+  /// Fetches this user's active plan, overrides and recent logs, and runs
+  /// [computeRescheduleDays] over them for [missed].
+  Future<List<DateTime>> findRescheduleDays({
     required String uid,
-    required String muscleGroup,
-    required DateTime missedDate,
+    required MissedDay missed,
   }) async {
     final plan = await WorkoutPlanService().getActivePlan(uid);
     if (plan == null) return const [];
 
     final planDays = (plan['days'] as List).cast<Map<String, dynamic>>();
     final overrides = await WorkoutPlanService().getScheduleOverrides(uid);
-    final lastTrainedDate = await WorkoutLogService()
-        .getLastTrainedDate(uid: uid, muscleGroup: muscleGroup);
+    final logs = await WorkoutLogService().getRecentLogs(uid, limit: 7);
 
-    return computeValidRescheduleDays(
+    return computeRescheduleDays(
       planDays: planDays,
       overrides: overrides,
-      muscleGroup: muscleGroup,
-      missedDate: missedDate,
-      lastTrainedDate: lastTrainedDate,
+      logs: logs,
+      missedDate: missed.date,
       today: DateTime.now(),
     );
   }
 
-  Future<Set<String>> _getResolvedMissedDayKeys(String uid) async {
-    final snapshot = await _db
-        .collection('users')
-        .doc(uid)
-        .collection('missedDayResolutions')
-        .get();
+  CollectionReference<Map<String, dynamic>> _missedDayResolutions(String uid) =>
+      _db.collection('users').doc(uid).collection('missedDayResolutions');
 
-    return snapshot.docs.map((d) => d.id).toSet();
+  /// Where [findMissedDays] keeps the last date it settled (see
+  /// computeMissedDays' checkedThrough) — alongside the resolutions, under
+  /// an ID no date key can collide with.
+  static const _scanDocId = '_scan';
+
+  Future<({Set<String> keys, DateTime? checkedThrough})> _getResolutions(String uid) async {
+    final snapshot = await _missedDayResolutions(uid).get();
+    DateTime? checkedThrough;
+    for (final doc in snapshot.docs) {
+      if (doc.id == _scanDocId) {
+        checkedThrough = DateTime.tryParse(doc.data()['checkedThrough'] as String? ?? '');
+      }
+    }
+    return (keys: snapshot.docs.map((d) => d.id).toSet(), checkedThrough: checkedThrough);
   }
 
-  /// Part B, "Move to [date]": records this missed day as rescheduled
-  /// (never a skip — nothing is written to adaptationProposals) and
-  /// installs the one-time schedule override so the moved session
-  /// actually appears on [rescheduledTo]. Only [muscleGroup]'s exercises
-  /// from the originally-missed day move — if that day trained several
-  /// muscle groups (e.g. a combined Push day), the others are unaffected
-  /// and keep whatever resolution they get on their own.
+  /// How each resolved missed date ended — 'skipped' or 'rescheduled' —
+  /// by date key, older per-muscle-group records included.
+  Future<Map<String, String>> getMissedDayStatuses(String uid) async {
+    final snapshot = await _missedDayResolutions(uid).get();
+    return {
+      for (final doc in snapshot.docs)
+        if (doc.id != _scanDocId)
+          doc.id.split('|').last: doc.data()['status'] as String? ?? 'skipped',
+    };
+  }
+
+  /// "Move to [rescheduledTo]": puts [missed]'s whole session on that rest
+  /// day as a one-time change — the plan stays as it is — and records the
+  /// missed date as moved (never a skip — nothing is written to
+  /// adaptationProposals). The moved session carries its source date, so
+  /// the original day reads as moved and the new one as a moved-in session.
   Future<void> resolveMissedDayAsRescheduled({
     required String uid,
-    required String muscleGroup,
-    required DateTime missedDate,
+    required MissedDay missed,
     required DateTime rescheduledTo,
   }) async {
     try {
@@ -417,94 +431,85 @@ class AdaptService {
       final planDays = (plan?['days'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final overrides = await WorkoutPlanService().getScheduleOverrides(uid);
       // Same lookup detection used, so what moves is what was missed.
-      final originalDay = ScheduleMatcher.resolvedDayForDate(planDays, overrides, missedDate);
-      final allExercises =
-          (originalDay?['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final groupExercises = allExercises
-          .where((exercise) => _exerciseMuscleGroup(exercise) == muscleGroup)
-          .toList();
+      final session = ScheduleMatcher.resolvedDayForDate(planDays, overrides, missed.date);
+      if (session == null) throw StateError('Nothing was scheduled on ${missed.key}');
 
-      await WorkoutPlanService().addScheduleOverride(
-        uid: uid,
-        date: rescheduledTo,
-        muscleGroup: muscleGroup,
-        workoutName: '$muscleGroup (Rescheduled)',
-        exercises: groupExercises,
-        sourceMissedDate: ScheduleMatcher.dateKey(missedDate),
-      );
+      await WorkoutPlanService().setDaysForDates(uid: uid, contentByDate: {
+        rescheduledTo: {
+          ...session,
+          'planDayId': ?_planDayIdOf(session),
+          'sourceMissedDate': null,
+          'sourceMissedDates': [missed.key],
+        },
+      });
 
-      await _db
-          .collection('users')
-          .doc(uid)
-          .collection('missedDayResolutions')
-          .doc(_missedDayKey(muscleGroup, missedDate))
-          .set({
-        'muscleGroup': muscleGroup,
-        'missedDate': ScheduleMatcher.dateKey(missedDate),
+      await _missedDayResolutions(uid).doc(missed.key).set({
+        'missedDate': missed.key,
+        'workoutName': missed.workoutName,
+        'muscleGroups': missed.muscleGroups,
         'status': 'rescheduled',
         'rescheduledToDate': ScheduleMatcher.dateKey(rescheduledTo),
         'resolvedAt': FieldValue.serverTimestamp(),
       });
+      WorkoutPlanService.scheduleChanges.value++;
     } catch (e, st) {
       // Surfaced rather than left silent: a caller awaiting this (the
       // missed-day popup) needs the rejection to know the card shouldn't
       // be treated as resolved.
       debugPrint('AdaptService.resolveMissedDayAsRescheduled failed for '
-          'uid=$uid muscleGroup=$muscleGroup missedDate=$missedDate: $e');
+          'uid=$uid missedDate=${missed.key}: $e');
       debugPrint('$st');
       rethrow;
     }
   }
 
-  /// Part B, "Skip entirely": the only path that counts toward detection.
-  /// Records the resolution (so the popup never re-asks about this missed
-  /// day) and writes an unconditional adaptationProposals entry — every
-  /// explicit skip is recorded, with no streak gate (Decision replaced;
-  /// see Part C).
+  /// "Skip": the only path that counts toward detection. Records the
+  /// resolution (so the popup never re-asks about this session) and writes
+  /// an unconditional adaptationProposals entry for each muscle group it
+  /// trained — every explicit skip is recorded, with no streak gate
+  /// (Decision replaced; see Part C).
   /// Also the automatic path an app-open sweep uses once a missed day's
   /// 7-day reschedule window has expired (see [findMissedDays] /
   /// [partitionMissedDaysByExpiry]) — same method, same proposal shape,
   /// whether the skip was tapped explicitly or resolved automatically.
   Future<void> resolveMissedDayAsSkipped({
     required String uid,
-    required String muscleGroup,
-    required DateTime missedDate,
+    required MissedDay missed,
   }) async {
     try {
-      await _db
-          .collection('users')
-          .doc(uid)
-          .collection('missedDayResolutions')
-          .doc(_missedDayKey(muscleGroup, missedDate))
-          .set({
-        'muscleGroup': muscleGroup,
-        'missedDate': ScheduleMatcher.dateKey(missedDate),
+      await _missedDayResolutions(uid).doc(missed.key).set({
+        'missedDate': missed.key,
+        'workoutName': missed.workoutName,
+        'muscleGroups': missed.muscleGroups,
         'status': 'skipped',
         'rescheduledToDate': null,
         'resolvedAt': FieldValue.serverTimestamp(),
       });
 
-      // Idempotency: don't stack a second pending skip proposal for a
-      // muscle group that already has one awaiting resolution.
-      if (await _hasPendingSkipProposal(uid, muscleGroup)) return;
+      for (final muscleGroup in missed.muscleGroups) {
+        // Idempotency: don't stack a second pending skip proposal for a
+        // muscle group that already has one awaiting resolution.
+        if (await _hasPendingSkipProposal(uid, muscleGroup)) continue;
 
-      final priorLastTrainedDate = await WorkoutLogService()
-          .getLastTrainedDate(uid: uid, muscleGroup: muscleGroup);
+        final priorLastTrainedDate = await WorkoutLogService()
+            .getLastTrainedDate(uid: uid, muscleGroup: muscleGroup);
 
-      final proposal = buildReturnFromBreakProposal(
-        muscleGroup: muscleGroup,
-        sourceLogId: _missedDayKey(muscleGroup, missedDate),
-        priorLastTrainedDate: priorLastTrainedDate,
-      );
+        final proposal = buildReturnFromBreakProposal(
+          muscleGroup: muscleGroup,
+          sourceLogId: _missedDayKey(muscleGroup, missed.date),
+          priorLastTrainedDate: priorLastTrainedDate,
+        );
 
-      await _db
-          .collection('users')
-          .doc(uid)
-          .collection('adaptationProposals')
-          .add(proposal);
+        await _db
+            .collection('users')
+            .doc(uid)
+            .collection('adaptationProposals')
+            .add(proposal);
+      }
+      WorkoutPlanService.scheduleChanges.value++;
     } catch (e, st) {
       debugPrint('AdaptService.resolveMissedDayAsSkipped failed for '
-          'uid=$uid muscleGroup=$muscleGroup missedDate=$missedDate: $e');
+          'uid=$uid missedDate=${missed.key}: $e');
       debugPrint('$st');
       rethrow;
     }
@@ -621,7 +626,85 @@ class AdaptService {
     return true;
   }
 
+  // V-12 / P1-7: a session whose /adapt-plan call fails (offline, server
+  // error, cold-start timeout) is kept on the device and retried on the
+  // next Home open, so it still feeds the weekly adaptation.
+  static String _pendingKey(String uid) => 'pending_adapt_predictions_$uid';
+
+  /// Queued sessions older than this are dropped: the weekly runs have
+  /// moved on and the reading no longer describes the current week.
+  static const Duration kPendingPredictionMaxAge = Duration(days: 14);
+
+  /// Sessions waiting for a retry, oldest first.
+  static Future<List<Map<String, dynamic>>> pendingPredictions(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_pendingKey(uid));
+    if (raw == null) return [];
+    try {
+      return (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> _savePending(
+      String uid, List<Map<String, dynamic>> entries) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (entries.isEmpty) {
+      await prefs.remove(_pendingKey(uid));
+    } else {
+      await prefs.setString(_pendingKey(uid), jsonEncode(entries));
+    }
+  }
+
+  /// Queues [entry] unless the same workout (sourceLogId) already is.
+  static Future<void> queuePrediction(
+      String uid, Map<String, dynamic> entry) async {
+    final entries = await pendingPredictions(uid);
+    if (entries.any((e) => e['sourceLogId'] == entry['sourceLogId'])) return;
+    await _savePending(uid, [...entries, entry]);
+  }
+
+  /// Entries still worth retrying at [now] (see [kPendingPredictionMaxAge]).
+  static List<Map<String, dynamic>> unexpiredPredictions(
+    List<Map<String, dynamic>> entries,
+    DateTime now,
+  ) =>
+      entries.where((e) {
+        final at = DateTime.tryParse(e['sessionAt'] as String? ?? '');
+        return at != null && now.difference(at) <= kPendingPredictionMaxAge;
+      }).toList();
+
+  /// Retries every queued session; ones that fail again stay queued.
+  /// Never throws — called fire-and-forget from Home.
+  Future<void> retryPendingPredictions(String uid) async {
+    try {
+      final entries = await pendingPredictions(uid);
+      if (entries.isEmpty) return;
+      final failed = <Map<String, dynamic>>[];
+      for (final entry in unexpiredPredictions(entries, DateTime.now())) {
+        try {
+          await _predict(uid, entry);
+        } catch (e) {
+          debugPrint('AdaptService: retry failed for ${entry['sourceLogId']}: $e');
+          failed.add(entry);
+        }
+      }
+      // Keep anything queued while this ran, too.
+      final processed = entries.map((e) => e['sourceLogId']).toSet();
+      final latest = await pendingPredictions(uid);
+      await _savePending(uid, [
+        ...failed,
+        ...latest.where((e) => !processed.contains(e['sourceLogId'])),
+      ]);
+    } catch (e) {
+      debugPrint('AdaptService: retryPendingPredictions failed: $e');
+    }
+  }
+
   /// Predicts fatigue and writes one adaptation proposal per unique primary
+  /// muscle group. If that fails, the session is queued for
+  /// [retryPendingPredictions] and '' is returned.
   Future<String> predictAndAdapt({
     required String uid,
     required double avgRpe,
@@ -633,70 +716,97 @@ class AdaptService {
     required String sourceLogId,
     required List<LoggedExerciseInfo> sessionExercises,
   }) async {
+    final entry = <String, dynamic>{
+      'avgRpe': avgRpe,
+      'maxRpe': maxRpe,
+      'sessionDuration': sessionDuration,
+      'exercisesCount': exercisesCount,
+      'completionRate': completionRate,
+      'experienceLevel': experienceLevel,
+      'sourceLogId': sourceLogId,
+      'exerciseNames': [for (final e in sessionExercises) e.exerciseName],
+      'sessionAt': DateTime.now().toIso8601String(),
+    };
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/adapt-plan'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'avg_rpe': avgRpe,
-          'max_rpe': maxRpe,
-          'session_duration': sessionDuration,
-          'exercises_count': exercisesCount,
-          'completion_rate': completionRate,
-          'experience_level': experienceLevel,
-        }),
-      ).timeout(const Duration(seconds: 60));
-
-      if (response.statusCode != 200) {
-        throw Exception('Adaptation prediction failed: ${response.statusCode}');
-      }
-
-      final result = jsonDecode(response.body) as Map<String, dynamic>;
-      final double fatigueScore = (result['fatigue_score'] as num).toDouble();
-      final String fatigueLevel = result['fatigue_level'] as String;
-      // The backend message describes a raw adjustment.
-      debugPrint(
-        'AdaptService: fatigue=$fatigueLevel; '
-        'backend message=${result['message']}',
-      );
-
-      final sessionProposals = buildSessionProposals(
-        sessionExercises: sessionExercises,
-        fatigueScore: fatigueScore,
-        sourceLogId: sourceLogId,
-      );
-
-      final batch = _db.batch();
-      final proposalsRef = _db
-          .collection('users')
-          .doc(uid)
-          .collection('adaptationProposals');
-
-      for (final sessionProposal in sessionProposals) {
-        final muscleGroup = sessionProposal['muscleGroup'] as String;
-
-        final pendingSkip = await _findUnresolvedSkipProposal(uid, muscleGroup);
-        final decision = resolvePendingSkipForSession(
-          pendingSkipProposalData: pendingSkip?.data(),
-          sessionDate: DateTime.now(),
-        );
-
-        if (decision.suppressSessionProposal) {
-          batch.update(pendingSkip!.reference, {
-            'daysSinceLastTrained': decision.daysSinceLastTrained,
-          });
-          continue;
-        }
-
-        batch.set(proposalsRef.doc(), sessionProposal);
-      }
-
-      await batch.commit();
-
-      return fatigueLevel;
+      return await _predict(uid, entry);
     } catch (e) {
-      debugPrint('AdaptService error: $e');
+      debugPrint('AdaptService error (queued for retry): $e');
+      try {
+        await queuePrediction(uid, entry);
+      } catch (_) {}
       return '';
     }
+  }
+
+  /// One /adapt-plan call plus the proposal writes for a session [entry]
+  /// (the shape [predictAndAdapt] queues). Throws on any failure.
+  Future<String> _predict(String uid, Map<String, dynamic> entry) async {
+    final sourceLogId = entry['sourceLogId'] as String;
+    final sessionAt = DateTime.parse(entry['sessionAt'] as String);
+    final sessionExercises = [
+      for (final name in (entry['exerciseNames'] as List).cast<String>())
+        LoggedExerciseInfo(exerciseName: name),
+    ];
+    final response = await http.post(
+      Uri.parse('$_baseUrl/adapt-plan'),
+      headers: await backendHeaders(),
+      body: jsonEncode({
+        'avg_rpe': entry['avgRpe'],
+        'max_rpe': entry['maxRpe'],
+        'session_duration': entry['sessionDuration'],
+        'exercises_count': entry['exercisesCount'],
+        'completion_rate': entry['completionRate'],
+        'experience_level': entry['experienceLevel'],
+      }),
+    ).timeout(const Duration(seconds: 60));
+
+    if (response.statusCode != 200) {
+      throw Exception('Adaptation prediction failed: ${response.statusCode}');
+    }
+
+    final result = jsonDecode(response.body) as Map<String, dynamic>;
+    final double fatigueScore = (result['fatigue_score'] as num).toDouble();
+    final String fatigueLevel = result['fatigue_level'] as String;
+    // The backend message describes a raw adjustment.
+    debugPrint(
+      'AdaptService: fatigue=$fatigueLevel; '
+      'backend message=${result['message']}',
+    );
+
+    final sessionProposals = buildSessionProposals(
+      sessionExercises: sessionExercises,
+      fatigueScore: fatigueScore,
+      sourceLogId: sourceLogId,
+    );
+
+    final batch = _db.batch();
+    final proposalsRef = _db
+        .collection('users')
+        .doc(uid)
+        .collection('adaptationProposals');
+
+    for (final sessionProposal in sessionProposals) {
+      final muscleGroup = sessionProposal['muscleGroup'] as String;
+
+      final pendingSkip = await _findUnresolvedSkipProposal(uid, muscleGroup);
+      final decision = resolvePendingSkipForSession(
+        pendingSkipProposalData: pendingSkip?.data(),
+        // The workout's own time, also when it's a retried session.
+        sessionDate: sessionAt,
+      );
+
+      if (decision.suppressSessionProposal) {
+        batch.update(pendingSkip!.reference, {
+          'daysSinceLastTrained': decision.daysSinceLastTrained,
+        });
+        continue;
+      }
+
+      batch.set(proposalsRef.doc(), sessionProposal);
+    }
+
+    await batch.commit();
+
+    return fatigueLevel;
   }
 }

@@ -205,6 +205,20 @@ class WorkoutPlanService {
       batch.set(dayRefB.collection('exercises').doc(doc.id), doc.data());
     }
 
+    // One-time versions remember which plan day their workout came from
+    // ('planDayId'); that workout now lives in the other day's document.
+    final versionsSnap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('scheduleOverrides')
+        .where('planDayId', whereIn: [dayIdA, dayIdB])
+        .get();
+    for (final doc in versionsSnap.docs) {
+      batch.update(doc.reference, {
+        'planDayId': doc.data()['planDayId'] == dayIdA ? dayIdB : dayIdA,
+      });
+    }
+
     await batch.commit();
   }
 
@@ -422,45 +436,6 @@ class WorkoutPlanService {
     return snapshot.docs.map((d) => d.data()).toList();
   }
 
-  /// Records a one-time move of [muscleGroup]'s missed session onto
-  /// [date] (Phase 25 reschedule flow). This does not touch the
-  /// recurring weekly template — only this specific calendar date gets
-  /// this content; the weekday it was originally scheduled on is
-  /// unaffected in every other week.
-  ///
-  /// Doc IDs include [muscleGroup], not just the date: a single missed
-  /// day can carry several muscle groups (e.g. a combined Push day), each
-  /// resolved independently, and two of them can legitimately land on the
-  /// same candidate date. Keying by date alone would let the second
-  /// overwrite the first — [ScheduleMatcher.overrideForDate] merges every
-  /// override doc for a date back into one synthetic day for reads.
-  Future<void> addScheduleOverride({
-    required String uid,
-    required DateTime date,
-    required String muscleGroup,
-    required String workoutName,
-    required List<Map<String, dynamic>> exercises,
-    required String sourceMissedDate,
-  }) async {
-    final dateStr = ScheduleMatcher.dateKey(date);
-
-    await _db
-        .collection('users')
-        .doc(uid)
-        .collection('scheduleOverrides')
-        .doc('${dateStr}__$muscleGroup')
-        .set({
-          'date': dateStr,
-          'dayType': 'workout',
-          'workoutName': workoutName,
-          'muscleGroup': muscleGroup,
-          'exercises': exercises,
-          'sourceMissedDate': sourceMissedDate,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-    scheduleChanges.value++;
-  }
-
   /// Gives each date in [contentByDate] its own one-time version of its day
   /// — an exercise added "just this time", or two days swapped for this
   /// week only — leaving the recurring plan alone. A version stands for the
@@ -468,9 +443,14 @@ class WorkoutPlanService {
   /// version, or a rescheduled session, whose content and source dates the
   /// caller has already folded into the new content); see
   /// [ScheduleMatcher.overrideForDate] for how it's read back.
+  ///
+  /// [keptForThisWeek] marks versions that just hold on to what a date
+  /// already had, written before a plan change that should only apply from
+  /// next week — not a change the user made to that date.
   Future<void> setDaysForDates({
     required String uid,
     required Map<DateTime, Map<String, dynamic>> contentByDate,
+    bool keptForThisWeek = false,
   }) async {
     final overridesRef = _db.collection('users').doc(uid).collection('scheduleOverrides');
     final batch = _db.batch();
@@ -482,7 +462,10 @@ class WorkoutPlanService {
       for (final doc in existing.docs) {
         if (doc.id != versionId) batch.delete(doc.reference);
       }
-      batch.set(overridesRef.doc(versionId), dayVersion(dateStr, entry.value));
+      batch.set(
+        overridesRef.doc(versionId),
+        dayVersion(dateStr, entry.value, keptForThisWeek: keptForThisWeek),
+      );
     }
 
     await batch.commit();
@@ -491,7 +474,11 @@ class WorkoutPlanService {
   /// The stored shape of a one-time version: the day's content, minus the
   /// plan's own bookkeeping (slot fields, exercise doc IDs and order).
   @visibleForTesting
-  static Map<String, dynamic> dayVersion(String dateStr, Map<String, dynamic> content) {
+  static Map<String, dynamic> dayVersion(
+    String dateStr,
+    Map<String, dynamic> content, {
+    bool keptForThisWeek = false,
+  }) {
     final isRest = content['dayType'] == 'rest';
     final exercises = isRest
         ? const <Map<String, dynamic>>[]
@@ -509,7 +496,7 @@ class WorkoutPlanService {
 
     return {
       'date': dateStr,
-      'kind': 'version',
+      'kind': keptForThisWeek ? 'kept' : 'version',
       'dayType': isRest ? 'rest' : 'workout',
       'workoutName': isRest ? 'Rest Day' : content['workoutName'] as String? ?? 'Workout',
       'focusDescription': isRest ? '' : content['focusDescription'] as String? ?? '',

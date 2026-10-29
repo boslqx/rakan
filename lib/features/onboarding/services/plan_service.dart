@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../../../core/utils/backend_headers.dart';
 import '../models/onboarding_data.dart';
 
 class PlanService {
@@ -27,7 +28,7 @@ class PlanService {
 
     final response = await http.post(
       url,
-      headers: {'Content-Type': 'application/json'},
+      headers: await backendHeaders(),
       body: body,
     ).timeout(
       // Render free tier cold starts can take 50+ seconds on first request so give it 90 secs

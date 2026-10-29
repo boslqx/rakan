@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
 from pydantic import BaseModel, Field
 from services.plan_generator import (
@@ -6,14 +6,18 @@ from services.plan_generator import (
     regenerate_days,
     get_logged_day_numbers_this_week,
     select_days_to_regenerate,
+    weekly_sets_by_group,
 )
 from firebase_config import db
+from auth import current_uid, check_body_uid
 
 router = APIRouter()
 
-# This defines the exact shape of data Flutter must send
+# This defines the exact shape of data Flutter must send. The user comes
+# from the verified ID token (auth.current_uid); a body uid is only
+# accepted when it matches it.
 class GeneratePlanRequest(BaseModel):
-    uid: str
+    uid: Optional[str] = None
     goal: str
     experience: str
     equipment: list[str]
@@ -23,13 +27,16 @@ class GeneratePlanRequest(BaseModel):
     focus_areas: list[str]
 
 @router.post("/generate-plan")
-async def generate_plan_endpoint(request: GeneratePlanRequest):
+async def generate_plan_endpoint(
+    request: GeneratePlanRequest, uid: str = Depends(current_uid)
+):
+    check_body_uid(request.uid, uid)
     if any(d < 1 or d > 7 for d in request.workout_days):
         raise HTTPException(status_code=422, detail="workout_days must be 1-7")
     try:
         # Step 1: Generate the plan using our rule-based engine
         plan = generate_plan(
-            uid=request.uid,
+            uid=uid,
             goal=request.goal,
             experience=request.experience,
             equipment=request.equipment,
@@ -44,7 +51,7 @@ async def generate_plan_endpoint(request: GeneratePlanRequest):
         # Structure: users/{uid}/workoutPlans/{planId}/days/{dayId}/exercises
         plan_ref = (
             db.collection("users")
-            .document(request.uid)
+            .document(uid)
             .collection("workoutPlans")
             .document(plan_id)
         )
@@ -80,11 +87,11 @@ async def generate_plan_endpoint(request: GeneratePlanRequest):
         # failed or abandoned generation can never leave the user with no
         # active plan, which is what happened when the app deactivated the
         # old plan before calling this endpoint.
-        plans_col = db.collection("users").document(request.uid).collection("workoutPlans")
+        plans_col = db.collection("users").document(uid).collection("workoutPlans")
         batch = db.batch()
         batch.set(plan_ref, {
             "planId": plan_id,
-            "uid": request.uid,
+            "uid": uid,
             "planName": plan["planName"],
             "status": plan["status"],
             "generatedAt": plan["generatedAt"],
@@ -109,7 +116,7 @@ async def generate_plan_endpoint(request: GeneratePlanRequest):
 
 
 class RegeneratePlanRequest(BaseModel):
-    uid: str
+    uid: Optional[str] = None
     plan_id: str
     # Empty once the last injury recovers: the call then only restores the
     # days earlier injury regenerations adjusted.
@@ -124,27 +131,42 @@ class RegeneratePlanRequest(BaseModel):
     client_date: Optional[str] = None
 
 @router.post("/regenerate-plan")
-async def regenerate_plan_endpoint(request: RegeneratePlanRequest):
+async def regenerate_plan_endpoint(
+    request: RegeneratePlanRequest, uid: str = Depends(current_uid)
+):
+    check_body_uid(request.uid, uid)
     try:
         plan_ref = (
-            db.collection("users").document(request.uid)
+            db.collection("users").document(uid)
             .collection("workoutPlans").document(request.plan_id)
         )
         days_ref = plan_ref.collection("days")
 
         # Step 1: find which weekdays are already locked (logged this week)
-        logged_days = get_logged_day_numbers_this_week(db, request.uid, request.client_date)
+        logged_days = get_logged_day_numbers_this_week(db, uid, request.client_date)
 
         # Step 2: pick the days to rebuild. Locked days are never touched;
-        # with no exclusions left, only injury-adjusted days are restored.
+        # only days that train a paused muscle group (or were changed by an
+        # earlier rebuild) are rebuilt; with no exclusions left, only the
+        # injury-adjusted days are restored (D-27).
         restore_only = not request.excluded_muscle_groups
-        all_days = [{**doc.to_dict(), "dayPlanId": doc.id} for doc in days_ref.get()]
-        eligible_specs = select_days_to_regenerate(all_days, logged_days, restore_only)
+        all_days = []
+        for doc in days_ref.get():
+            exercises = [
+                e.to_dict()
+                for e in days_ref.document(doc.id).collection("exercises").get()
+            ]
+            all_days.append({**doc.to_dict(), "dayPlanId": doc.id, "exercises": exercises})
+        eligible_specs = select_days_to_regenerate(
+            all_days, logged_days, restore_only, request.excluded_muscle_groups
+        )
 
         if not eligible_specs:
             return {"success": True, "message": "No eligible days to update.", "updatedCount": 0}
 
-        # Step 3: regenerate only the eligible days
+        # Step 3: regenerate only the eligible days, keeping each muscle's
+        # weekly sets (with the days left as they are) within its maximum.
+        rebuilt_ids = {spec["dayPlanId"] for spec in eligible_specs}
         updated_days = regenerate_days(
             day_specs=eligible_specs,
             excluded_muscle_groups=request.excluded_muscle_groups,
@@ -153,6 +175,9 @@ async def regenerate_plan_endpoint(request: RegeneratePlanRequest):
             equipment=request.equipment,
             session_duration=request.session_duration,
             focus_areas=request.focus_areas,
+            weekly_sets_kept=weekly_sets_by_group(
+                [d for d in all_days if d["dayPlanId"] not in rebuilt_ids]
+            ),
         )
 
         # Step 4: write back — overwrite day metadata + exercises subcollection only

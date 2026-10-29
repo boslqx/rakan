@@ -452,7 +452,9 @@ String _fmt(double? v) => v?.toStringAsFixed(1) ?? 'null';
 /// tools/posture_study/capture.py (6 fields):
 ///   VALIDATION|exercise|rep|primaryAngle|secondaryMeasure|isCorrect
 /// The squat now also logs trunk lean as the secondary measure.
+/// Debug builds only: debugPrint is not stripped from release builds.
 void _logRep(String tag, int rep, double? primary, double? secondary, bool ok) {
+  if (!kDebugMode) return;
   debugPrint('VALIDATION|$tag|$rep|${_fmt(primary)}|${_fmt(secondary)}|$ok');
 }
 
@@ -938,8 +940,10 @@ class DeadliftAnalyser implements PostureAnalyser {
     final rep = _t.update(hipAngle);
     if (rep != null) {
       final ok = rep.minAngle <= FormThresholds.deadliftHingeMax;
-      // 5-field format, unchanged from before.
-      debugPrint('VALIDATION|deadlift|${_t.count}|${_fmt(rep.minAngle)}|$ok');
+      // 5-field format, unchanged from before. Debug builds only.
+      if (kDebugMode) {
+        debugPrint('VALIDATION|deadlift|${_t.count}|${_fmt(rep.minAngle)}|$ok');
+      }
     }
 
     final phase = _t.phase(hipAngle,

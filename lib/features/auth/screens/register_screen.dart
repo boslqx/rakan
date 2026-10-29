@@ -1,12 +1,17 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../core/utils/validators.dart';
+import '../../legal/data/legal_content.dart';
+import '../../legal/screens/legal_screen.dart';
+import '../../legal/services/legal_consent_service.dart';
 import '../services/auth_service.dart';
 import 'email_verification_screen.dart';
 import '../services/auth_navigation_service.dart'; 
 import '../../../shared/widgets/pressable.dart';
+import '../../../shared/widgets/password_checklist.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -16,7 +21,8 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final AuthService _authService = AuthService();
+  // Lazy so the form can be built (and widget-tested) without Firebase.
+  late final AuthService _authService = AuthService();
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -39,9 +45,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _confirmTouched = false;
   bool _passwordHasContent = false; // controls checklist visibility
 
+  // Must be ticked before the account is created — by email (and so before
+  // the verification email goes out) or with Google.
+  bool _agreedToTerms = false;
+  bool _termsError = false;
+  final GlobalKey _termsKey = GlobalKey();
+  late final TapGestureRecognizer _termsTap;
+  late final TapGestureRecognizer _privacyTap;
+
   @override
   void initState() {
     super.initState();
+    _termsTap = TapGestureRecognizer()
+      ..onTap = () => LegalScreen.open(context, termsAndConditions);
+    _privacyTap = TapGestureRecognizer()
+      ..onTap = () => LegalScreen.open(context, privacyPolicy);
     _emailFocus.addListener(() {
       if (!_emailFocus.hasFocus) _validateEmail(force: true);
     });
@@ -68,6 +86,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _emailFocus.dispose();
     _passwordFocus.dispose();
     _confirmFocus.dispose();
+    _termsTap.dispose();
+    _privacyTap.dispose();
     super.dispose();
   }
 
@@ -101,8 +121,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       _passwordValid =
           Validators.registerPassword(_passwordController.text) == null;
+      _termsError = !_agreedToTerms;
     });
-    return _emailError == null && _confirmError == null && _passwordValid;
+    return _emailError == null &&
+        _confirmError == null &&
+        _passwordValid &&
+        _agreedToTerms;
+  }
+
+  void _setAgreedToTerms(bool value) {
+    setState(() {
+      _agreedToTerms = value;
+      if (value) _termsError = false;
+    });
+  }
+
+  /// Google sign-up sits above the checkbox, so flag it and scroll it
+  /// into view rather than failing silently.
+  void _promptForTerms() {
+    setState(() => _termsError = true);
+    final termsContext = _termsKey.currentContext;
+    if (termsContext != null) {
+      Scrollable.ensureVisible(
+        termsContext,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+    _showError(
+      'Please agree to the Terms & Conditions and Privacy Policy first.',
+    );
   }
 
   void _showError(String message) {
@@ -120,10 +169,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       setState(() => _isLoading = true);
       try {
-        await _authService.signUpWithEmail(
+        final credential = await _authService.signUpWithEmail(
           email: _emailController.text,
           password: _passwordController.text,
         );
+        final uid = credential?.user?.uid;
+        if (uid != null) {
+          // Unverified, so it's written later with the onboarding profile.
+          await LegalConsentService()
+              .recordAcceptance(uid: uid, canWriteNow: false);
+        }
         if (!mounted) return;
         // Verification email is sent by EmailVerificationScreen on open.
         // New email/password accounts always go to the verification
@@ -140,10 +195,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     Future<void> _signInWithGoogle() async {
+      if (!_agreedToTerms) {
+        _promptForTerms();
+        return;
+      }
       setState(() => _isLoading = true);
       try {
         final result = await _authService.signInWithGoogle();
         if (result == null) return;
+        final user = result.user;
+        if (user != null) {
+          await LegalConsentService()
+              .recordAcceptance(uid: user.uid, canWriteNow: true);
+        }
         if (!mounted) return;
         final next = await AuthNavigationService().resolveNextScreen();
         if (!mounted) return;
@@ -342,7 +406,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     // Live checklist — only shown once the user starts
                     if (_passwordHasContent) ...[
                       const SizedBox(height: 10),
-                      _PasswordChecklist(password: _passwordController.text),
+                      PasswordChecklist(password: _passwordController.text),
                     ],
 
                     const SizedBox(height: 20),
@@ -372,6 +436,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ),
                     ),
+
+                    const SizedBox(height: 20),
+
+                    _buildTermsCheckbox(),
 
                     const SizedBox(height: 24),
 
@@ -468,6 +536,96 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  Widget _buildTermsCheckbox() {
+    final linkStyle = GoogleFonts.manrope(
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+      color: AppColors.onSurface,
+      decoration: TextDecoration.underline,
+      decorationColor: AppColors.onSurface,
+    );
+
+    return Column(
+      key: _termsKey,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Tapping the sentence toggles the box; the two links open the
+        // documents instead (their recognizers win the gesture arena).
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _isLoading ? null : () => _setAgreedToTerms(!_agreedToTerms),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: Checkbox(
+                  value: _agreedToTerms,
+                  onChanged: _isLoading
+                      ? null
+                      : (v) => _setAgreedToTerms(v ?? false),
+                  activeColor: AppColors.primary,
+                  checkColor: AppColors.onPrimary,
+                  side: BorderSide(
+                    color: _termsError
+                        ? AppColors.error
+                        : AppColors.onSurfaceVariant,
+                    width: 1.5,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text.rich(
+                    TextSpan(
+                      text: 'I agree to the ',
+                      style: GoogleFonts.manrope(
+                        fontSize: 13,
+                        color: AppColors.onSurfaceVariant,
+                        height: 1.4,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: 'Terms & Conditions',
+                          style: linkStyle,
+                          recognizer: _termsTap,
+                        ),
+                        const TextSpan(text: ' and '),
+                        TextSpan(
+                          text: 'Privacy Policy',
+                          style: linkStyle,
+                          recognizer: _privacyTap,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_termsError) ...[
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 36),
+            child: Text(
+              'Please agree to continue',
+              style: GoogleFonts.manrope(fontSize: 12, color: AppColors.error),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildInput({
     required TextEditingController controller,
     required String hint,
@@ -517,42 +675,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
           errorMaxLines: 2,
         ),
       ),
-    );
-  }
-}
-
-/// Live password-strength checklist
-class _PasswordChecklist extends StatelessWidget {
-  final String password;
-  const _PasswordChecklist({required this.password});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: Validators.passwordRequirements.map((req) {
-        final met = req.test(password);
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(
-            children: [
-              Icon(
-                met ? Icons.check_circle : Icons.circle_outlined,
-                size: 14,
-                color: met ? AppColors.primary : AppColors.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                req.label,
-                style: GoogleFonts.manrope(
-                  fontSize: 12,
-                  color: met ? AppColors.onSurface : AppColors.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
     );
   }
 }

@@ -125,6 +125,42 @@ MUSCLE_GROUP_MAP = {
     "abs": "Core",
 }
 
+# Weekly maximum recoverable volume (working sets per week) per app muscle
+# group: the same table the app shows (kWeeklyMRVByMuscleGroup in
+# lib/features/workout/data/muscle_recovery_constants.dart). An injury
+# rebuild never takes a muscle past it (D-27); keep the two in step.
+WEEKLY_MAX_SETS = {
+    "Chest": 20,
+    "Back": 20,
+    "Legs": 20,
+    "Glutes": 20,
+    "Shoulders": 16,
+    "Arms": 16,
+    "Core": 12,
+}
+
+
+def _split_groups_of(app_group: Optional[str]) -> set[str]:
+    """App muscle group ("Arms") -> split vocabulary ({"biceps", "triceps"})."""
+    for internal, label in MUSCLE_GROUP_MAP.items():
+        if label == app_group:
+            return _expand_groups([internal])
+    return set()
+
+
+def weekly_sets_by_group(days: list[dict]) -> dict[str, int]:
+    """Working sets per app muscle group across the workout days given
+    (each with its saved `exercises`)."""
+    totals: dict[str, int] = {}
+    for day in days:
+        if day.get("dayType") != "workout":
+            continue
+        for ex in day.get("exercises") or []:
+            group = ex.get("muscleGroup")
+            if group:
+                totals[group] = totals.get(group, 0) + int(ex.get("sets") or 0)
+    return totals
+
 
 def generate_plan(
     uid: str,
@@ -204,39 +240,63 @@ def generate_plan(
 
 # Markers regenerate_days leaves on a day it had to change because of an
 # injury: a whole-day rest swap, or a workout rebuilt on fallback muscles.
+# Any changed day also keeps its split in originalWorkoutName.
 INJURY_REST_FOCUS = "Recovery (injury-adjusted)"
 ADJUSTED_SUFFIX = " (Adjusted)"
 
 
 def is_injury_adjusted(day: dict) -> bool:
-    return (day.get("workoutName") or "").endswith(ADJUSTED_SUFFIX) or (
-        day.get("focusDescription") == INJURY_REST_FOCUS
+    """A day an earlier regeneration changed: a rest swap, a fallback
+    workout, or a workout that lost some of its muscles (originalWorkoutName
+    set, L-02), so it can be restored once they're safe again."""
+    return (
+        (day.get("workoutName") or "").endswith(ADJUSTED_SUFFIX)
+        or day.get("focusDescription") == INJURY_REST_FOCUS
+        or bool(day.get("originalWorkoutName"))
     )
 
 
+def _exercise_muscles(day: dict) -> set[str]:
+    """Split-vocabulary muscles of the exercises saved on a day."""
+    muscles: set[str] = set()
+    for ex in day.get("exercises") or []:
+        muscles |= _split_groups_of(ex.get("muscleGroup"))
+    return muscles
+
+
+def _day_muscles(day: dict) -> set[str]:
+    """What a day trains: its split's muscles plus those of any exercise on
+    it (manual additions, custom-named days)."""
+    base = (day.get("workoutName") or "").replace(ADJUSTED_SUFFIX, "")
+    return set(SPLIT_MUSCLES.get(base, [])) | _exercise_muscles(day)
+
+
 def select_days_to_regenerate(
-    days: list[dict],            # the plan's day docs, each with its dayPlanId
+    days: list[dict],            # the plan's day docs, each with its dayPlanId and exercises
     logged_days: set[int],
     restore_only: bool,
+    excluded_muscle_groups: list[str],
 ) -> list[dict]:
     """The regenerate_days specs for the days /regenerate-plan may rewrite.
 
     Days logged this week are never touched. With injuries still active,
-    every workout day is rebuilt around them, plus any injury rest day so it
-    can come back once its muscles are safe again. With no injuries left
-    (restore_only), only days an earlier regeneration adjusted are rebuilt;
-    everything else keeps its weekly adaptations and manual edits.
+    only workout days that train a paused muscle group are rebuilt (D-27),
+    plus days an earlier regeneration changed, so they can come back once
+    their muscles are safe again. Every other day keeps its exercises,
+    weekly adaptations and manual edits. With no injuries left
+    (restore_only), only the changed days are rebuilt.
     """
+    excluded_set = _expand_groups(excluded_muscle_groups)
     specs = []
     for day in days:
         if day.get("dayNumber") in logged_days:
             continue
         injury_rest = day.get("focusDescription") == INJURY_REST_FOCUS
-        if restore_only:
-            if not is_injury_adjusted(day):
-                continue
-        elif day.get("dayType") != "workout" and not injury_rest:
-            continue  # ordinary rest days have nothing to filter
+        if not is_injury_adjusted(day):
+            if restore_only or day.get("dayType") != "workout":
+                continue  # ordinary rest days have nothing to filter
+            if not (_day_muscles(day) & excluded_set):
+                continue  # the injuries don't touch this day
 
         if injury_rest:
             split_name = day.get("originalWorkoutName") or _infer_split_name(day, days)
@@ -247,6 +307,9 @@ def select_days_to_regenerate(
             "dayNumber": day.get("dayNumber"),
             "dayName": day.get("dayName"),
             "workoutName": split_name,
+            # For days whose name isn't a known split (e.g. a converted
+            # rest day): rebuild around what they actually trained.
+            "trainedGroups": sorted(_exercise_muscles(day)),
         })
     return specs
 
@@ -267,18 +330,31 @@ def _infer_split_name(day: dict, days: list[dict]) -> str:
 
 
 def regenerate_days(
-    day_specs: list[dict],       # [{dayPlanId, dayNumber, dayName, workoutName(splitName)}]
+    day_specs: list[dict],       # [{dayPlanId, dayNumber, dayName, workoutName(splitName), trainedGroups?}]
     excluded_muscle_groups: list[str],
     goal: str,
     experience: str,
     equipment: list[str],
     session_duration: str,
     focus_areas: list[str],
+    weekly_sets_kept: Optional[dict[str, int]] = None,
 ) -> list[dict]:
+    """Rebuilds the given days around the excluded muscle groups.
 
+    [weekly_sets_kept] is the working sets per app muscle group on the days
+    that are NOT rebuilt. When given, the rebuilt days only add sets up to
+    each muscle's weekly maximum (WEEKLY_MAX_SETS), so refilling days can't
+    pile volume onto the muscles that are still allowed (D-27).
+    """
     available = filter_by_difficulty(get_exercises_for_equipment(equipment), experience)
     muscle_priority = GOAL_MUSCLE_PRIORITY.get(goal, GOAL_MUSCLE_PRIORITY["muscleGain"])
     excluded_set = _expand_groups(excluded_muscle_groups)
+    set_budget = None
+    if weekly_sets_kept is not None:
+        set_budget = {
+            group: max(0, cap - weekly_sets_kept.get(group, 0))
+            for group, cap in WEEKLY_MAX_SETS.items()
+        }
 
     updated_days = []
 
@@ -287,7 +363,9 @@ def regenerate_days(
         # A day regenerated before may already carry the " (Adjusted)"
         # suffix — strip it so the original split's muscles are used.
         base_split = split_name.replace(ADJUSTED_SUFFIX, "")
-        target_muscles = SPLIT_MUSCLES.get(base_split, ["chest"])
+        target_muscles = (
+            SPLIT_MUSCLES.get(base_split) or spec.get("trainedGroups") or ["chest"]
+        )
 
         # Remove injured muscle groups from this day's target focus
         safe_targets = [m for m in target_muscles if m not in excluded_set]
@@ -308,6 +386,7 @@ def regenerate_days(
                 session_duration=session_duration,
                 focus_areas=[f for f in focus_areas if f not in excluded_set],
                 excluded=excluded_set,
+                set_budget=set_budget,
             )
 
         if not raw_exercises:
@@ -341,7 +420,9 @@ def regenerate_days(
             "durationMinutes": _session_minutes(raw_exercises),
             "exercises": [_format_exercise(ex) for ex in raw_exercises],
         }
-        if used_fallback:
+        # Also when only some of the day's muscles were dropped (e.g. Push
+        # without shoulders): marks it for restoring on recovery (L-02).
+        if used_fallback or len(safe_targets) < len(target_muscles):
             day["originalWorkoutName"] = base_split
         updated_days.append(day)
 
@@ -406,8 +487,14 @@ def _build_session(
     session_duration: str,
     focus_areas: list[str],
     excluded: Optional[set[str]] = None,
+    set_budget: Optional[dict[str, int]] = None,
 ) -> list[dict]:
     """Selects and prescribes one workout day's exercises.
+
+    [set_budget] (injury rebuilds only) is the sets each app muscle group
+    may still get this week. It's spent as exercises and sets are added
+    (and refunded when sets are trimmed); a muscle with fewer than 2 left
+    gets no new exercise. None = no weekly cap (plan generation).
 
     1. Order the day's muscles: user focus areas first, then by the goal's
        muscle priority.
@@ -466,16 +553,29 @@ def _build_session(
     if not rotation:
         return selected
 
+    def group_of(ex: dict) -> Optional[str]:
+        return MUSCLE_GROUP_MAP.get(ex["muscle_group"])
+
+    def spend(ex: dict, sets: int) -> None:
+        if set_budget is not None:
+            set_budget[group_of(ex)] = set_budget.get(group_of(ex), 0) - sets
+
     while len(selected) < max_count:
         candidate = next_exercise(used_names)
         if candidate is None:
             break
         prescribed = _prescribe(candidate, goal)
+        if set_budget is not None:
+            left = set_budget.get(group_of(prescribed), 0)
+            if left < 2:
+                continue  # this muscle's weekly maximum is reached
+            prescribed["sets"] = min(prescribed["sets"], left)
         projected = _work_seconds(selected) + _work_seconds([prescribed])
         if len(selected) >= min_count and projected > target_work_seconds:
             break
         selected.append(prescribed)
         used_names.add(candidate["name"])
+        spend(prescribed, prescribed["sets"])
 
     # Over the session length even at the minimum exercise count (e.g.
     # heavy 4x6 lifts with long rest in a 30-minute session)? Trim sets,
@@ -484,7 +584,9 @@ def _build_session(
         trimmable = [ex for ex in selected if ex["sets"] > 2]
         if not trimmable:
             break
-        max(trimmable, key=lambda ex: ex["sets"] * ex["rest_seconds"])["sets"] -= 1
+        trimmed = max(trimmable, key=lambda ex: ex["sets"] * ex["rest_seconds"])
+        trimmed["sets"] -= 1
+        spend(trimmed, -1)
 
     # Still short of the session length (small pool, or the exercise cap
     # was hit)? Add sets to the compound lifts, one at a time.
@@ -494,10 +596,13 @@ def _build_session(
         for ex in selected:
             if not ex["is_compound"] or ex["sets"] >= MAX_SETS_PER_EXERCISE:
                 continue
+            if set_budget is not None and set_budget.get(group_of(ex), 0) < 1:
+                continue
             per_set = ex["rest_seconds"] + SECONDS_PER_WORKING_SET
             if _work_seconds(selected) + per_set > target_work_seconds:
                 continue
             ex["sets"] += 1
+            spend(ex, 1)
             added = True
 
     return selected

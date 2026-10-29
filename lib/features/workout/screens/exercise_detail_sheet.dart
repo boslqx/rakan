@@ -4,10 +4,28 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../data/exercise_data.dart';
+import '../services/schedule_matcher.dart';
+import '../services/workout_log_service.dart';
 import '../services/workout_plan_service.dart';
 import '../widgets/exercise_media.dart';
+import 'workout_day_detail_screen.dart';
 import 'pose_detection_screen.dart';
 import '../../../shared/widgets/pressable.dart';
+
+/// How the library's ADD TO WORKOUT adds to [planDay] (V-19): through the
+/// day's own screen — which asks "plan or just this time" — while this
+/// week's session on that date is that plan day (or a one-time version of
+/// it) and isn't [over] (passed or done). Otherwise straight into the plan,
+/// from next week, so a different session this week is never overwritten.
+bool addsThroughDayScreen({
+  required Map<String, dynamic> planDay,
+  required Map<String, dynamic> thisWeek,
+  required List<Map<String, dynamic>> planDays,
+  required bool over,
+}) =>
+    !over &&
+    thisWeek['dayType'] == 'workout' &&
+    ScheduleMatcher.planDayOf(planDays, thisWeek)?['id'] == planDay['id'];
 
 /// Exercise library detail. Pops with `true` if the exercise was added to
 /// a plan day, so the library can refresh its IN PLAN badges.
@@ -694,7 +712,7 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
       );
 
       if (selectedDay != null && mounted) {
-        await _confirmAddToWorkout(context, selectedDay, planId);
+        await _addToChosenDay(selectedDay, planId, days);
       }
     } catch (e) {
       if (mounted) {
@@ -709,8 +727,72 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
     }
   }
 
+  /// Adds with the same rules as adding on the day itself (V-19). While this
+  /// week's session on that day is still to come, the day opens and asks
+  /// there whether it's for the plan or just this time
+  /// (WorkoutDayDetailScreen.addOnOpen). Once it's over (passed or done) —
+  /// or that date holds a different session this week — the exercise goes
+  /// into the plan from next week, and this week's day stays as it was.
+  Future<void> _addToChosenDay(
+    Map<String, dynamic> planDay,
+    String planId,
+    List<Map<String, dynamic>> planDays,
+  ) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final date = DateTime(now.year, now.month,
+        now.day + (planDay['dayNumber'] as int) - now.weekday);
+    final results = await Future.wait<Object?>([
+      WorkoutPlanService().getScheduleOverrides(uid),
+      WorkoutLogService().getLogForDate(uid: uid, date: date),
+    ]);
+    if (!mounted) return;
+
+    final overrides = results[0] as List<Map<String, dynamic>>;
+    final thisWeek =
+        ScheduleMatcher.resolvedDayForDate(planDays, overrides, date) ?? planDay;
+    final over = date.isBefore(today) || results[1] != null;
+
+    if (addsThroughDayScreen(
+      planDay: planDay,
+      thisWeek: thisWeek,
+      planDays: planDays,
+      over: over,
+    )) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => WorkoutDayDetailScreen(
+            day: thisWeek,
+            planId: planId,
+            planDay: planDay,
+            addOnOpen: _exercise,
+          ),
+        ),
+      );
+      // Close the sheet so the library reloads its IN PLAN badges.
+      if (mounted) Navigator.pop(context, true);
+      return;
+    }
+
+    await _confirmAddToWorkout(
+      context,
+      planDay,
+      planId,
+      // The Schedule tab's rule: a day that's over keeps this week's
+      // session as it happened (WorkoutScreen._keepThisWeek).
+      keepThisWeek: over && thisWeek['id'] is String ? {date: thisWeek} : null,
+    );
+  }
+
   Future<void> _confirmAddToWorkout(
-      BuildContext context, Map<String, dynamic> day, String planId) async {
+    BuildContext context,
+    Map<String, dynamic> day,
+    String planId, {
+    Map<DateTime, Map<String, dynamic>>? keepThisWeek,
+  }) async {
     final dayName = day['dayName'] as String? ?? 'this day';
     final workoutName = day['workoutName'] as String? ?? 'Workout';
 
@@ -723,7 +805,8 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
             style: GoogleFonts.spaceGrotesk(
                 color: AppColors.onSurface, fontWeight: FontWeight.w600)),
         content: Text(
-          'Add "${_exercise.name}" to $dayName ($workoutName)?',
+          'Add "${_exercise.name}" to your plan\'s $dayName ($workoutName), '
+          'from next $dayName?',
           style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant),
         ),
         actions: [
@@ -743,12 +826,17 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
     );
 
     if (confirm == true && mounted) {
-      await _addExerciseToDay(day, planId, dayName);
+      await _addExerciseToDay(day, planId, dayName, keepThisWeek: keepThisWeek);
     }
   }
 
+  /// Adds to the plan day (every week from next week).
   Future<void> _addExerciseToDay(
-      Map<String, dynamic> day, String planId, String dayName) async {
+    Map<String, dynamic> day,
+    String planId,
+    String dayName, {
+    Map<DateTime, Map<String, dynamic>>? keepThisWeek,
+  }) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
@@ -772,6 +860,13 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
         WorkoutPlanService.estimateDurationMinutes([...exercises, newExercise]);
 
     try {
+      if (keepThisWeek != null) {
+        await WorkoutPlanService().setDaysForDates(
+          uid: uid,
+          contentByDate: keepThisWeek,
+          keptForThisWeek: true,
+        );
+      }
       await WorkoutPlanService().addExerciseToDay(
         uid: uid,
         planId: planId,
@@ -780,11 +875,13 @@ class _ExerciseDetailSheetState extends State<ExerciseDetailSheet> {
         order: exercises.length,
         newDurationMinutes: finalDuration,
       );
+      // Home and the Schedule tab reload (they listen to this).
+      WorkoutPlanService.scheduleChanges.value++;
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Added "${_exercise.name}" to $dayName',
+            content: Text('Added "${_exercise.name}" to your plan from next $dayName',
                 style: GoogleFonts.manrope(color: AppColors.onSurface)),
             backgroundColor: AppColors.surfaceContainerHigh,
           ),

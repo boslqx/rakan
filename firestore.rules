@@ -14,9 +14,12 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email_verified == true;
     }
 
+    // Optional fields are read with .get(field, default): reading a field
+    // that was never written is an error, which denies the request (D-24 —
+    // accounts that never touched "Private Account" couldn't be followed).
     function canViewActivity(database, uid) {
       return request.auth.uid == uid
-        || get(/databases/$(database)/documents/users/$(uid)).data.isPrivate != true
+        || get(/databases/$(database)/documents/users/$(uid)).data.get('isPrivate', false) != true
         || (
           exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + uid))
           && get(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + uid)).data.status == 'accepted'
@@ -50,11 +53,14 @@ service cloud.firestore {
 
     // Username uniqueness index: usernames/{usernameLower} -> {uid}.
     // Claimed via a transaction in PublicProfileService.claimUsername.
+    // Claiming and releasing need a verified email like all other user
+    // data (V-06); usernames are only claimed after verification
+    // (onboarding / ChooseUsernameScreen sit behind the verification gate).
     match /usernames/{usernameLower} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null
+      allow create: if isVerified()
         && request.resource.data.uid == request.auth.uid;
-      allow delete: if request.auth != null
+      allow delete: if isVerified()
         && resource.data.uid == request.auth.uid;
       allow update: if false; // release + reclaim instead of mutating
     }
@@ -114,7 +120,7 @@ service cloud.firestore {
           request.resource.data.status == 'pending'
           || (
             request.resource.data.status == 'accepted'
-            && get(/databases/$(database)/documents/users/$(request.resource.data.followingUid)).data.isPrivate != true
+            && get(/databases/$(database)/documents/users/$(request.resource.data.followingUid)).data.get('isPrivate', false) != true
           )
         );
       allow update: if request.auth != null

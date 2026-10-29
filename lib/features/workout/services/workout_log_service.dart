@@ -31,6 +31,13 @@ class ExerciseWeightHistory {
   );
 }
 
+/// One finished session in the recovery window: when it was completed
+/// and its exercise logs (see [WorkoutLogService.computeRecoveryDocs]).
+typedef RecoverySession = ({
+  DateTime completedAt,
+  List<Map<String, dynamic>> exerciseLogs,
+});
+
 class WorkoutLogService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
@@ -223,9 +230,12 @@ class WorkoutLogService {
         .toList();
   }
 
-  /// Recomputes and writes per-muscle recovery data for [uid]
+  /// Recomputes and writes per-muscle recovery data for [uid]. Also run
+  /// before the weekly summary and when the Coach Recovery tab opens, so
+  /// scores follow the 7-day window between saves (V-11).
   Future<void> updateMuscleRecovery(String uid) async {
-    final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
+    final now = DateTime.now();
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
     // Only the last 7 days are needed. completedAt is a local ISO-8601
     // string, so string comparison orders it correctly.
@@ -234,30 +244,73 @@ class WorkoutLogService {
             isGreaterThanOrEqualTo: sevenDaysAgo.toIso8601String())
         .get();
 
-    // Fetch every log's exercise list in parallel instead of one by one.
-    final exerciseSnaps = await Future.wait(logsSnapshot.docs
-        .map((d) => d.reference.collection('exerciseLogs').get()));
+    final muscleRecoveryRef =
+        _db.collection('users').doc(uid).collection('muscleRecovery');
 
+    // Fetch every log's exercise list in parallel instead of one by one,
+    // alongside the groups already tracked (to reset ones that dropped out).
+    final results = await Future.wait<Object>([
+      muscleRecoveryRef.get(),
+      ...logsSnapshot.docs.map((d) => d.reference.collection('exerciseLogs').get()),
+    ]);
+    final tracked = (results.first as QuerySnapshot<Map<String, dynamic>>)
+        .docs
+        .map((d) => d.id);
+
+    final sessions = <RecoverySession>[];
+    for (int i = 0; i < logsSnapshot.docs.length; i++) {
+      final completedAt = DateTime.tryParse(
+          logsSnapshot.docs[i].data()['completedAt'] as String? ?? '');
+      if (completedAt == null) continue;
+      final exerciseLogsSnap =
+          results[i + 1] as QuerySnapshot<Map<String, dynamic>>;
+      sessions.add((
+        completedAt: completedAt,
+        exerciseLogs: exerciseLogsSnap.docs.map((d) => d.data()).toList(),
+      ));
+    }
+
+    final docs = computeRecoveryDocs(
+      sessions: sessions,
+      since: sevenDaysAgo,
+      trackedGroups: tracked,
+      now: now,
+    );
+    if (docs.isEmpty) return; // nothing trained, nothing to reset
+
+    final batch = _db.batch();
+    docs.forEach((group, fields) {
+      batch.set(muscleRecoveryRef.doc(group), fields, SetOptions(merge: true));
+    });
+
+    try {
+      await batch.commit().timeout(_saveAckTimeout);
+    } on TimeoutException {
+      // Already applied to the local cache; Firestore will sync it.
+    }
+  }
+
+  /// Pure core of [updateMuscleRecovery]: the muscleRecovery fields to
+  /// merge per broad muscle group, from the [sessions] completed since
+  /// [since]. A group in [trackedGroups] (its doc already exists) with no
+  /// sets left in the window is reset to zero, keeping its lastTrained, so
+  /// it doesn't stay "fatigued" until it turns "unknown".
+  static Map<String, Map<String, dynamic>> computeRecoveryDocs({
+    required List<RecoverySession> sessions,
+    required DateTime since,
+    required Iterable<String> trackedGroups,
+    required DateTime now,
+  }) {
     // Accumulated per broad muscle group across all logs in the window.
     final Map<String, double> weightedSets = {};
     final Map<String, double> rawVolume = {};
     final Map<String, DateTime> lastTrained = {};
 
-    for (int i = 0; i < logsSnapshot.docs.length; i++) {
-      final logDoc = logsSnapshot.docs[i];
-      final logData = logDoc.data();
-      final completedAtStr = logData['completedAt'] as String?;
-      if (completedAtStr == null) continue;
+    for (final session in sessions) {
+      final completedAt = session.completedAt;
+      if (completedAt.isBefore(since)) continue;
 
-      final completedAt = DateTime.tryParse(completedAtStr);
-      if (completedAt == null || completedAt.isBefore(sevenDaysAgo)) {
-        continue;
-      }
-
-      final exerciseLogsSnap = exerciseSnaps[i];
-
-      for (final exLogDoc in exerciseLogsSnap.docs) {
-        final exLog = exLogDoc.data();
+      for (final exLog in session.exerciseLogs) {
         final exerciseName = exLog['exerciseName'] as String?;
         if (exerciseName == null) continue;
 
@@ -312,11 +365,8 @@ class WorkoutLogService {
       }
     }
 
-    if (weightedSets.isEmpty) return; // nothing trained in the window
-
-    final batch = _db.batch();
-    final muscleRecoveryRef =
-        _db.collection('users').doc(uid).collection('muscleRecovery');
+    final updatedAt = now.toIso8601String();
+    final docs = <String, Map<String, dynamic>>{};
 
     for (final group in weightedSets.keys) {
       final mrv = kWeeklyMRVByMuscleGroup[group] ?? kFallbackWeeklyMRV;
@@ -325,25 +375,35 @@ class WorkoutLogService {
           ? kDefaultRestDays
           : kElevatedRestDays;
 
-      batch.set(
-        muscleRecoveryRef.doc(group),
-        {
-          'muscleGroup': group,
-          'lastTrained': lastTrained[group]?.toIso8601String(),
-          'fatigueScore': fatigueScore,
-          'volumeLast7Days': rawVolume[group],
-          'weightedSetsLast7Days': weightedSets[group],
-          'weeklyMrv': mrv,
-          'recommendedRestDays': recommendedRestDays,
-          'updatedAt': DateTime.now().toIso8601String(),
-        },
-      );
+      docs[group] = {
+        'muscleGroup': group,
+        'lastTrained': lastTrained[group]?.toIso8601String(),
+        'fatigueScore': fatigueScore,
+        'volumeLast7Days': rawVolume[group],
+        'weightedSetsLast7Days': weightedSets[group],
+        'weeklyMrv': mrv,
+        'recommendedRestDays': recommendedRestDays,
+        'updatedAt': updatedAt,
+      };
     }
 
-    await batch.commit();
+    // No sets left in the window: fully recovered. lastTrained is left
+    // as it is (merge), so "days since trained" stays correct.
+    for (final group in trackedGroups) {
+      if (docs.containsKey(group)) continue;
+      docs[group] = {
+        'fatigueScore': 0.0,
+        'volumeLast7Days': 0.0,
+        'weightedSetsLast7Days': 0.0,
+        'recommendedRestDays': kDefaultRestDays,
+        'updatedAt': updatedAt,
+      };
+    }
+
+    return docs;
   }
 
-  void _updateLastTrained(
+  static void _updateLastTrained(
       Map<String, DateTime> lastTrained, String group, DateTime completedAt) {
     final current = lastTrained[group];
     if (current == null || completedAt.isAfter(current)) {

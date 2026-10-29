@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../services/workout_plan_service.dart';
 import '../services/workout_log_service.dart';
+import '../services/adapt_service.dart';
 import '../services/schedule_matcher.dart';
 import '../services/notification_service.dart';
 import '../widgets/exercise_media.dart';
@@ -14,10 +15,12 @@ import '../widgets/scope_choice_sheet.dart';
 import 'workout_day_detail_screen.dart';
 import 'exercise_library_screen.dart';
 import '../data/exercise_data.dart';
+import '../data/workout_templates.dart';
 import '../../onboarding/services/user_profile_service.dart';
 import '../../../shared/widgets/pressable.dart';
 
 export '../data/exercise_data.dart' show equipmentMatches;
+export '../data/workout_templates.dart' show buildTemplateExercises;
 
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
@@ -47,6 +50,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   /// One-time content for single dates (rescheduled sessions, one-time
   /// versions) — see [_thisWeek].
   List<Map<String, dynamic>> _overrides = [];
+
+  /// How each resolved missed date ended ('skipped' / 'rescheduled'), by
+  /// date key — for the SKIPPED and MOVED labels.
+  Map<String, String> _missedStatuses = {};
 
   final ScrollController _scheduleScroll = ScrollController();
   final GlobalKey _scheduleListKey = GlobalKey();
@@ -96,11 +103,18 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       } catch (e) {
         debugPrint('Schedule: schedule overrides load failed: $e');
       }
+      var missedStatuses = _missedStatuses;
+      try {
+        missedStatuses = await AdaptService().getMissedDayStatuses(uid);
+      } catch (e) {
+        debugPrint('Schedule: missed-day statuses load failed: $e');
+      }
       if (mounted) {
         setState(() {
           _plan = plan;
           _recentLogs = logs;
           _overrides = overrides;
+          _missedStatuses = missedStatuses;
           _isLoading = false;
         });
       }
@@ -476,9 +490,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   /// This week as it will actually run: each template day, unless that
   /// date has one-time content — a missed session rescheduled onto it, or
   /// its own version (something added just this time, a swap for this week
-  /// only) — shown in the template day's calendar slot. That content
-  /// carries no plan-day 'id', so its detail screen edits that date only
-  /// instead of the recurring day underneath.
+  /// only), or what it had before a plan change that applies from next
+  /// week ('keptForThisWeek') — shown in the template day's calendar slot.
+  /// That content carries no plan-day 'id', so its detail screen edits that
+  /// date only instead of the recurring day underneath.
   List<Map<String, dynamic>> _thisWeek(List<Map<String, dynamic>> days) {
     return [
       for (final day in days)
@@ -496,7 +511,10 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 WorkoutPlanService.estimateDurationMinutes(
                   _exercisesOf(oneTime),
                 ),
-            'isOneTime': true,
+            if (oneTime['kind'] == 'kept')
+              'keptForThisWeek': true
+            else
+              'isOneTime': true,
           }
         else
           day,
@@ -524,6 +542,64 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     }
     return null;
   }
+
+  List<Map<String, dynamic>> get _planDays =>
+      (_plan!['days'] as List).cast<Map<String, dynamic>>();
+
+  /// [slot]'s day as it runs this week — see [_thisWeek].
+  Map<String, dynamic> _thisWeekOf(Map<String, dynamic> slot) => _thisWeek(
+    _planDays,
+  ).firstWhere((d) => d['dayNumber'] == slot['dayNumber']);
+
+  /// Whether [slot]'s day is over for this week — passed, or its workout
+  /// done. Its plan day can still change, but only from next week.
+  bool _isOver(Map<String, dynamic> slot) =>
+      _dateThisWeek(slot['dayNumber'] as int).isBefore(_today) ||
+      _isDoneThisWeek(slot);
+
+  /// Why [slot]'s day can't be swapped or moved this week — null while it
+  /// can. A day that's over is settled, and a missed session moved onto a
+  /// day is only moved once.
+  String? _lockedReason(Map<String, dynamic> slot) {
+    final name = slot['dayName'];
+    if (_dateThisWeek(slot['dayNumber'] as int).isBefore(_today)) {
+      return '$name has already passed this week.';
+    }
+    if (_isDoneThisWeek(slot)) {
+      return "$name's workout is already done this week.";
+    }
+    if (ScheduleMatcher.sourceMissedDates(_thisWeekOf(slot)).isNotEmpty) {
+      return '$name has a missed session moved onto it.';
+    }
+    return null;
+  }
+
+  /// What to write so [slots]' days stay as they are this week while the
+  /// plan changes under them from next week — each one still showing the
+  /// plan day itself (one with this week's own content keeps it anyway).
+  Map<DateTime, Map<String, dynamic>> _keptThisWeek(
+    List<Map<String, dynamic>> slots,
+  ) => {
+    for (final slot in slots)
+      if (_thisWeekOf(slot) case final entry when entry['id'] is String)
+        _dateThisWeek(slot['dayNumber'] as int): entry,
+  };
+
+  Future<void> _keepThisWeek(List<Map<String, dynamic>> slots) async {
+    final kept = _keptThisWeek(slots);
+    if (kept.isEmpty) return;
+    await WorkoutPlanService().setDaysForDates(
+      uid: FirebaseAuth.instance.currentUser!.uid,
+      contentByDate: kept,
+      keptForThisWeek: true,
+    );
+  }
+
+  /// Opens a day's editor: this week's session while the day isn't over;
+  /// after that, the plan day itself, whose changes apply from next week.
+  Future<void> _openSlot(Map<String, dynamic> slot) => _isOver(slot)
+      ? _openDayDetail(slot, beforePlanChange: () => _keepThisWeek([slot]))
+      : _openDayDetail(_thisWeekOf(slot));
 
   static List<Map<String, dynamic>> _exercisesOf(Map<String, dynamic> day) =>
       (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -791,18 +867,31 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final exercises = _exercisesOf(day);
     final sets = _setsOf(day);
     final isOneTime = day['isOneTime'] == true;
-    // One-time content has no plan day of its own to hang a weekly
-    // reminder on, so its card closes without the reminder row.
-    final hasReminderRow = !isRest && !isOneTime;
+    // Only the plan day itself has a weekly reminder; a date's own content
+    // has none, so its card closes without the reminder row.
+    final hasReminderRow = !isRest && day['id'] is String;
 
     final date = _dateThisWeek(dayNumber);
     final isToday = date == _today;
+    final isPast = date.isBefore(_today);
     final isDone = !isRest && _isDoneThisWeek(day);
-    final isMissed = !isRest && !isDone && date.isBefore(_today);
+    final isMissed = !isRest && !isDone && isPast;
+    final missedStatus = isMissed
+        ? _missedStatuses[ScheduleMatcher.dateKey(date)]
+        : null;
     final movedTo = isMissed ? _movedTo(date) : null;
+    final isMoved = movedTo != null || missedStatus == 'rescheduled';
+    final isMovedHere = ScheduleMatcher.sourceMissedDates(day).isNotEmpty;
+    // Skipped, moved and missed days are settled — only a day still to
+    // come, or one whose workout is done, opens (see _openSlot).
+    final canOpen = !isRest && (isDone || !isPast);
 
     final card = Pressable(
-      onTap: isRest ? null : () => _openDayDetail(day),
+      onTap: canOpen
+          ? () => _openSlot(
+              ScheduleMatcher.planDayForWeekday(_planDays, dayNumber)!,
+            )
+          : null,
       child: Container(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
         decoration: BoxDecoration(
@@ -846,18 +935,29 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 ],
                 if (isDone)
                   _statusChip('DONE', icon: Icons.check_rounded)
-                else if (movedTo != null)
+                else if (isMoved)
                   _statusChip(
-                    'MOVED → ${const ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'][movedTo.weekday - 1]}',
+                    movedTo == null
+                        ? 'MOVED'
+                        : 'MOVED → ${const ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'][movedTo.weekday - 1]}',
                     icon: Icons.redo_rounded,
                     color: AppColors.onSurfaceVariant,
                   )
+                else if (missedStatus == 'skipped')
+                  _statusChip('SKIPPED', color: AppColors.onSurfaceVariant)
                 else if (isMissed)
                   _statusChip('MISSED', color: AppColors.error)
+                else if (isMovedHere)
+                  _statusChip('MOVED HERE', icon: Icons.redo_rounded)
                 else if (isOneTime)
                   _statusChip(
                     'THIS WEEK ONLY',
                     icon: Icons.event_rounded,
+                    color: AppColors.onSurfaceVariant,
+                  )
+                else if (day['keptForThisWeek'] == true && !isPast)
+                  _statusChip(
+                    'PLAN CHANGES NEXT WEEK',
                     color: AppColors.onSurfaceVariant,
                   )
                 else if (isRest)
@@ -927,12 +1027,14 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                             overflowColor: AppColors.surfaceContainerHigh,
                           ),
                   ),
-                  const SizedBox(width: 8),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.onSurfaceVariant,
-                    size: 20,
-                  ),
+                  if (canOpen) ...[
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppColors.onSurfaceVariant,
+                      size: 20,
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -1129,9 +1231,14 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 Text(
                   highlighted
                       ? 'Drop to swap'
-                      : isRest
-                      ? 'Recovery'
-                      : '${exercises.length} exercise${exercises.length == 1 ? '' : 's'} · $minutes min',
+                      : [
+                          isRest
+                              ? 'Recovery'
+                              : '${exercises.length} exercise${exercises.length == 1 ? '' : 's'} · $minutes min',
+                          // Changes to a day that's settled this week land
+                          // next week (see _lockedReason).
+                          if (_lockedReason(day) != null) 'from next week',
+                        ].join(' · '),
                   style: GoogleFonts.manrope(
                     fontSize: 12,
                     color: highlighted
@@ -1224,10 +1331,12 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   /// Swaps two days — in the plan, or for this week only (asked each
-  /// time; cancelling a workout is always for good, so it isn't). Comes
-  /// with UNDO rather than a confirm dialog: a swap is fully reversible, so
-  /// asking whether to go ahead only slows it down. [inPlan] is given only
-  /// by that UNDO, which repeats the same kind of swap.
+  /// time; cancelling a workout is always for good, so it isn't). Once
+  /// either day is settled this week ([_lockedReason]) only the plan can
+  /// change, from next week. Comes with UNDO rather than a confirm dialog:
+  /// a swap is fully reversible, so asking whether to go ahead only slows
+  /// it down. [inPlan] is given only by that UNDO, which repeats the same
+  /// kind of swap.
   Future<void> _swapDays(
     Map<String, dynamic> dayA,
     Map<String, dynamic> dayB, {
@@ -1235,11 +1344,12 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }) async {
     HapticFeedback.mediumImpact();
     final isUndo = inPlan != null;
-    inPlan ??= await _askSwapScope(dayA, dayB);
+    final lockedReason = _lockedReason(dayA) ?? _lockedReason(dayB);
+    inPlan ??= await _askSwapScope(dayA, dayB, lockedReason);
     if (inPlan == null || !mounted) return;
 
     final ok = inPlan
-        ? await _swapInPlan(dayA, dayB)
+        ? await _swapInPlan(dayA, dayB, keepThisWeek: lockedReason != null)
         : await _swapThisWeek(dayA, dayB);
     if (!mounted || !ok || isUndo) return;
 
@@ -1249,9 +1359,11 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(
-            swapped
-                ? 'Swapped ${dayA['dayName']} and ${dayB['dayName']} in your plan'
-                : 'Swapped ${dayA['dayName']} and ${dayB['dayName']} for this week only',
+            !swapped
+                ? 'Swapped ${dayA['dayName']} and ${dayB['dayName']} for this week only'
+                : lockedReason != null
+                ? 'Swapped ${dayA['dayName']} and ${dayB['dayName']} in your plan from next week'
+                : 'Swapped ${dayA['dayName']} and ${dayB['dayName']} in your plan',
             style: GoogleFonts.manrope(color: AppColors.onSurface),
           ),
           backgroundColor: AppColors.surfaceContainerHigh,
@@ -1265,48 +1377,53 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   /// Every week, or just this one? Resolves true for the plan, null if
-  /// dismissed. Just this week isn't offered once either day has passed or
-  /// had its workout done this week.
+  /// dismissed. With a [lockedReason] the plan change starts next week and
+  /// just this week isn't offered.
   Future<bool?> _askSwapScope(
     Map<String, dynamic> dayA,
     Map<String, dynamic> dayB,
+    String? lockedReason,
   ) {
     final nameA = dayA['dayName'] as String;
     final nameB = dayB['dayName'] as String;
-    String? unavailable;
-    for (final day in [dayA, dayB]) {
-      if (_dateThisWeek(day['dayNumber'] as int).isBefore(_today)) {
-        unavailable = '${day['dayName']} has already passed this week.';
-        break;
-      }
-      if (_isDoneThisWeek(day)) {
-        unavailable = "${day['dayName']}'s workout is already done this week.";
-        break;
-      }
-    }
 
     return showScopeChoiceSheet(
       context,
       title: 'SWAP ${nameA.toUpperCase()} AND ${nameB.toUpperCase()}',
       subtitle: 'Change your plan, or just this week?',
-      planTitle: 'EVERY WEEK',
-      planDescription:
-          '$nameA and $nameB trade workouts in your plan from now on.',
+      planTitle: lockedReason == null ? 'EVERY WEEK' : 'FROM NEXT WEEK',
+      planDescription: lockedReason == null
+          ? '$nameA and $nameB trade workouts in your plan from now on.'
+          : '$nameA and $nameB trade workouts in your plan from next week. '
+                'This week stays as it is.',
       oneTimeTitle: 'JUST THIS WEEK',
       oneTimeDescription:
           "Only this week's $nameA and $nameB — your plan stays as it is.",
-      oneTimeUnavailable: unavailable == null
+      oneTimeUnavailable: lockedReason == null
           ? null
-          : 'Not available — $unavailable',
+          : 'Not available — $lockedReason',
     );
   }
 
   /// Swaps the two plan days' content, at once on screen (then confirmed by
-  /// the reload).
+  /// the reload). This week's two days, read before the plan changes under
+  /// them, are kept as they are when [keepThisWeek]; otherwise, where
+  /// either has this week's own content, that's traded along with the plan.
   Future<bool> _swapInPlan(
     Map<String, dynamic> dayA,
-    Map<String, dynamic> dayB,
-  ) async {
+    Map<String, dynamic> dayB, {
+    required bool keepThisWeek,
+  }) async {
+    final weekA = _thisWeekOf(dayA), weekB = _thisWeekOf(dayB);
+    final Map<DateTime, Map<String, dynamic>> thisWeek = keepThisWeek
+        ? _keptThisWeek([dayA, dayB])
+        : weekA['id'] is String && weekB['id'] is String
+        ? const {}
+        : {
+            _dateThisWeek(dayA['dayNumber'] as int): weekB,
+            _dateThisWeek(dayB['dayNumber'] as int): weekA,
+          };
+
     // Optimistic: mirror WorkoutPlanService.swapDays — content moves, the
     // calendar slot (dayNumber/dayName/dayOfWeek, doc id) stays put.
     const slotFields = {'id', 'dayNumber', 'dayName', 'dayOfWeek'};
@@ -1329,14 +1446,23 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       days[ib] = withContent(b, a);
     });
 
-    return _runMutation(
-      () => WorkoutPlanService().swapDays(
-        uid: FirebaseAuth.instance.currentUser!.uid,
+    return _runMutation(() async {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      // Before the swap: it repoints these versions' plan days too.
+      if (thisWeek.isNotEmpty) {
+        await WorkoutPlanService().setDaysForDates(
+          uid: uid,
+          contentByDate: thisWeek,
+          keptForThisWeek: keepThisWeek,
+        );
+      }
+      await WorkoutPlanService().swapDays(
+        uid: uid,
         planId: _plan!['id'] as String,
         dayIdA: dayA['id'] as String,
         dayIdB: dayB['id'] as String,
-      ),
-    );
+      );
+    });
   }
 
   /// Trades what's on the two days' dates this week — as they'll actually
@@ -1631,7 +1757,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               subtitle: 'Sets, reps, rest — add, swap or remove',
               onTap: () {
                 Navigator.pop(sheetContext);
-                _openDayDetail(day);
+                _openSlot(day);
               },
             ),
             const SizedBox(height: 10),
@@ -1850,6 +1976,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   Future<void> _confirmCancelDay(Map<String, dynamic> day) async {
+    final over = _isOver(day);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -1863,7 +1990,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           ),
         ),
         content: Text(
-          '${day['dayName']} will be marked as a rest day. Its exercises will be removed from the schedule.',
+          over
+              ? "${day['dayName']} becomes a rest day in your plan from next week. This week's stays as it is."
+              : '${day['dayName']} will be marked as a rest day. Its exercises will be removed from the schedule.',
           style: GoogleFonts.manrope(
             color: AppColors.onSurfaceVariant,
             height: 1.5,
@@ -1892,13 +2021,14 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
 
     if (confirm != true) return;
-    await _runMutation(
-      () => WorkoutPlanService().cancelDay(
+    await _runMutation(() async {
+      if (over) await _keepThisWeek([day]);
+      await WorkoutPlanService().cancelDay(
         uid: FirebaseAuth.instance.currentUser!.uid,
         planId: _plan!['id'] as String,
         dayId: day['id'] as String,
-      ),
-    );
+      );
+    });
   }
 
   /// Edit mode: manage sheet for rest days — lets the user convert a rest
@@ -2034,6 +2164,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final useTemplate = await _showUseTemplateDialog();
     if (!mounted) return;
 
+    // A rest day that's already over this week becomes a workout from next
+    // week; this week's stays a rest day.
+    final over = _isOver(day);
     Map<String, dynamic>? updatedDay;
 
     if (useTemplate == true) {
@@ -2054,6 +2187,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       );
 
       await _runMutation(() async {
+        if (over) await _keepThisWeek([day]);
         updatedDay = await WorkoutPlanService().convertRestDayToWorkout(
           uid: uid,
           planId: _plan!['id'] as String,
@@ -2064,6 +2198,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       });
     } else {
       await _runMutation(() async {
+        if (over) await _keepThisWeek([day]);
         updatedDay = await WorkoutPlanService().convertRestDayToWorkout(
           uid: FirebaseAuth.instance.currentUser!.uid,
           planId: _plan!['id'] as String,
@@ -2074,14 +2209,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     }
 
     if (!mounted || updatedDay == null) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => WorkoutDayDetailScreen(
-          day: updatedDay!,
-          planId: _plan!['id'] as String,
-        ),
-      ),
+    await _openDayDetail(
+      updatedDay!,
+      beforePlanChange: over ? () => _keepThisWeek([day]) : null,
     );
   }
 
@@ -2183,142 +2313,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
   }
 
-  // Template exercise helpers
-  static const Map<String, int> _kDifficultyRank = {
-    'Beginner': 0,
-    'Intermediate': 1,
-    'Advanced': 2,
-  };
-
-  /// Absolute distance between exercise difficulty and user experience level.
-  int _difficultyDistance(String exerciseDifficulty, String userExperience) {
-    final exRank = _kDifficultyRank[exerciseDifficulty] ?? 1;
-    final normalized = userExperience.isEmpty
-        ? 'beginner'
-        : userExperience[0].toUpperCase() +
-              userExperience.substring(1).toLowerCase();
-    final userRank = _kDifficultyRank[normalized] ?? 0;
-    return (exRank - userRank).abs();
-  }
-
-  /// Template exercise pools per muscle group (exercise names from kExercises).
-  /// Note: some exercise `equipment` strings in exercise_data.dart use '/'
-  /// to mean "OR" between alternative setups (e.g. 'Bodyweight / Dumbbells, Bench').
-  /// See equipmentMatches() for how this is parsed.
-  static const Map<String, List<String>> _kMuscleGroupTemplatePools = {
-    'Chest': [
-      'Push-Up',
-      'Dumbbell Bench Press',
-      'Dumbbell Flye',
-      'Incline Push-Up',
-      'Incline Dumbbell Press',
-      'Machine Chest Press',
-      'Pec Deck Flye',
-      'Resistance Band Chest Press',
-      'Resistance Band Chest Flye',
-      'Dumbbell Floor Press',
-    ],
-    'Back': [
-      'Inverted Row',
-      'Dumbbell Row',
-      'Lat Pulldown',
-      'Seated Cable Row',
-      'Pull-Up',
-      'Chin-Up',
-      'Resistance Band Row',
-      'Resistance Band Lat Pulldown',
-      'Chest-Supported Dumbbell Row',
-      'Single-Arm Cable Row',
-    ],
-    'Shoulders': [
-      'Pike Push-Up',
-      'Dumbbell Shoulder Press',
-      'Dumbbell Lateral Raise',
-      'Dumbbell Front Raise',
-      'Dumbbell Rear Delt Flye',
-      'Arnold Press',
-      'Seated Dumbbell Shoulder Press',
-      'Machine Shoulder Press',
-      'Resistance Band Lateral Raise',
-      'Resistance Band Face Pull',
-    ],
-    'Arms': [
-      'Dumbbell Bicep Curl',
-      'Dumbbell Hammer Curl',
-      'Dumbbell Tricep Overhead Extension',
-      'Tricep Dip',
-      'Resistance Band Bicep Curl',
-      'Resistance Band Tricep Pushdown',
-      'Bench Dip',
-      'Dumbbell Concentration Curl',
-      'Incline Dumbbell Curl',
-      'Dumbbell Skull Crusher',
-    ],
-    'Legs': [
-      'Bodyweight Squat',
-      'Reverse Lunge',
-      'Dumbbell Goblet Squat',
-      'Dumbbell Romanian Deadlift',
-      'Split Squat',
-      'Bulgarian Split Squat',
-      'Step-Up',
-      'Wall Sit',
-      'Leg Press',
-      'Leg Curl',
-    ],
-    'Glutes': [
-      'Glute Bridge',
-      'Hip Thrust',
-      'Single-Leg Glute Bridge',
-      'Frog Pump',
-      'Fire Hydrant',
-      'Donkey Kick',
-      'Dumbbell Hip Thrust',
-      'Dumbbell Step-Up',
-      'Cable Glute Kickback',
-      'Resistance Band Glute Bridge',
-    ],
-    'Core': [
-      'Plank',
-      'Crunch',
-      'Leg Raise',
-      'Mountain Climber',
-      'Russian Twist',
-      'Dead Bug',
-      'Bird Dog',
-      'Bicycle Crunch',
-      'Flutter Kick',
-      'Side Plank',
-    ],
-  };
-
-  /// Builds a list of template exercises for the given muscle group,
-  /// filtered by user's equipment and sorted by difficulty proximity
-  /// to the user's experience level.
-  List<ExerciseData> buildTemplateExercises({
-    required String muscleGroup,
-    required List<String> userEquipment,
-    required String userExperience,
-    int maxExercises = 4,
-  }) {
-    final pool = _kMuscleGroupTemplatePools[muscleGroup] ?? [];
-
-    final resolved = pool
-        .map((name) => findExerciseByName(name))
-        .whereType<ExerciseData>()
-        .where((ex) => equipmentMatches(ex.equipment, userEquipment))
-        .toList();
-
-    resolved.sort(
-      (a, b) => _difficultyDistance(
-        a.difficulty,
-        userExperience,
-      ).compareTo(_difficultyDistance(b.difficulty, userExperience)),
-    );
-
-    return resolved.take(maxExercises).toList();
-  }
-
   /// Runs a swap/cancel write, showing a lightweight loading state and
   /// reloading the plan from Firestore afterward so the UI reflects the
   /// authoritative saved state rather than a locally-guessed one. Returns
@@ -2358,14 +2352,19 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   /// exercises, and view exercise details, then start the workout
   /// directly from there if it's today. A date's one-time content
   /// ([_thisWeek]) opens there too, with its edits kept to that date.
-  Future<void> _openDayDetail(Map<String, dynamic> day) async {
-    final days = (_plan!['days'] as List).cast<Map<String, dynamic>>();
+  /// [beforePlanChange] is for a plan day that's over this week — see
+  /// [_openSlot].
+  Future<void> _openDayDetail(
+    Map<String, dynamic> day, {
+    Future<void> Function()? beforePlanChange,
+  }) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => WorkoutDayDetailScreen(
           day: day,
           planId: _plan!['id'] as String,
-          planDay: ScheduleMatcher.planDayOf(days, day),
+          planDay: ScheduleMatcher.planDayOf(_planDays, day),
+          beforePlanChange: beforePlanChange,
         ),
       ),
     );

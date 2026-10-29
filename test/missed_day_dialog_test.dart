@@ -10,11 +10,15 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
   });
 
+  MissedDay missed(DateTime date, String workoutName,
+          [List<String> muscleGroups = const ['Chest']]) =>
+      MissedDay(date: date, workoutName: workoutName, muscleGroups: muscleGroups);
+
   Future<void> pumpDialog(
     WidgetTester tester, {
     required List<MissedDay> actionable,
     List<MissedDay> autoSkipped = const [],
-    Future<List<DateTime>> Function(MissedDay item)? findValidRescheduleDaysOverride,
+    Future<List<DateTime>> Function(MissedDay item)? findRescheduleDaysOverride,
     Future<void> Function(MissedDay item)? resolveSkippedOverride,
     Future<void> Function(MissedDay item, DateTime target)? resolveRescheduledOverride,
   }) async {
@@ -29,8 +33,8 @@ void main() {
                 uid: 'test-uid',
                 actionable: actionable,
                 autoSkipped: autoSkipped,
-                findValidRescheduleDaysOverride:
-                    findValidRescheduleDaysOverride ?? (_) async => const [],
+                findRescheduleDaysOverride:
+                    findRescheduleDaysOverride ?? (_) async => const [],
                 resolveSkippedOverride: resolveSkippedOverride,
                 resolveRescheduledOverride: resolveRescheduledOverride,
               ),
@@ -45,10 +49,29 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('tapping Skip entirely calls the skip action and dismisses the card',
+  /// Taps SKIP on a card, then confirms in the follow-up dialog.
+  Future<void> skipAndConfirm(WidgetTester tester, Finder skipButton) async {
+    await tester.tap(skipButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('SKIP SESSION'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('one card per missed session, with the muscle groups it trains',
       (tester) async {
+    await pumpDialog(tester, actionable: [
+      missed(DateTime(2024, 1, 1), 'Push', ['Chest', 'Shoulders', 'Arms']),
+    ]);
+
+    expect(find.text('Push'), findsOneWidget);
+    expect(find.text('Chest · Shoulders · Arms'), findsOneWidget);
+    expect(find.text('SKIP'), findsOneWidget);
+  });
+
+  testWidgets('skipping asks to confirm first, then calls the skip action and '
+      'dismisses the card', (tester) async {
     var skipCalled = false;
-    final item = MissedDay(muscleGroup: 'Chest', date: DateTime(2024, 1, 1));
+    final item = missed(DateTime(2024, 1, 1), 'Push', ['Chest', 'Shoulders']);
 
     await pumpDialog(
       tester,
@@ -58,10 +81,15 @@ void main() {
       },
     );
 
-    expect(find.text('Chest'), findsOneWidget);
-    expect(find.text('SKIP ENTIRELY'), findsOneWidget);
+    await tester.tap(find.text('SKIP'));
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.text('SKIP ENTIRELY'));
+    // Asked, not yet skipped.
+    expect(find.text("Skip Monday's Push?"), findsOneWidget);
+    expect(find.textContaining('a break for Chest and Shoulders'), findsOneWidget);
+    expect(skipCalled, isFalse);
+
+    await tester.tap(find.text('SKIP SESSION'));
     await tester.pumpAndSettle();
 
     expect(skipCalled, isTrue);
@@ -70,23 +98,43 @@ void main() {
     expect(find.byType(MissedDayDialog), findsNothing);
   });
 
-  testWidgets('tapping Reschedule then a day calls the reschedule action with that '
-      'date and dismisses the card', (tester) async {
+  testWidgets('cancelling the skip confirmation leaves the session untouched',
+      (tester) async {
+    var skipCalled = false;
+
+    await pumpDialog(
+      tester,
+      actionable: [missed(DateTime(2024, 1, 1), 'Push')],
+      resolveSkippedOverride: (_) async {
+        skipCalled = true;
+      },
+    );
+
+    await tester.tap(find.text('SKIP'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('CANCEL'));
+    await tester.pumpAndSettle();
+
+    expect(skipCalled, isFalse);
+    expect(find.text('Push'), findsOneWidget);
+    expect(find.text('SKIP'), findsOneWidget);
+  });
+
+  testWidgets('moving to a rest day calls the reschedule action with that date '
+      'and dismisses the card', (tester) async {
     DateTime? rescheduledTo;
-    final item = MissedDay(muscleGroup: 'Chest', date: DateTime(2024, 1, 1));
     final candidate = DateTime(2024, 1, 3); // a Wednesday
 
     await pumpDialog(
       tester,
-      actionable: [item],
-      findValidRescheduleDaysOverride: (_) async => [candidate],
+      actionable: [missed(DateTime(2024, 1, 1), 'Push')],
+      findRescheduleDaysOverride: (_) async => [candidate],
       resolveRescheduledOverride: (m, target) async {
         rescheduledTo = target;
       },
     );
 
-    expect(find.text('RESCHEDULE'), findsOneWidget);
-    await tester.tap(find.text('RESCHEDULE'));
+    await tester.tap(find.text('MOVE TO A REST DAY'));
     await tester.pumpAndSettle();
 
     // The day picker is now showing the one candidate day.
@@ -99,138 +147,83 @@ void main() {
   });
 
   testWidgets(
-      'resolving a non-last item does not leave a later item stuck loading '
+      'resolving a non-last session does not leave a later one stuck loading '
       '(regression: per-item state must be keyed by identity, not list index)',
       (tester) async {
-    final itemA = MissedDay(muscleGroup: 'Chest', date: DateTime(2024, 1, 1));
-    final itemB = MissedDay(muscleGroup: 'Legs', date: DateTime(2024, 1, 2));
-
     await pumpDialog(
       tester,
-      actionable: [itemA, itemB],
-      findValidRescheduleDaysOverride: (_) async => const [],
+      actionable: [
+        missed(DateTime(2024, 1, 1), 'Push'),
+        missed(DateTime(2024, 1, 2), 'Legs'),
+      ],
       resolveSkippedOverride: (_) async {},
     );
 
-    expect(find.text('SKIP ENTIRELY'), findsNWidgets(2));
+    expect(find.text('SKIP'), findsNWidgets(2));
 
     // Resolve the FIRST item, not the last — this is exactly what
     // shifted index-1's item into index 0 under the old implementation,
     // leaving it permanently stuck on the loading spinner because its
     // "candidates loaded" flag was recorded under the wrong key.
-    await tester.tap(find.text('SKIP ENTIRELY').first);
-    await tester.pumpAndSettle();
+    await skipAndConfirm(tester, find.text('SKIP').first);
 
-    expect(find.text('Chest'), findsNothing);
+    expect(find.text('Push'), findsNothing);
     expect(find.text('Legs'), findsOneWidget);
-    expect(find.text('SKIP ENTIRELY'), findsOneWidget);
+    expect(find.text('SKIP'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
-  });
-
-  testWidgets(
-      'resolving one muscle group under a shared date header does not affect '
-      'the other rows under that same header (regression: grouping by date '
-      'must not reintroduce index-based state keying — see Decision #51)',
-      (tester) async {
-    final sameDate = DateTime(2024, 1, 6); // Sat 6/1
-    final chest = MissedDay(muscleGroup: 'Chest', date: sameDate);
-    final shoulders = MissedDay(muscleGroup: 'Shoulders', date: sameDate);
-    final arms = MissedDay(muscleGroup: 'Arms', date: sameDate);
-
-    await pumpDialog(
-      tester,
-      actionable: [chest, shoulders, arms],
-      findValidRescheduleDaysOverride: (_) async => const [],
-      resolveSkippedOverride: (_) async {},
-    );
-
-    // All three share one date header, not three repeated ones.
-    expect(find.text('Sat 6/1'), findsOneWidget);
-    expect(find.text('Chest'), findsOneWidget);
-    expect(find.text('Shoulders'), findsOneWidget);
-    expect(find.text('Arms'), findsOneWidget);
-    expect(find.text('SKIP ENTIRELY'), findsNWidgets(3));
-
-    // Resolve the middle row (Shoulders) — under the old index-keyed bug
-    // this is exactly the case that would shift a sibling under the same
-    // group into a stale slot and leave it stuck on a permanent spinner.
-    await tester.tap(find.text('SKIP ENTIRELY').at(1));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Shoulders'), findsNothing);
-    // The date header survives — Chest and Arms are still under it, each
-    // still independently actionable and not stuck loading.
-    expect(find.text('Sat 6/1'), findsOneWidget);
-    expect(find.text('Chest'), findsOneWidget);
-    expect(find.text('Arms'), findsOneWidget);
-    expect(find.text('SKIP ENTIRELY'), findsNWidgets(2));
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-
-    // Resolving the remaining two rows should make the whole date group
-    // disappear along with the dialog (nothing actionable or read-only left).
-    await tester.tap(find.text('SKIP ENTIRELY').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('SKIP ENTIRELY').first);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Sat 6/1'), findsNothing);
-    expect(find.byType(MissedDayDialog), findsNothing);
   });
 
   testWidgets('a failed skip keeps the card and surfaces an error instead of '
       'hanging or silently dismissing', (tester) async {
-    final item = MissedDay(muscleGroup: 'Chest', date: DateTime(2024, 1, 1));
-
     await pumpDialog(
       tester,
-      actionable: [item],
+      actionable: [missed(DateTime(2024, 1, 1), 'Push')],
       resolveSkippedOverride: (_) async {
         throw Exception('write failed');
       },
     );
 
-    await tester.tap(find.text('SKIP ENTIRELY'));
-    await tester.pumpAndSettle();
+    await skipAndConfirm(tester, find.text('SKIP'));
 
     // Card is still there with its button restored — not a permanent
     // spinner, and not silently treated as resolved.
-    expect(find.text('Chest'), findsOneWidget);
-    expect(find.text('SKIP ENTIRELY'), findsOneWidget);
+    expect(find.text('Push'), findsOneWidget);
+    expect(find.text('SKIP'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets('an empty candidate list offers only Skip entirely, no Reschedule button',
+  testWidgets('with no free rest day, only Skip is offered — and says why',
       (tester) async {
-    final item = MissedDay(muscleGroup: 'Chest', date: DateTime(2024, 1, 1));
-
     await pumpDialog(
       tester,
-      actionable: [item],
-      findValidRescheduleDaysOverride: (_) async => const [],
+      actionable: [missed(DateTime(2024, 1, 1), 'Push')],
+      findRescheduleDaysOverride: (_) async => const [],
     );
 
-    expect(find.text('RESCHEDULE'), findsNothing);
-    expect(find.text('SKIP ENTIRELY'), findsOneWidget);
+    expect(find.text('MOVE TO A REST DAY'), findsNothing);
+    expect(find.textContaining('No rest day is free'), findsOneWidget);
+    expect(find.text('SKIP'), findsOneWidget);
   });
 
   testWidgets('auto-skipped misses collapse into one summary line, not individual '
-      'cards, and never show a reschedule action', (tester) async {
+      'cards, and never show a move action', (tester) async {
     final autoSkipped = [
-      MissedDay(muscleGroup: 'Chest', date: DateTime(2024, 1, 1)),
-      MissedDay(muscleGroup: 'Legs', date: DateTime(2023, 12, 20)),
-      MissedDay(muscleGroup: 'Back', date: DateTime(2023, 12, 10)),
+      missed(DateTime(2024, 1, 1), 'Push'),
+      missed(DateTime(2023, 12, 20), 'Legs'),
+      missed(DateTime(2023, 12, 10), 'Pull'),
     ];
 
     await pumpDialog(tester, actionable: const [], autoSkipped: autoSkipped);
 
     expect(find.textContaining('You also missed 3 workouts'), findsOneWidget);
-    expect(find.text('SKIP ENTIRELY'), findsNothing);
-    expect(find.text('RESCHEDULE'), findsNothing);
+    expect(find.text('SKIP'), findsNothing);
+    expect(find.text('MOVE TO A REST DAY'), findsNothing);
 
     await tester.tap(find.textContaining('You also missed 3 workouts'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('skipped'), findsNWidgets(3));
+    expect(find.textContaining('Push —'), findsOneWidget);
 
     // Nothing actionable, only read-only content -> an explicit close button.
     expect(find.text('GOT IT'), findsOneWidget);

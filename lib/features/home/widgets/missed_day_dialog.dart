@@ -2,16 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../workout/services/adapt_service.dart';
-import '../../workout/services/schedule_matcher.dart';
 
-/// Shown on Home screen load whenever the user has missed scheduled day(s)
-/// not yet acknowledged (Phase 25 — see AdaptService.findMissedDays).
+/// Shown on Home screen load whenever the user has missed scheduled
+/// session(s) not yet acknowledged (Phase 25 — see AdaptService.findMissedDays).
 ///
+/// One card per missed session — the whole day, whatever it trained.
 /// [actionable] misses are still within the reschedule-eligible window and
-/// get a live card: "Reschedule" (opens an inline day picker — only shown
-/// when at least one valid day exists) and "Skip entirely". [autoSkipped]
-/// misses already had their window expire and were auto-resolved as
-/// skipped before this dialog was even built (see
+/// get a live card: "Move to a rest day" (opens an inline day picker — only
+/// shown when at least one rest day is free before that workout comes
+/// round again) and "Skip" (asks to confirm first: a skip is final).
+/// [autoSkipped] misses already had their window expire and were
+/// auto-resolved as skipped before this dialog was even built (see
 /// AdaptService.findMissedDays) — they're read-only, collapsed into one
 /// summary line.
 ///
@@ -24,8 +25,7 @@ class MissedDayDialog extends StatefulWidget {
   final List<MissedDay> actionable;
   final List<MissedDay> autoSkipped;
 
-  final Future<List<DateTime>> Function(MissedDay item)?
-  findValidRescheduleDaysOverride;
+  final Future<List<DateTime>> Function(MissedDay item)? findRescheduleDaysOverride;
   final Future<void> Function(MissedDay item, DateTime target)?
   resolveRescheduledOverride;
   final Future<void> Function(MissedDay item)? resolveSkippedOverride;
@@ -35,7 +35,7 @@ class MissedDayDialog extends StatefulWidget {
     required this.uid,
     required this.actionable,
     this.autoSkipped = const [],
-    this.findValidRescheduleDaysOverride,
+    this.findRescheduleDaysOverride,
     this.resolveRescheduledOverride,
     this.resolveSkippedOverride,
   });
@@ -52,7 +52,7 @@ class _MissedDayDialogState extends State<MissedDayDialog> {
   AdaptService? _adaptServiceInstance;
   AdaptService get _adaptService => _adaptServiceInstance ??= AdaptService();
 
-  // All per-item transient state is keyed by MissedDay.key (muscleGroup +
+  // All per-item transient state is keyed by MissedDay.key (the missed
   // date), never by list index or position — indices shift whenever an
   // earlier item is removed (an item resolving out of order), and keying
   // by index caused a real bug: the item that slid into a freed index
@@ -76,13 +76,9 @@ class _MissedDayDialogState extends State<MissedDayDialog> {
   }
 
   Future<List<DateTime>> _fetchCandidates(MissedDay item) {
-    final override = widget.findValidRescheduleDaysOverride;
+    final override = widget.findRescheduleDaysOverride;
     if (override != null) return override(item);
-    return _adaptService.findValidRescheduleDays(
-      uid: widget.uid,
-      muscleGroup: item.muscleGroup,
-      missedDate: item.date,
-    );
+    return _adaptService.findRescheduleDays(uid: widget.uid, missed: item);
   }
 
   Future<void> _loadCandidates(MissedDay item) async {
@@ -101,11 +97,7 @@ class _MissedDayDialogState extends State<MissedDayDialog> {
   Future<void> _skipAction(MissedDay item) {
     final override = widget.resolveSkippedOverride;
     if (override != null) return override(item);
-    return _adaptService.resolveMissedDayAsSkipped(
-      uid: widget.uid,
-      muscleGroup: item.muscleGroup,
-      missedDate: item.date,
-    );
+    return _adaptService.resolveMissedDayAsSkipped(uid: widget.uid, missed: item);
   }
 
   Future<void> _rescheduleAction(MissedDay item, DateTime target) {
@@ -113,10 +105,68 @@ class _MissedDayDialogState extends State<MissedDayDialog> {
     if (override != null) return override(item, target);
     return _adaptService.resolveMissedDayAsRescheduled(
       uid: widget.uid,
-      muscleGroup: item.muscleGroup,
-      missedDate: item.date,
+      missed: item,
       rescheduledTo: target,
     );
+  }
+
+  /// A skip is final — the session can't be moved or redone after — so it
+  /// asks first.
+  Future<void> _confirmSkip(MissedDay item) async {
+    final groups = item.muscleGroups;
+    final groupList = groups.length <= 1
+        ? groups.join()
+        : '${groups.sublist(0, groups.length - 1).join(', ')} and ${groups.last}';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          "Skip ${_weekdayName(item.date.weekday)}'s ${item.workoutName}?",
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
+          ),
+        ),
+        content: Text(
+          "It can't be moved or redone after this. "
+          '${groups.isEmpty ? '' : 'Your coach will treat it as a break for $groupList.'}',
+          style: GoogleFonts.manrope(
+            fontSize: 13,
+            color: AppColors.onSurfaceVariant,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              'CANCEL',
+              style: GoogleFonts.manrope(
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              'SKIP SESSION',
+              style: GoogleFonts.manrope(
+                fontWeight: FontWeight.w700,
+                color: AppColors.error,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await _resolve(item, () => _skipAction(item));
+    }
   }
 
   Future<void> _resolve(MissedDay item, Future<void> Function() action) async {
@@ -157,13 +207,14 @@ class _MissedDayDialogState extends State<MissedDayDialog> {
     }
   }
 
-  String _weekdayLabel(int weekday) {
-    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return labels[weekday - 1];
-  }
+  static const _weekdayNames = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  ];
+
+  String _weekdayName(int weekday) => _weekdayNames[weekday - 1];
 
   String _dateLabel(DateTime date) =>
-      '${_weekdayLabel(date.weekday)} ${date.day}/${date.month}';
+      '${_weekdayName(date.weekday).substring(0, 3)} ${date.day}/${date.month}';
 
   @override
   Widget build(BuildContext context) {
@@ -176,9 +227,9 @@ class _MissedDayDialogState extends State<MissedDayDialog> {
       child: ConstrainedBox(
         // Bounded so the dialog never tries to render taller than the
         // screen — with the day picker expanded and several missed
-        // muscle groups shown at once, unbounded content here is exactly
-        // what produced the reported overflow. The inner scroll view
-        // handles anything past this height.
+        // sessions shown at once, unbounded content here is exactly what
+        // produced the reported overflow. The inner scroll view handles
+        // anything past this height.
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.8,
         ),
@@ -213,7 +264,7 @@ class _MissedDayDialogState extends State<MissedDayDialog> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Choose what to do with each one — reschedule it, or skip it entirely.',
+                'Move each one to a rest day, or skip it. Your plan stays as it is.',
                 style: GoogleFonts.manrope(
                   fontSize: 13,
                   color: AppColors.onSurfaceVariant,
@@ -225,7 +276,7 @@ class _MissedDayDialogState extends State<MissedDayDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ..._dateGroups().map(_dateGroupCard),
+                      ..._items.map(_sessionCard),
                       if (widget.autoSkipped.isNotEmpty) _autoSkippedSummary(),
                     ],
                   ),
@@ -262,32 +313,13 @@ class _MissedDayDialogState extends State<MissedDayDialog> {
     );
   }
 
-  /// Groups the current [_items] by calendar date, preserving each date's
-  /// first-seen order — this is purely a rendering grouping, recomputed on
-  /// every build from whatever is left in [_items]. It never touches the
-  /// underlying data model: [MissedDay] instances stay keyed by
-  /// muscleGroup + date exactly as before (Decision #47), this just
-  /// decides how to lay them out under shared date headers. Because it's
-  /// derived fresh each build, a date's group shrinks (and vanishes once
-  /// empty) automatically as its rows resolve one by one.
-  List<List<MissedDay>> _dateGroups() {
-    final Map<String, List<MissedDay>> grouped = {};
-    final List<String> order = [];
-    for (final item in _items) {
-      final dateKey = ScheduleMatcher.dateKey(item.date);
-      final group = grouped.putIfAbsent(dateKey, () {
-        order.add(dateKey);
-        return [];
-      });
-      group.add(item);
-    }
-    return order.map((dateKey) => grouped[dateKey]!).toList();
-  }
+  Widget _sessionCard(MissedDay item) {
+    final isResolving = _resolving.contains(item.key);
+    final candidates = _candidates[item.key];
+    final pickerOpen = _pickerOpenFor.contains(item.key);
 
-  Widget _dateGroupCard(List<MissedDay> group) {
-    final date = group.first.date;
     return Container(
-      key: ValueKey('date-group-${ScheduleMatcher.dateKey(date)}'),
+      key: ValueKey(item.key),
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -298,128 +330,130 @@ class _MissedDayDialogState extends State<MissedDayDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            _dateLabel(date),
+            _dateLabel(item.date),
             style: GoogleFonts.manrope(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.onSurfaceVariant,
             ),
           ),
-          for (var i = 0; i < group.length; i++) ...[
-            if (i > 0) ...[
-              const SizedBox(height: 12),
-              Divider(
-                height: 1,
-                color: AppColors.onSurfaceVariant.withValues(alpha: 0.15),
-              ),
-            ],
-            const SizedBox(height: 12),
-            _muscleGroupRow(group[i]),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _muscleGroupRow(MissedDay item) {
-    final isResolving = _resolving.contains(item.key);
-    final candidates = _candidates[item.key];
-    final pickerOpen = _pickerOpenFor.contains(item.key);
-
-    return Column(
-      key: ValueKey(item.key),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          item.muscleGroup,
-          style: GoogleFonts.spaceGrotesk(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppColors.onSurface,
+          const SizedBox(height: 6),
+          Text(
+            item.workoutName,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        if (isResolving || candidates == null)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Center(
-              child: SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.primary,
-                ),
+          if (item.muscleGroups.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              item.muscleGroups.join(' · '),
+              style: GoogleFonts.manrope(
+                fontSize: 12,
+                color: AppColors.onSurfaceVariant,
               ),
             ),
-          )
-        else if (pickerOpen)
-          _dayPicker(item, candidates)
-        else
-          Row(
-            children: [
-              if (candidates.isNotEmpty) ...[
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () =>
-                        setState(() => _pickerOpenFor.add(item.key)),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(
-                        color: AppColors.primary.withValues(alpha: 0.5),
+          ],
+          const SizedBox(height: 12),
+          if (isResolving || candidates == null)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            )
+          else if (pickerOpen)
+            _dayPicker(item, candidates)
+          else ...[
+            if (candidates.isEmpty) ...[
+              Text(
+                'No rest day is free before this workout comes round again.',
+                style: GoogleFonts.manrope(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            Row(
+              children: [
+                if (candidates.isNotEmpty) ...[
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () =>
+                          setState(() => _pickerOpenFor.add(item.key)),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(
+                          color: AppColors.primary.withValues(alpha: 0.5),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
+                      child: Text(
+                        'MOVE TO A REST DAY',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _confirmSkip(item),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.surfaceContainerHigh,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                     child: Text(
-                      'RESCHEDULE',
+                      'SKIP',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.spaceGrotesk(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
-                        color: AppColors.primary,
+                        color: AppColors.onSurface,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
               ],
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => _resolve(item, () => _skipAction(item)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.surfaceContainerHigh,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    'SKIP ENTIRELY',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                      color: AppColors.onSurface,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-      ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 
   Widget _dayPicker(MissedDay item, List<DateTime> candidates) {
+    final today = DateTime.now();
+    bool isToday(DateTime d) =>
+        d.year == today.year && d.month == today.month && d.day == today.day;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'CHOOSE A DAY',
+          'CHOOSE A REST DAY',
           style: GoogleFonts.manrope(
             fontSize: 10,
             fontWeight: FontWeight.w700,
@@ -449,7 +483,7 @@ class _MissedDayDialogState extends State<MissedDayDialog> {
                     ),
                   ),
                   child: Text(
-                    _dateLabel(date).toUpperCase(),
+                    isToday(date) ? 'TODAY' : _dateLabel(date).toUpperCase(),
                     style: GoogleFonts.spaceGrotesk(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -529,7 +563,7 @@ class _MissedDayDialogState extends State<MissedDayDialog> {
                       (item) => Padding(
                         padding: const EdgeInsets.symmetric(vertical: 3),
                         child: Text(
-                          '${item.muscleGroup} — ${_dateLabel(item.date)} — skipped',
+                          '${item.workoutName} — ${_dateLabel(item.date)} — skipped',
                           style: GoogleFonts.manrope(
                             fontSize: 12,
                             color: AppColors.onSurfaceVariant.withValues(

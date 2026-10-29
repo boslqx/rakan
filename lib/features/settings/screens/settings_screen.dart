@@ -16,6 +16,8 @@ import '../../social/services/public_profile_service.dart';
 import '../../workout/services/workout_plan_service.dart';
 import '../../workout/services/notification_service.dart';
 import '../../coach/services/plan_reset_flow.dart';
+import '../../legal/data/legal_content.dart';
+import '../../legal/screens/legal_screen.dart';
 import '../services/account_deletion_service.dart';
 import 'change_password_dialog.dart';
 import 'edit_profile_screen.dart';
@@ -46,6 +48,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isUpdatingReminders = false;
 
   String _appVersion = '';
+
+  // Google-only accounts have no password to change (Google manages it),
+  // so the Change Password tile is hidden for them.
+  final bool _usesPassword = AccountDeletionService().usesPassword;
 
   // Social stats
   int _followerCount = 0;
@@ -612,11 +618,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
 
             // Settings items
-            _SettingsTile(
-              icon: Icons.lock_outline_rounded,
-              label: 'Change Password',
-              onTap: () => ChangePasswordDialog.show(context),
-            ),
+            if (_usesPassword)
+              _SettingsTile(
+                icon: Icons.lock_outline_rounded,
+                label: 'Change Password',
+                onTap: () => ChangePasswordDialog.show(context),
+              ),
 
             _SettingsTile(
               icon: Icons.monitor_weight_outlined,
@@ -649,6 +656,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             // Privacy card (custom — has toggle) ────────
             _buildPrivacyCard(),
+
+            _SettingsTile(
+              icon: Icons.description_outlined,
+              label: 'Terms & Conditions',
+              onTap: () => LegalScreen.open(context, termsAndConditions),
+            ),
+
+            _SettingsTile(
+              icon: Icons.privacy_tip_outlined,
+              label: 'Privacy Policy',
+              onTap: () => LegalScreen.open(context, privacyPolicy),
+            ),
 
             _SettingsTile(
               icon: Icons.info_outline_rounded,

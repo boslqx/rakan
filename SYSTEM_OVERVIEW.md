@@ -336,13 +336,19 @@ Every result carries a human-readable `reason` string with citations — surface
 `_applyAdjustmentToMuscleGroup`: for **future** days only (`dayNumber > today.weekday`, non-rest), each exercise whose primary group matches gets
 `sets = clamp(round(sets·(1+adj)), 1..6)`, `reps = clamp(round(reps·(1+adj)), 3..20)`; stamped with `adaptedAt`, `fatigueLevel` (=tier), `adaptationSource: "engine_v2"`. Only *changed* exercises count toward the summary. **Weight is never modified** (basis for plateau detection).
 
-### 9.7 Missed-day flow (Phase 25/26)
-- **Detection** (`computeMissedDays`, pure): scan back ≤30 days from yesterday; a scheduled workout day with no log and no resolution doc is *missed*, per **muscle group + date** (key `"{group}|YYYY-MM-DD"`). Bounded by the plan's `generatedAt` so brand-new plans don't retroactively "miss" days (Phase 26 bug fix).
-- **User choice** (`MissedDayDialog`, grouped by date visually, resolved per muscle group): **Reschedule** or **Skip entirely**.
-- **Reschedule:** `computeValidRescheduleDays` — candidate date must (1) be after the missed date and after today, (2) be ≥48 h after the group's *actual* last-trained date, (3) fall before the next scheduled occurrence of that group, (4) be an empty (rest/unscheduled, no override) day. Writes a one-off `scheduleOverrides` doc + `missedDayResolutions{status: rescheduled}`; **no adaptation proposal**.
-- **Skip:** writes resolution `skipped` and a `trigger:"skip"` proposal (idempotent — only one pending skip proposal per group), capturing `priorLastTrainedDate` *now*. `daysSinceLastTrained` is filled in when the user next trains that group (`resolvePendingSkipForSession`), which **suppresses** the ordinary session proposal that day (Decision #44).
-- **Expiry:** missed days older than **7 days** are auto-resolved as skipped on app open.
-- `ScheduleMatcher.resolvedDayForDate` is the single lookup for "what's scheduled on date D" (override wins over weekday template).
+### 9.7 Missed-day flow (Phase 25/26, reworked per session)
+- **Detection** (`computeMissedDays`, pure): scan back ≤30 days from yesterday; a scheduled workout day (read through `resolvedDayForDate`, so one-time versions count) with no log and no resolution doc is *missed* — one `MissedDay` per **date**, the whole session with every muscle group it trains. Bounded by the plan's `generatedAt` (Phase 26 bug fix) and by `missedDayResolutions/_scan.checkedThrough`, the last date an earlier scan settled — so a later plan change can't turn an old date into a phantom miss. Older `"{group}|YYYY-MM-DD"` resolutions still settle their date.
+- **User choice** (`MissedDayDialog`, one card per session): **Move to a rest day** or **Skip** (asks to confirm — a skip is final).
+- **Move:** `computeRescheduleDays` — rest days (nothing scheduled, nothing logged) from today, up to 7 days ahead, and before that same plan day comes round again. Writes the whole session as a one-time version on that date (`setDaysForDates`, carrying `sourceMissedDates`) + `missedDayResolutions/{date}{status: rescheduled}`; the plan is untouched and **no adaptation proposal** is written. A moved-in session can have its exercises edited but can't be moved again.
+- **Skip:** writes resolution `skipped` and one `trigger:"skip"` proposal per muscle group the session trained (idempotent — only one pending skip proposal per group), capturing `priorLastTrainedDate` *now*. `daysSinceLastTrained` is filled in when the user next trains that group (`resolvePendingSkipForSession`), which **suppresses** the ordinary session proposal that day (Decision #44).
+- **Expiry:** missed sessions older than **7 days** are auto-resolved as skipped on app open.
+- `ScheduleMatcher.resolvedDayForDate` is the single lookup for "what's scheduled on date D" (a date's own content wins over the weekday template).
+
+### 9.7a Changing the week (Schedule tab)
+- **One-time versions** (`scheduleOverrides/{date}__version`): a date's whole content for that week only — an exercise added "just this time", a swap "just this week", or a moved missed session. `kind: kept` marks one that only holds on to what the date already had (below). `planDayId` points at the plan day whose workout it holds; `swapDays` repoints it.
+- **Adding an exercise** asks "Save to my plan" or "Just this time" whenever both can apply.
+- **Swapping days** asks "Every week" or "Just this week". Once either day is settled this week — passed, done, skipped, moved, or holding a moved-in session — only the plan can change, **from next week**: this week's days are first kept as they are (`kind: kept`). Cancelling or converting a day that's over works the same way.
+- **Settled days:** skipped and moved days can't be opened; a completed day opens its plan day, whose edits apply from next week (its start button stays locked).
 
 ### 9.8 Plateau detection (Phase 27, read-only)
 `AdaptService.detectPlateau(sessionMaxWeights, n=4, thresholdPct=0.02)`: needs **N+1 = 5** sessions (4 transitions); plateau iff **no** transition improved max weight ≥ 2 %. Shown as a passive notice under the exercise-progression chart; computed on demand (no persistence). Threshold sits below the 2.5–5 % overload range in the literature. Limitation: a long calendar gap isn't distinguished from stagnation (Decision #60). **Unit-tested only, not device-verified.**
@@ -396,8 +402,8 @@ users/{uid}                          ← PUBLIC index doc (readable by any verif
   ├─ workoutPlans/{planId}           planName, status:'active', generatedAt, weekNumber
   │    └─ days/{dayPlanId}           dayNumber(1–7), dayName, dayType(workout|rest), workoutName, focusDescription, durationMinutes, reminder fields
   │         └─ exercises/{id}        exerciseName, muscleGroup, secondaryMuscles, sets, reps, restSeconds, equipment, order, adaptedAt, fatigueLevel, adaptationSource
-  ├─ scheduleOverrides/{group_date}  one-off rescheduled content (date key YYYY-MM-DD)
-  ├─ missedDayResolutions/{group|date} status: rescheduled|skipped, rescheduledToDate, resolvedAt
+  ├─ scheduleOverrides/{date__version} a date's one-time content (kind: version|kept, planDayId, sourceMissedDates); older {date__group} docs from per-muscle reschedules
+  ├─ missedDayResolutions/{date}     status: rescheduled|skipped, rescheduledToDate, workoutName, muscleGroups, resolvedAt (older docs keyed {group|date}); _scan.checkedThrough
   ├─ workoutLogs/{logId}             planId, dayPlanId, workoutName, started/completedAt (ISO strings), totalDurationMins, totalVolume, totalSetsCompleted, prReached, prExerciseNames
   │    └─ exerciseLogs/{id}          exerciseName, muscleGroup, rpeScale, setDetails[{reps,weightKg,completed}]
   ├─ activityFeed/{logId}            thin follower-visible copy (name, completedAt, duration, sets, prReached) — NO weights

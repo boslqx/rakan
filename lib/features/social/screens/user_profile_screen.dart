@@ -25,6 +25,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   final _workoutLogService = WorkoutLogService();
 
   bool _isLoading = true;
+  // Set when the profile or feed can't be read (e.g. denied by the rules,
+  // or offline) — shown instead of spinning forever (D-24).
+  String? _loadError;
   Map<String, dynamic>? _profile;
   int _followerCount = 0;
   int _followingCount = 0;
@@ -42,36 +45,48 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final viewerUid = FirebaseAuth.instance.currentUser?.uid;
     if (viewerUid == null) return;
 
-    final results = await Future.wait([
-      FirebaseFirestore.instance.collection('users').doc(widget.uid).get(),
-      _followService.getFollowerCount(widget.uid),
-      _followService.getFollowingCount(widget.uid),
-      _followService.getFollowStatus(viewerUid: viewerUid, targetUid: widget.uid),
-    ]);
+    try {
+      final results = await Future.wait([
+        FirebaseFirestore.instance.collection('users').doc(widget.uid).get(),
+        _followService.getFollowerCount(widget.uid),
+        _followService.getFollowingCount(widget.uid),
+        _followService.getFollowStatus(viewerUid: viewerUid, targetUid: widget.uid),
+      ]);
 
-    final profileSnap = results[0] as DocumentSnapshot<Map<String, dynamic>>;
-    final followerCount = results[1] as int;
-    final followingCount = results[2] as int;
-    final status = results[3] as FollowStatus;
+      final profileSnap = results[0] as DocumentSnapshot<Map<String, dynamic>>;
+      final followerCount = results[1] as int;
+      final followingCount = results[2] as int;
+      final status = results[3] as FollowStatus;
 
-    final profile = profileSnap.data();
-    final isPrivate = profile?['isPrivate'] as bool? ?? false;
-    final canView = _isOwner || !isPrivate || status == FollowStatus.accepted;
+      final profile = profileSnap.data();
+      final isPrivate = profile?['isPrivate'] as bool? ?? false;
+      final canView = _isOwner || !isPrivate || status == FollowStatus.accepted;
 
-    List<Map<String, dynamic>> feed = [];
-    if (canView) {
-      feed = await _workoutLogService.getActivityFeed(widget.uid);
+      List<Map<String, dynamic>> feed = [];
+      if (canView) {
+        feed = await _workoutLogService.getActivityFeed(widget.uid);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _profile = profile;
+        _followerCount = followerCount;
+        _followingCount = followingCount;
+        _canViewDetails = canView;
+        _feed = feed;
+        _loadError = null;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('UserProfileScreen load failed for ${widget.uid}: $e');
+      if (!mounted) return;
+      setState(() {
+        _loadError = e is FirebaseException && e.code == 'permission-denied'
+            ? "You can't view this profile right now."
+            : "Couldn't load this profile. Check your connection and try again.";
+        _isLoading = false;
+      });
     }
-
-    if (!mounted) return;
-    setState(() {
-      _profile = profile;
-      _followerCount = followerCount;
-      _followingCount = followingCount;
-      _canViewDetails = canView;
-      _feed = feed;
-      _isLoading = false;
-    });
   }
 
   @override
@@ -83,7 +98,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ? const Center(
                 child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 1.5),
               )
-            : _profile == null
+            : _loadError != null
+                ? _buildLoadError()
+                : _profile == null
                 ? _buildNotFound()
                 : RefreshIndicator(
                     onRefresh: _load,
@@ -113,6 +130,50 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ],
                     ),
                   ),
+      ),
+    );
+  }
+
+  Widget _buildLoadError() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildBackButton(),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _loadError!,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.manrope(color: AppColors.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _isLoading = true;
+                        _loadError = null;
+                      });
+                      _load();
+                    },
+                    child: Text(
+                      'TRY AGAIN',
+                      style: GoogleFonts.spaceGrotesk(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

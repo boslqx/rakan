@@ -137,11 +137,90 @@ void main() {
       );
 
       expect(result, hasLength(2));
-      expect(result.every((m) => m.muscleGroup == 'Chest'), isTrue);
+      expect(result.every((m) => m.muscleGroups.contains('Chest')), isTrue);
       expect(result.map((m) => m.date), containsAll([daysAgo(1), daysAgo(8)]));
     });
 
-    test('excludes a missed occurrence already resolved (present in resolvedKeys)', () {
+    test('one missed session per date, carrying every muscle group it trains', () {
+      final planDays = [
+        {
+          'dayNumber': daysAgo(1).weekday,
+          'dayType': 'workout',
+          'workoutName': 'Push',
+          'exercises': [
+            {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+            {'exerciseName': 'Overhead Press', 'muscleGroup': 'Shoulders'},
+          ],
+        },
+      ];
+
+      final result = AdaptService.computeMissedDays(
+        planDays: planDays,
+        logs: const [],
+        resolvedKeys: const {},
+        today: today,
+        planStartDate: null,
+        scanLimitDays: 1,
+      );
+
+      expect(result, hasLength(1));
+      expect(result.single.workoutName, 'Push');
+      expect(result.single.muscleGroups, ['Chest', 'Shoulders']);
+      expect(result.single.key, _dateKey(daysAgo(1)));
+    });
+
+    test('a date resolved as a whole session is not flagged again', () {
+      final planDays = [
+        {
+          'dayNumber': daysAgo(1).weekday,
+          'dayType': 'workout',
+          'exercises': [
+            {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+          ],
+        },
+      ];
+
+      final result = AdaptService.computeMissedDays(
+        planDays: planDays,
+        logs: const [],
+        resolvedKeys: {_dateKey(daysAgo(1))},
+        today: today,
+        planStartDate: null,
+        scanLimitDays: 1,
+      );
+
+      expect(result, isEmpty);
+    });
+
+    test('never looks again at dates an earlier check settled — a rest day '
+        'later swapped into a workout is not a phantom miss', () {
+      // Every day is a workout now, but everything up to 3 days ago was
+      // already checked (it may well have been a rest day back then).
+      final planDays = [
+        for (final weekday in [1, 2, 3, 4, 5, 6, 7])
+          {
+            'dayNumber': weekday,
+            'dayType': 'workout',
+            'exercises': [
+              {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+            ],
+          },
+      ];
+
+      final result = AdaptService.computeMissedDays(
+        planDays: planDays,
+        logs: const [],
+        resolvedKeys: const {},
+        today: today,
+        planStartDate: null,
+        checkedThrough: daysAgo(3),
+        scanLimitDays: 10,
+      );
+
+      expect(result.map((m) => m.date), [daysAgo(1), daysAgo(2)]);
+    });
+
+    test('an older per-muscle-group resolution still settles its date', () {
       final chestDayNumber = daysAgo(1).weekday;
       final planDays = [
         {
@@ -261,7 +340,7 @@ void main() {
       );
 
       expect(result, hasLength(1));
-      expect(result.single.muscleGroup, 'Chest');
+      expect(result.single.muscleGroups, ['Chest']);
       expect(result.single.date, daysAgo(1));
     });
 
@@ -358,38 +437,32 @@ void main() {
     });
   });
 
-  group('AdaptService.computeValidRescheduleDays', () {
+  group('AdaptService.computeRescheduleDays', () {
     final today = DateTime(2024, 1, 10); // a Wednesday
     final missedDate = DateTime(2024, 1, 8); // the Monday just passed
 
-    List<Map<String, dynamic>> planWithWeeklyOccurrence(int weekday) => [
-          {
-            'dayNumber': weekday,
-            'dayType': 'workout',
-            'exercises': [
-              {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
-            ],
-          },
-        ];
+    Map<String, dynamic> monday() => {
+          'id': 'mon',
+          'dayNumber': DateTime.monday,
+          'dayType': 'workout',
+          'exercises': [
+            {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+          ],
+        };
 
-    test('(a) returns every empty day before the next occurrence, in order', () {
-      // Chest trains every Monday; missed Jan 8, next occurrence Jan 15.
-      // Every day in between (Tue-Sun) has no plan at all -> all empty.
-      final planDays = planWithWeeklyOccurrence(missedDate.weekday);
-
-      final result = AdaptService.computeValidRescheduleDays(
-        planDays: planDays,
+    test('offers rest days from today until that workout comes round again', () {
+      final result = AdaptService.computeRescheduleDays(
+        planDays: [monday()],
         overrides: const [],
-        muscleGroup: 'Chest',
+        logs: const [],
         missedDate: missedDate,
-        lastTrainedDate: null,
         today: today,
       );
 
-      // Candidate window starts the day after today (Jan 11, since today
-      // Jan 10 is later than missedDate+1 Jan 9) and runs up to but not
-      // including the next occurrence (Jan 15) — Jan 11-14, all empty.
+      // Today (Jan 10) through Sunday Jan 14 — Monday Jan 15 is its next
+      // session, so the window ends before it.
       expect(result, [
+        DateTime(2024, 1, 10),
         DateTime(2024, 1, 11),
         DateTime(2024, 1, 12),
         DateTime(2024, 1, 13),
@@ -397,130 +470,27 @@ void main() {
       ]);
     });
 
-    test('(b) returns an empty list when no empty day exists before the next occurrence', () {
-      final planDays = [
-        {
-          'dayNumber': missedDate.weekday,
-          'dayType': 'workout',
-          'exercises': [
-            {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
-          ],
-        },
-        // Every other weekday also has a (non-Chest) workout scheduled,
-        // so there's no empty day anywhere in the window.
-        for (final weekday in [1, 2, 3, 4, 5, 6, 7])
-          if (weekday != missedDate.weekday)
-            {
-              'dayNumber': weekday,
-              'dayType': 'workout',
-              'exercises': [
-                {'exerciseName': 'Overhead Press', 'muscleGroup': 'Shoulders'},
-              ],
-            },
-      ];
-
-      final result = AdaptService.computeValidRescheduleDays(
-        planDays: planDays,
+    test('leaves out days with another workout, and days already trained', () {
+      final result = AdaptService.computeRescheduleDays(
+        planDays: [
+          monday(),
+          {
+            'id': 'thu',
+            'dayNumber': DateTime.thursday,
+            'dayType': 'workout',
+            'exercises': [
+              {'exerciseName': 'Dumbbell Row', 'muscleGroup': 'Back'},
+            ],
+          },
+        ],
         overrides: const [],
-        muscleGroup: 'Chest',
+        logs: [
+          {'completedAt': today.toIso8601String()},
+        ],
         missedDate: missedDate,
-        lastTrainedDate: null,
         today: today,
       );
 
-      expect(result, isEmpty);
-    });
-
-    test('(c) returns an empty list when the 48-hour floor pushes at/past the next occurrence', () {
-      // Chest trains twice weekly: Monday (missed) and Thursday, three
-      // days later — a close-enough next occurrence for a recent session's
-      // 48-hour floor to actually reach it.
-      final thursday = missedDate.add(const Duration(days: 3));
-      final planDays = [
-        {
-          'dayNumber': missedDate.weekday,
-          'dayType': 'workout',
-          'exercises': [
-            {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
-          ],
-        },
-        {
-          'dayNumber': thursday.weekday,
-          'dayType': 'workout',
-          'exercises': [
-            {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
-          ],
-        },
-      ];
-
-      // Trained Chest the day after the missed Monday (Jan 9) — the
-      // 48-hour floor lands exactly on Thursday, the next occurrence.
-      final result = AdaptService.computeValidRescheduleDays(
-        planDays: planDays,
-        overrides: const [],
-        muscleGroup: 'Chest',
-        missedDate: missedDate,
-        lastTrainedDate: missedDate.add(const Duration(days: 1)),
-        today: today,
-      );
-
-      expect(result, isEmpty);
-    });
-
-    test('(d) zero-width window when the missed day is the day before an '
-        'already-scheduled occurrence', () {
-      // Chest trains Tue/Wed back-to-back. Missed Tuesday; detected the
-      // same day. The very next day (Wednesday) is already the next
-      // occurrence, leaving no room at all.
-      final tuesday = DateTime(2024, 1, 9);
-      final wednesday = tuesday.add(const Duration(days: 1));
-      final planDays = [
-        {
-          'dayNumber': tuesday.weekday,
-          'dayType': 'workout',
-          'exercises': [
-            {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
-          ],
-        },
-        {
-          'dayNumber': wednesday.weekday,
-          'dayType': 'workout',
-          'exercises': [
-            {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
-          ],
-        },
-      ];
-
-      final result = AdaptService.computeValidRescheduleDays(
-        planDays: planDays,
-        overrides: const [],
-        muscleGroup: 'Chest',
-        missedDate: tuesday,
-        lastTrainedDate: null,
-        today: tuesday,
-      );
-
-      // Earliest candidate is Wednesday, which is also the next
-      // occurrence — zero-width window, not even a same-day squeeze.
-      expect(result, isEmpty);
-    });
-
-    test('an override already occupying a candidate day excludes just that day', () {
-      final planDays = planWithWeeklyOccurrence(missedDate.weekday);
-      final overrides = [
-        {'date': '2024-01-11', 'dayType': 'workout', 'exercises': []},
-      ];
-
-      final result = AdaptService.computeValidRescheduleDays(
-        planDays: planDays,
-        overrides: overrides,
-        muscleGroup: 'Chest',
-        missedDate: missedDate,
-        lastTrainedDate: null,
-        today: today,
-      );
-
-      // Jan 11 is occupied by the override; Jan 12-14 remain empty.
       expect(result, [
         DateTime(2024, 1, 12),
         DateTime(2024, 1, 13),
@@ -528,56 +498,75 @@ void main() {
       ]);
     });
 
-    test(
-        'a muscle group trained on two split days a week gets a much '
-        'narrower (or zero) window than one trained on only one — not a '
-        'bug, just constraint 3 reacting to how soon it recurs (mirrors a '
-        'live Push/Monday + Pull/Wednesday split where Arms has no valid '
-        'reschedule day but Chest, trained only on Push day, does)', () {
-      final monday = DateTime(2024, 1, 8); // Push: Chest + Arms
-      final wednesday = DateTime(2024, 1, 10); // Pull: Arms + Back
-
-      List<Map<String, dynamic>> pushPullPlan() => [
-            {
-              'dayNumber': monday.weekday,
-              'dayType': 'workout',
-              'exercises': [
-                {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
-                {'exerciseName': 'Tricep Dip', 'muscleGroup': 'Arms'},
-              ],
-            },
-            {
-              'dayNumber': wednesday.weekday,
-              'dayType': 'workout',
-              'exercises': [
-                {'exerciseName': 'Dumbbell Row', 'muscleGroup': 'Back'},
-                {'exerciseName': 'Dumbbell Bicep Curl', 'muscleGroup': 'Arms'},
-              ],
-            },
-          ];
-
-      // Viewing the dialog on the Wednesday itself (the day Arms recurs) —
-      // by then there's no calendar slot left before Arms is due again.
-      final armsResult = AdaptService.computeValidRescheduleDays(
-        planDays: pushPullPlan(),
-        overrides: const [],
-        muscleGroup: 'Arms',
-        missedDate: monday,
-        lastTrainedDate: null,
-        today: wednesday,
+    test("that workout swapped onto a nearer day ends the window there", () {
+      final result = AdaptService.computeRescheduleDays(
+        planDays: [monday()],
+        overrides: [
+          {
+            'date': '2024-01-12',
+            'kind': 'version',
+            'dayType': 'workout',
+            'planDayId': 'mon',
+            'exercises': [
+              {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+            ],
+          },
+        ],
+        logs: const [],
+        missedDate: missedDate,
+        today: today,
       );
-      expect(armsResult, isEmpty);
 
-      // Chest only recurs the following Monday — six clear days remain.
-      final chestResult = AdaptService.computeValidRescheduleDays(
-        planDays: pushPullPlan(),
-        overrides: const [],
-        muscleGroup: 'Chest',
-        missedDate: monday,
-        lastTrainedDate: null,
-        today: wednesday,
+      expect(result, [DateTime(2024, 1, 10), DateTime(2024, 1, 11)]);
+    });
+
+    test('a workout swapped away for the week leaves a rest day free', () {
+      final result = AdaptService.computeRescheduleDays(
+        planDays: [
+          monday(),
+          {
+            'id': 'thu',
+            'dayNumber': DateTime.thursday,
+            'dayType': 'workout',
+            'exercises': [
+              {'exerciseName': 'Dumbbell Row', 'muscleGroup': 'Back'},
+            ],
+          },
+        ],
+        overrides: [
+          {'date': '2024-01-11', 'kind': 'version', 'dayType': 'rest', 'exercises': []},
+        ],
+        logs: const [],
+        missedDate: missedDate,
+        today: today,
       );
-      expect(chestResult, isNotEmpty);
+
+      expect(result, contains(DateTime(2024, 1, 11)));
+    });
+
+    test('a session with no plan day of its own is capped at 7 days ahead', () {
+      // The missed session was itself moved onto Monday — no plan day, so
+      // nothing marks when it comes round again.
+      final result = AdaptService.computeRescheduleDays(
+        planDays: const [],
+        overrides: [
+          {
+            'date': '2024-01-08',
+            'dayType': 'workout',
+            'sourceMissedDates': ['2024-01-05'],
+            'exercises': [
+              {'exerciseName': 'Push-Up', 'muscleGroup': 'Chest'},
+            ],
+          },
+        ],
+        logs: const [],
+        missedDate: missedDate,
+        today: today,
+      );
+
+      expect(result.first, today);
+      expect(result.last, DateTime(2024, 1, 17));
+      expect(result, hasLength(8));
     });
   });
 
@@ -585,7 +574,7 @@ void main() {
     final today = DateTime(2024, 1, 15);
 
     test('a missed day exactly 7 days old is still actionable', () {
-      final missed = MissedDay(muscleGroup: 'Chest', date: DateTime(2024, 1, 8));
+      final missed = _missed(DateTime(2024, 1, 8));
 
       final result = AdaptService.partitionMissedDaysByExpiry(
         missedDays: [missed],
@@ -597,7 +586,7 @@ void main() {
     });
 
     test('a missed day 8 days old has expired', () {
-      final missed = MissedDay(muscleGroup: 'Chest', date: DateTime(2024, 1, 7));
+      final missed = _missed(DateTime(2024, 1, 7));
 
       final result = AdaptService.partitionMissedDaysByExpiry(
         missedDays: [missed],
@@ -610,9 +599,9 @@ void main() {
 
     test('several old misses collapse into one expired batch, not several', () {
       final missedDays = [
-        MissedDay(muscleGroup: 'Chest', date: DateTime(2024, 1, 1)),
-        MissedDay(muscleGroup: 'Shoulders', date: DateTime(2023, 12, 25)),
-        MissedDay(muscleGroup: 'Legs', date: DateTime(2023, 12, 18)),
+        _missed(DateTime(2024, 1, 1), 'Push'),
+        _missed(DateTime(2023, 12, 25), 'Pull'),
+        _missed(DateTime(2023, 12, 18), 'Legs'),
       ];
 
       final result = AdaptService.partitionMissedDaysByExpiry(
@@ -622,13 +611,13 @@ void main() {
 
       expect(result.actionable, isEmpty);
       expect(result.expired, hasLength(3));
-      expect(result.expired.map((m) => m.muscleGroup),
-          containsAll(['Chest', 'Shoulders', 'Legs']));
+      expect(result.expired.map((m) => m.workoutName),
+          containsAll(['Push', 'Pull', 'Legs']));
     });
 
     test('actionable and expired misses are correctly separated when mixed', () {
-      final recent = MissedDay(muscleGroup: 'Chest', date: DateTime(2024, 1, 12));
-      final old = MissedDay(muscleGroup: 'Back', date: DateTime(2023, 12, 20));
+      final recent = _missed(DateTime(2024, 1, 12));
+      final old = _missed(DateTime(2023, 12, 20));
 
       final result = AdaptService.partitionMissedDaysByExpiry(
         missedDays: [recent, old],
@@ -791,3 +780,6 @@ String _dateKey(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-'
     '${date.month.toString().padLeft(2, '0')}-'
     '${date.day.toString().padLeft(2, '0')}';
+
+MissedDay _missed(DateTime date, [String workoutName = 'Push']) =>
+    MissedDay(date: date, workoutName: workoutName, muscleGroups: const ['Chest']);

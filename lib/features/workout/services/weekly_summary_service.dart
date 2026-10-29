@@ -3,7 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import '../../../core/utils/backend_headers.dart';
 import '../data/exercise_data.dart';
+import 'workout_log_service.dart';
 
 class WeeklySummaryService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -31,9 +33,11 @@ class WeeklySummaryService {
         return; // not due yet
       }
 
+      // Throws (so nothing below runs) when the run must be retried — see
+      // mustRetryWeeklyRun.
       await _generateSummary(uid, now);
 
-      // Advance the checkpoint regardless
+      // Advance the checkpoint once the run has been written
       await profileRef.update({
         'lastWeeklySummaryAt': now.toIso8601String(),
       });
@@ -42,14 +46,39 @@ class WeeklySummaryService {
     }
   }
 
+  /// V-12: when there were proposals to resolve but /commit-adaptations
+  /// failed, the whole run is retried on the next Home open: no summary is
+  /// written and neither lastWeeklySummaryAt nor the plan's weekNumber
+  /// advances, so the proposals stay pending and a scheduled deload week
+  /// isn't skipped.
+  static bool mustRetryWeeklyRun({
+    required bool hadProposals,
+    required bool commitSucceeded,
+  }) =>
+      hadProposals && !commitSucceeded;
+
   Future<void> _generateSummary(String uid, DateTime now) async {
     final weekStart = now.subtract(kSummaryInterval);
 
-    // existing session/RPE aggregation
+    // Recovery scores are otherwise only recomputed when a workout is
+    // saved, so a muscle last trained days ago would still carry the
+    // score from that save (V-11). Best-effort: a failure here leaves the
+    // stored scores, as before.
+    try {
+      await WorkoutLogService().updateMuscleRecovery(uid);
+    } catch (e) {
+      debugPrint('Weekly summary: recovery refresh failed for $uid: $e');
+    }
+
+    // existing session/RPE aggregation — only this week's logs (V-13).
+    // completedAt is a local ISO-8601 string, so string comparison orders
+    // it correctly (same as updateMuscleRecovery).
     final logsSnapshot = await _db
         .collection('users')
         .doc(uid)
         .collection('workoutLogs')
+        .where('completedAt',
+            isGreaterThanOrEqualTo: weekStart.toIso8601String())
         .get();
 
     int sessionsCompleted = 0;
@@ -176,7 +205,7 @@ class WeeklySummaryService {
     if (proposalPayloads.isNotEmpty || pastVolumes.isNotEmpty) {
       final response = await http.post(
         Uri.parse('$_baseUrl/commit-adaptations'),
-        headers: {'Content-Type': 'application/json'},
+        headers: await backendHeaders(),
         body: jsonEncode({
           'current_volume': totalVolume,
           'past_volumes': pastVolumes,
@@ -188,9 +217,16 @@ class WeeklySummaryService {
       if (response.statusCode == 200) {
         commitResult = jsonDecode(response.body) as Map<String, dynamic>;
       } else {
-        debugPrint(
-            'commit-adaptations failed: ${response.statusCode} — skipping this run\'s adaptations');
+        debugPrint('commit-adaptations failed: ${response.statusCode}');
       }
+    }
+
+    if (mustRetryWeeklyRun(
+      hadProposals: proposalPayloads.isNotEmpty,
+      commitSucceeded: commitResult != null,
+    )) {
+      throw StateError(
+          'commit-adaptations failed with pending proposals; retrying next time');
     }
 
     // apply resolved adjustments + write summary, all in ONE batch

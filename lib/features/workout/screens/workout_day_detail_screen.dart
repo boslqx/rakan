@@ -29,6 +29,10 @@ const _weekdayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', '
 /// something added just this time: edits change that date only (see
 /// WorkoutPlanService.setDaysForDates), and an added exercise can still go
 /// into the plan too.
+///
+/// A plan day that's over this week (passed, or its workout done) can still
+/// be edited, but its changes apply from next week — this week's day stays
+/// as it happened ([beforePlanChange]).
 class WorkoutDayDetailScreen extends StatefulWidget {
   /// What's on this date: the plan day, or the date's one-time version.
   final Map<String, dynamic> day;
@@ -38,11 +42,23 @@ class WorkoutDayDetailScreen extends StatefulWidget {
   /// so an exercise added there can still go into the plan.
   final Map<String, dynamic>? planDay;
 
+  /// Runs once before the first change to a plan day that's over this
+  /// week — the Schedule tab's keeps this week's day as it was, so the
+  /// change applies from next week.
+  final Future<void> Function()? beforePlanChange;
+
+  /// An exercise to add as soon as the screen opens, through the usual
+  /// add flow (plan or just this time) — used by the exercise library's
+  /// ADD TO WORKOUT so it follows the same rules as this screen (V-19).
+  final ExerciseData? addOnOpen;
+
   const WorkoutDayDetailScreen({
     super.key,
     required this.day,
     required this.planId,
     this.planDay,
+    this.beforePlanChange,
+    this.addOnOpen,
   });
 
   @override
@@ -68,6 +84,9 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
 
   /// Set once anything is saved, so Home and the Schedule tab reload on exit.
   bool _changedSchedule = false;
+
+  /// Whether [WorkoutDayDetailScreen.beforePlanChange] has run.
+  bool _keptThisWeek = false;
 
   Map<String, dynamic>? get _planDay =>
       widget.planDay ?? (widget.day['id'] is String ? widget.day : null);
@@ -105,6 +124,9 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
   /// A plan day can always be edited (it's every week); a one-time version
   /// only until its date is over.
   bool get _canEdit => !_oneTime || _canChangeThisDate;
+
+  /// A plan day whose day this week is over: its edits apply from next week.
+  bool get _appliesFromNextWeek => !_oneTime && !_canChangeThisDate;
 
   /// Whether an exercise can be added to the plan from a one-time version —
   /// its workout has a plan day (a rescheduled session doesn't).
@@ -161,6 +183,10 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
       _completedLog = log;
       _loadingStatus = false;
     });
+    // Needs the completion status: it decides whether "just this time" is
+    // offered.
+    final toAdd = widget.addOnOpen;
+    if (toAdd != null) _addExercise(toAdd);
   }
 
   // ── Mutations ─────────────────────────────────────────────────────
@@ -174,6 +200,10 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
     if (_isMutating) return false;
     setState(() => _isMutating = true);
     try {
+      if (_appliesFromNextWeek && !_keptThisWeek) {
+        await widget.beforePlanChange?.call();
+        _keptThisWeek = true;
+      }
       await action();
       _changedSchedule = true;
       return true;
@@ -273,7 +303,11 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
         newExercise['docId'] = docId;
         _showExercises(updatedExercises);
       });
-      if (ok && mounted) _showSnack('Added ${data.name} to your plan');
+      if (ok && mounted) {
+        _showSnack(_appliesFromNextWeek
+            ? 'Added ${data.name} to your plan from next $_dayName'
+            : 'Added ${data.name} to your plan');
+      }
       return;
     }
 
@@ -831,10 +865,12 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
                       style: GoogleFonts.spaceGrotesk(
                           fontSize: 34, fontWeight: FontWeight.w700, color: AppColors.onSurface, height: 1.0),
                     ),
-                    if (_oneTime) ...[
+                    if (_oneTime || _appliesFromNextWeek) ...[
                       const SizedBox(height: 10),
                       Text(
-                        _canEdit
+                        _appliesFromNextWeek
+                            ? 'CHANGES APPLY FROM NEXT ${_dayName.toUpperCase()} · THIS WEEK STAYS AS IT WAS'
+                            : _canEdit
                             ? '${_thisOccurrence.toUpperCase()} ONLY · EDITS HERE LEAVE YOUR PLAN AS IT IS'
                             : '${_thisOccurrence.toUpperCase()} ONLY · NO LONGER EDITABLE',
                         style: GoogleFonts.manrope(

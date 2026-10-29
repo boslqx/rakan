@@ -84,6 +84,10 @@ class PublicProfileService {
           'username': username,
           'usernameLower': lower,
           'updatedAt': DateTime.now().toIso8601String(),
+          // Every account claims a username, so this is where the public
+          // doc gets its explicit default (D-24). Never overwrites a
+          // choice the user already made.
+          if (userSnap.data()?['isPrivate'] == null) 'isPrivate': false,
         },
         SetOptions(merge: true),
       );

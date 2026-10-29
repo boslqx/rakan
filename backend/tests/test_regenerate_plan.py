@@ -106,7 +106,8 @@ def test_unadjusted_day_has_no_original_split():
 # --- select_days_to_regenerate -------------------------------------------
 
 def test_restore_selects_only_injury_adjusted_days():
-    specs = select_days_to_regenerate(_week(), logged_days={2}, restore_only=True)
+    specs = select_days_to_regenerate(
+        _week(), logged_days={2}, restore_only=True, excluded_muscle_groups=[])
     assert [(s["dayPlanId"], s["workoutName"]) for s in specs] == [
         ("wed", "Pull"),             # rest day -> its saved split
         ("fri", "Legs (Adjusted)"),  # regenerate_days strips the suffix
@@ -114,10 +115,90 @@ def test_restore_selects_only_injury_adjusted_days():
 
 
 def test_injuries_still_active_also_retry_injury_rest_days():
-    # One injury recovered, another is still active: the rested Pull day is
-    # retried (it may be trainable again); ordinary rest days are not.
-    specs = select_days_to_regenerate(_week(), logged_days=set(), restore_only=False)
+    # One injury recovered, another (shoulder) is still active: the rested
+    # days are retried (they may be trainable again) and Push trains the
+    # paused shoulders; ordinary rest days are not touched.
+    specs = select_days_to_regenerate(
+        _week(), logged_days=set(), restore_only=False,
+        excluded_muscle_groups=["shoulders"])
     assert [s["dayPlanId"] for s in specs] == ["mon", "tue", "wed", "fri"]
+
+
+# --- P0-4 / D-27: rebuild only what the injury touches ---------------------
+
+def _ppl_week():
+    return [
+        _day("mon", 1, "Monday", "workout", "Push", "Chest, Shoulders, Triceps"),
+        _day("wed", 3, "Wednesday", "workout", "Pull", "Back, Biceps"),
+        _day("fri", 5, "Friday", "workout", "Legs", "Legs, Glutes"),
+        _day("sun", 7, "Sunday", "rest", "Rest Day", "Recovery"),
+    ]
+
+
+def test_only_days_that_train_a_paused_group_are_selected():
+    specs = select_days_to_regenerate(
+        _ppl_week(), logged_days=set(), restore_only=False,
+        excluded_muscle_groups=["legs"])
+    assert [s["dayPlanId"] for s in specs] == ["fri"]
+
+    specs = select_days_to_regenerate(
+        _ppl_week(), logged_days=set(), restore_only=False,
+        excluded_muscle_groups=["arms"])
+    assert [s["dayPlanId"] for s in specs] == ["mon", "wed"]  # triceps, biceps
+
+
+def test_an_exercise_added_to_a_day_counts_as_training_it():
+    week = _ppl_week()
+    week[0]["exercises"] = [{"exerciseName": "Bodyweight Squat", "muscleGroup": "Legs", "sets": 3}]
+    specs = select_days_to_regenerate(
+        week, logged_days=set(), restore_only=False, excluded_muscle_groups=["legs"])
+    assert [s["dayPlanId"] for s in specs] == ["mon", "fri"]
+
+
+def test_partly_affected_day_is_marked_and_restored():
+    random.seed(5)
+    [push] = regenerate_days(
+        day_specs=[{"dayPlanId": "mon", "dayNumber": 1, "dayName": "Monday",
+                    "workoutName": "Push"}],
+        excluded_muscle_groups=["shoulders"],
+        **PROFILE,
+    )
+    assert push["workoutName"] == "Push"            # still Push, no suffix
+    assert push["originalWorkoutName"] == "Push"    # but marked as changed
+    assert "shoulders" not in _groups(push)
+
+    # Once the shoulder recovers it's restored like any adjusted day (L-02).
+    saved = {k: v for k, v in push.items() if k != "exercises"}
+    [spec] = select_days_to_regenerate(
+        [saved], logged_days=set(), restore_only=True, excluded_muscle_groups=[])
+    assert spec["dayPlanId"] == "mon"
+
+
+def test_rebuild_stays_within_each_muscles_weekly_maximum():
+    from services.plan_generator import WEEKLY_MAX_SETS, generate_plan, weekly_sets_by_group
+
+    for seed in range(20):
+        random.seed(seed)
+        plan = generate_plan("u", "muscleGain", "advanced", ["fullGym"],
+                             [1, 2, 3, 4, 5, 6], "ninetyPlusMin", [])
+        specs = select_days_to_regenerate(
+            plan["days"], logged_days=set(), restore_only=False,
+            excluded_muscle_groups=["shoulders"])
+        rebuilt_ids = {s["dayPlanId"] for s in specs}
+        kept = [d for d in plan["days"] if d["dayPlanId"] not in rebuilt_ids]
+        rebuilt = regenerate_days(
+            day_specs=specs, excluded_muscle_groups=["shoulders"],
+            goal="muscleGain", experience="advanced", equipment=["fullGym"],
+            session_duration="ninetyPlusMin", focus_areas=[],
+            weekly_sets_kept=weekly_sets_by_group(kept),
+        )
+        before = weekly_sets_by_group(plan["days"])
+        after = weekly_sets_by_group(kept + rebuilt)
+        for group, sets in after.items():
+            # Never past the max, unless the untouched days already were.
+            limit = max(WEEKLY_MAX_SETS[group], weekly_sets_by_group(kept).get(group, 0))
+            assert sets <= limit, (seed, group, before, after)
+        assert after.get("Shoulders", 0) <= weekly_sets_by_group(kept).get("Shoulders", 0)
 
 
 def test_legacy_injury_rest_day_infers_its_split():
@@ -129,7 +210,8 @@ def test_legacy_injury_rest_day_infers_its_split():
         _day("fri", 5, "Friday", "workout", "Legs", "Legs"),
         _day("sun", 7, "Sunday", "rest", "Rest Day", "Recovery"),
     ]
-    [spec] = select_days_to_regenerate(week, logged_days=set(), restore_only=True)
+    [spec] = select_days_to_regenerate(
+        week, logged_days=set(), restore_only=True, excluded_muscle_groups=[])
     assert spec["workoutName"] == "Pull"
 
 
@@ -230,9 +312,10 @@ def _call(module, monkeypatch, excluded, logged_days):
         lambda db, uid, client_date=None: set(logged_days),
     )
     request = module.RegeneratePlanRequest(
-        uid="u1", plan_id="p1", excluded_muscle_groups=excluded, **PROFILE,
+        plan_id="p1", excluded_muscle_groups=excluded, **PROFILE,
     )
-    return asyncio.run(module.regenerate_plan_endpoint(request))
+    # uid is normally the verified ID token's (auth.current_uid).
+    return asyncio.run(module.regenerate_plan_endpoint(request, uid="u1"))
 
 
 def _exercises(db, day_id):
@@ -303,3 +386,20 @@ def test_injury_rest_day_is_saved_with_its_original_split(plan_router, monkeypat
     assert mon["focusDescription"] == INJURY_REST_FOCUS
     assert mon["originalWorkoutName"] == "Push"
     assert _exercises(db, "mon") == []
+
+
+def test_active_injury_leaves_days_it_does_not_touch(plan_router, monkeypatch):
+    # P0-4 / D-27 (UT-REC-03): a knee injury rebuilds Legs only; Push and
+    # Pull keep their (possibly edited or adapted) exercises.
+    module, db = plan_router
+    _seed(db, _ppl_week())
+    before = dict(db.store)
+    random.seed(2)
+
+    result = _call(module, monkeypatch, excluded=["legs"], logged_days=set())
+
+    assert result["updatedCount"] == 1
+    assert {p[5] for p in db.written} == {"fri"}
+    for day_id in ("mon", "wed", "sun"):
+        assert db.store[DAYS + (day_id,)] == before[DAYS + (day_id,)]
+        assert _exercises(db, day_id) == [{"exerciseName": "Old"}]

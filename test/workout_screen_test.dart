@@ -42,4 +42,33 @@ void main() {
       );
     });
   });
+
+  // V-26 / D-22: the "Use Template" dialog promises 3–4 exercises.
+  group('buildTemplateExercises', () {
+    test('tops up a short Back pool for dumbbells + bench', () {
+      final exercises = buildTemplateExercises(
+        muscleGroup: 'Back',
+        userEquipment: ['dumbbell', 'bench'],
+        userExperience: 'intermediate',
+      );
+      expect(exercises.length, greaterThanOrEqualTo(3));
+      expect(exercises.map((e) => e.name),
+          containsAll(['Dumbbell Row', 'Chest-Supported Dumbbell Row']));
+      for (final ex in exercises) {
+        expect(ex.muscleGroup, 'Back');
+        expect(equipmentMatches(ex.equipment, ['dumbbell', 'bench']), isTrue,
+            reason: '${ex.name} needs ${ex.equipment}');
+      }
+      expect(exercises.map((e) => e.name).toSet().length, exercises.length);
+    });
+
+    test('a pool with enough matches is unchanged and capped at 4', () {
+      final exercises = buildTemplateExercises(
+        muscleGroup: 'Core',
+        userEquipment: ['noEquipment'],
+        userExperience: 'beginner',
+      );
+      expect(exercises.length, 4);
+    });
+  });
 }

@@ -519,7 +519,13 @@ class _LogInjuryScreenState extends State<LogInjuryScreen> {
 
     // Plan regeneration hits the Render backend (~50 s cold start), so run it
     // in the background instead of leaving the CONFIRM spinner up for it.
-    _regeneratePlanInBackground();
+    // Skipped when the area's muscle groups are already paused (D-27).
+    if (InjuryService.changesPausedGroups(widget.existingInjuries, [
+      ...widget.existingInjuries,
+      {'region': region.name, 'status': 'active'},
+    ])) {
+      _regeneratePlanInBackground();
+    }
     return reminderSet;
   }
 

@@ -96,6 +96,41 @@ void main() {
       expect(s.scheduled, 0);
       expect(s.adherence, isNull);
     });
+
+    // V-15: a plan created mid-window isn't measured on earlier days.
+    test('counts scheduled sessions only from the plan start', () {
+      // Plan generated Wed 7 Oct at 09:00; 30-day window ends Thu 8 Oct.
+      final planStart = DateTime(2026, 10, 7, 9);
+      final logs = [
+        log('before', DateTime(2026, 9, 28)), // on an earlier plan
+        log('wed', DateTime(2026, 10, 7)),
+      ];
+      final window = statsWindow(StatsRange.month, thu);
+
+      final unbounded = summarize(logs, plan, window);
+      expect(unbounded.scheduled, 13); // the "3 of 13" a new user saw
+
+      final s = summarize(logs, plan, window, planStart: planStart);
+      expect(s.workouts, 2); // the WORKOUTS tile still counts everything
+      expect(s.scheduled, 1); // Wed only (Fri hasn't come yet)
+      expect(s.planWorkouts, 1);
+      expect(s.adherence, 1.0);
+    });
+
+    test('a plan started after the window has nothing scheduled in it', () {
+      final s = summarize([log('a', DateTime(2026, 9, 30))], plan,
+          previousWindow(StatsRange.week, thu),
+          planStart: DateTime(2026, 10, 5));
+      expect(s.scheduled, 0);
+      expect(s.adherence, isNull);
+    });
+
+    test('a plan older than the window changes nothing', () {
+      final logs = [log('a', mon)];
+      final window = statsWindow(StatsRange.week, thu);
+      final s = summarize(logs, plan, window, planStart: DateTime(2026, 1, 1));
+      expect(s.scheduled, summarize(logs, plan, window).scheduled);
+    });
   });
 
   test('trendBuckets: week shows Mon–Sun, quarter buckets by week', () {
@@ -132,6 +167,14 @@ void main() {
       expect(back.progress, isNull);
 
       expect(muscleBalanceInsight(rows), contains('Legs is behind plan'));
+    });
+
+    test('targets count only the days since the plan started (V-15)', () {
+      final rows = muscleBalance([], {}, plan, statsWindow(StatsRange.week, thu),
+          planStart: DateTime(2026, 10, 6, 20)); // Tue evening
+      // Monday was before the plan; Wednesday's legs day counts.
+      expect(rows.firstWhere((r) => r.group == 'Chest').targetSets, 0);
+      expect(rows.firstWhere((r) => r.group == 'Legs').targetSets, 9);
     });
   });
 

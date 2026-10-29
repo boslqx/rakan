@@ -40,6 +40,8 @@ class _StatsReportTabState extends State<StatsReportTab> {
   String? _error;
   List<Map<String, dynamic>> _logs = []; // newest first
   List<Map<String, dynamic>> _planDays = [];
+  // When the active plan was generated; scheduled sessions count from here.
+  DateTime? _planStart;
   Map<String, List<Map<String, dynamic>>> _exerciseLogs = {};
   bool _exerciseLogsLoading = true;
 
@@ -74,6 +76,9 @@ class _StatsReportTabState extends State<StatsReportTab> {
             .toList();
         _planDays =
             (plan?['days'] as List? ?? const []).cast<Map<String, dynamic>>();
+        // toLocal(): stored as UTC, as in AdaptService's planStartDate.
+        _planStart =
+            DateTime.tryParse(plan?['generatedAt'] as String? ?? '')?.toLocal();
         _error = null;
         _loading = false;
       });
@@ -158,8 +163,9 @@ class _StatsReportTabState extends State<StatsReportTab> {
 
     final today = dateOnly(DateTime.now());
     final window = statsWindow(_range, today);
-    final summary = summarize(_logs, _planDays, window);
-    final previous = summarize(_logs, _planDays, previousWindow(_range, today));
+    final summary = summarize(_logs, _planDays, window, planStart: _planStart);
+    final previous = summarize(_logs, _planDays, previousWindow(_range, today),
+        planStart: _planStart);
 
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -405,7 +411,7 @@ class _StatsReportTabState extends State<StatsReportTab> {
       footer: Text(
         adherence == null
             ? 'No active plan'
-            : '${math.min(s.workouts, s.scheduled)} of ${s.scheduled} done',
+            : '${math.min(s.planWorkouts, s.scheduled)} of ${s.scheduled} done',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: GoogleFonts.manrope(
@@ -613,7 +619,8 @@ class _StatsReportTabState extends State<StatsReportTab> {
   Widget _buildMuscleBalanceCard(StatsWindow window) {
     final rows = _exerciseLogsLoading
         ? <MuscleBalance>[]
-        : muscleBalance(_logs, _exerciseLogs, _planDays, window);
+        : muscleBalance(_logs, _exerciseLogs, _planDays, window,
+            planStart: _planStart);
     final hasPlan = rows.any((r) => r.targetSets > 0);
     final scale = rows.fold<int>(1, (m, r) => math.max(m, math.max(r.sets, r.targetSets)));
     final insight = muscleBalanceInsight(rows);

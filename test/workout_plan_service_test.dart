@@ -62,6 +62,21 @@ void main() {
       expect(version['durationMinutes'], WorkoutPlanService.estimateDurationMinutes(exercises));
     });
 
+    test('a version kept for this week is marked as such, not as a change', () {
+      final kept = WorkoutPlanService.dayVersion(
+        '2024-01-11',
+        {'id': 'thu', 'dayType': 'workout', 'workoutName': 'Pull', 'exercises': []},
+        keptForThisWeek: true,
+      );
+      final changed = WorkoutPlanService.dayVersion(
+        '2024-01-11',
+        {'id': 'thu', 'dayType': 'workout', 'workoutName': 'Pull', 'exercises': []},
+      );
+
+      expect(kept['kind'], 'kept');
+      expect(changed['kind'], 'version');
+    });
+
     test('a rest day becomes an empty rest version with no plan day', () {
       final version = WorkoutPlanService.dayVersion('2024-01-11', {
         'id': 'fri',

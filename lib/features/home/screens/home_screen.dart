@@ -111,7 +111,12 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint(st.toString());
     }
 
-    WeeklySummaryService().checkAndGenerateWeeklySummary(uid);
+    // Fire-and-forget. Sessions whose adaptation call failed are retried
+    // first, so their proposals exist before the weekly run reads them
+    // (V-12). Neither call throws.
+    AdaptService().retryPendingPredictions(uid).whenComplete(
+          () => WeeklySummaryService().checkAndGenerateWeeklySummary(uid),
+        );
     // Fire-and-forget; a no-op once old inline photos have been moved.
     WorkoutLogService().migrateLegacyProgressPhotos(uid);
 
