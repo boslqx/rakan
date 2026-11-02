@@ -25,5 +25,11 @@ class AppColors {
   static const Color error = Color(0xFFEE7D77); // Error color
   static const Color outlineVariant = Color(0xFF2A2D32); // Ghost borders
 
+  // Selected tab in the bottom nav
+  static const LinearGradient navAccent = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF8B5CF6), Color(0xFF22D3EE)], // Violet to cyan
+  );
 
 }

@@ -65,9 +65,35 @@ class _MainShellState extends State<MainShell> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       // When switching tabs, we keep the state of each screen alive using IndexedStack
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _currentIndex,
+            children: _screens,
+          ),
+          // Content fades out above the floating bar instead of being cut off
+          // in a straight line.
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 20,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.surface.withValues(alpha: 0),
+                      AppColors.surface,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: RakanBottomNavBar(
         currentIndex: _currentIndex, 
