@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import 'register_screen.dart';
 import '../services/auth_navigation_service.dart';  
 import '../../../shared/widgets/pressable.dart';
+import '../../onboarding/widgets/brand_mark.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -36,7 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void initState() {
-    super.initState();
+    super.initState(); // let flutter do its own setup
     _emailFocus.addListener(() {
       if (!_emailFocus.hasFocus) _validateEmail(force: true);
     });
@@ -176,32 +177,8 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const SizedBox(height: 48),
 
-                // Logo
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.surfaceContainerLow,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        blurRadius: 40,
-                        spreadRadius: 10,
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      'R',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 42,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                ),
+                // Logo: the sweep loops while signing in.
+                BrandMark(height: 100, busy: _isLoading),
 
                 const SizedBox(height: 20),
 
@@ -216,7 +193,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'HIGH PERFORMANCE AI',
+                  'YOUR FITNESS BUDDY',
                   style: GoogleFonts.manrope(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,

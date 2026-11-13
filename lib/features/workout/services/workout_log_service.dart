@@ -350,9 +350,15 @@ class WorkoutLogService {
         // both be distinct groups here, but two chest-adjacent tags could
         // collapse to one) — avoids double-crediting the same broad group
         // twice from a single exercise.
+        // The primary group is dropped: it already has full credit, so a
+        // same-group secondary (e.g. Brachialis on a curl) must not add
+        // 0.5 more. Also compared with the library's own group, which uses
+        // the same constants as kGranularToBroadMuscleGroup, because logs
+        // saved before 4 Aug 2026 hold the backend's lowercase 'arms'.
         final secondaryGroups = (exerciseMeta?.secondaryMuscles ?? [])
             .map((m) => kGranularToBroadMuscleGroup[m])
             .whereType<String>()
+            .where((g) => g != primaryGroup && g != exerciseMeta?.muscleGroup)
             .toSet();
 
         for (final group in secondaryGroups) {

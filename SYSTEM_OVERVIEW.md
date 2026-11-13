@@ -311,7 +311,7 @@ Design principle: **the session only *proposes*; adjustments are committed weekl
 **Plateau detection is deliberately *not* a signal** (Decision #57).
 
 ### 9.3 Muscle recovery model (`WorkoutLogService.updateMuscleRecovery`, run after every save)
-- Window: last 7 days of `workoutLogs`; for each completed set, **primary muscle gets 1.0 set credit**, each distinct broad **secondary group 0.5** (`kSecondaryMuscleWeight`). Granular tags ("Lats", "Quads", …) are collapsed to 7 broad groups via `kGranularToBroadMuscleGroup`.
+- Window: last 7 days of `workoutLogs`; for each completed set, **primary muscle gets 1.0 set credit**, each distinct broad **secondary group 0.5** (`kSecondaryMuscleWeight`). Granular tags ("Lats", "Quads", …) are collapsed to 7 broad groups via `kGranularToBroadMuscleGroup`. **The primary group is excluded from secondary credit**, so a same-group secondary (Brachialis on a hammer curl) adds nothing: 3 sets give Arms 3.0, not 4.5 (D-29).
 - `fatigueScore = clamp(weightedSets / MRV, 0, 1)`.
 - **Weekly MRV (sets/wk):** Back/Chest/Legs/Glutes 20; Shoulders/Arms 16; Core 12; fallback 16.
 - `recommendedRestDays` = 2 if score < 0.5 else 3.
@@ -461,7 +461,7 @@ Follow/request system (public → instant accept; private → `pending` until ta
 - `saveWorkoutLog` writes: log → `exerciseLogs` (sequentially) → `activityFeed` copy → `totalSessionsLogged` increment → `updateMuscleRecovery`. These are **separate writes, not one transaction**.
 - PR detection sets `prReached` / `prExerciseNames`.
 - `WorkoutCompleteScreen._runAdaptation` computes `avgRpe`/`maxRpe` from per-exercise RPE, session duration, exercise count, completion rate, experience → `predictAndAdapt`.
-- Bodyweight vs weighted exercises decided by `tracksWeight` (equipment tag not in `{Bodyweight, Bodyweight+Bench, Pull-Up Bar, Ab Wheel}`).
+- Bodyweight vs weighted exercises decided by `tracksWeight` (equipment tag not in `kBodyweightOnlyEquipmentTags`: `{Bodyweight; Bodyweight, Bench; Bodyweight, Incline Bench; Bodyweight, Decline Bench; Pull-Up Bar; Pull-Up Bar, Resistance Band; Bar; Parallel Bars; Roman Chair; TRX; Gymnastic Rings; Stability Ball; Bosu Ball; Ab Wheel}`).
 
 ---
 

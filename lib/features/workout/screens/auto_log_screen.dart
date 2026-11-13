@@ -217,6 +217,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
     setState(() => _phase = _ScreenPhase.active);
   }
 
+  // hanldes every update camera sends, about 30 times per sec
   void _startPoseStream() {
     _poseSubscription?.cancel();
     _poseSubscription =

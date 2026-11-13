@@ -30,7 +30,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // will create a proper UserProfile model in Phase 2.
   Map<String, dynamic>? _profile;
   bool _isLoading = true;
   List<Map<String, dynamic>> _allLogs = [];

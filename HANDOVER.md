@@ -481,6 +481,16 @@ regressions.
 
 ---
 
+## Defect Log — Viva Preparation
+
+Continues the D-numbered defect log (D-1 … D-28 in `docs/`).
+
+| ID | Defect | Found | Severity | Effect | Status | Tests |
+|---|---|---|---|---|---|---|
+| D-29 | **Same-group secondary double credit.** `WorkoutLogService.computeRecoveryDocs` gave the primary group 1.0 per set and then 0.5 more when a secondary muscle mapped back to the same broad group (100 of 626 exercises, e.g. Dumbbell Hammer Curl: Brachialis and Forearms → Arms, so 3 sets gave Arms 4.5 instead of 3.0). Report §4.8 specifies full credit to the primary group and half credit to each *secondary* group. Fix: the primary group is dropped from the secondary groups before crediting (also compared with the library's group, so logs saved before 4 Aug 2026 with lowercase `'arms'` are covered). Backend checked: it computes no per-muscle recovery; `adaptation_engine.py` only consumes the app's `fatigueScore`, so no backend change | 12 Nov 2026, viva preparation | Medium | Overestimated fatigue for those exercises' own group: errs toward more rest and earlier forced deloads (score > 0.8), never toward overtraining | Fixed | `test/muscle_recovery_test.dart`, group "secondary muscle credit (D-29)": *Dumbbell Hammer Curl: same-group secondaries add nothing to Arms*; *Push-Up: other-group secondaries still get half credit*; *Dumbbell Pullover: two secondaries in one group credit it once*; *a log saved with the old lowercase group still drops it* |
+
+---
+
 ## On-Device Testing — Phase 24/25/26 Missed-Day Flow
 
 *(Unchanged from Phase 26 — all five scenarios (A–E) remain completed and

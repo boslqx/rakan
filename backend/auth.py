@@ -9,14 +9,14 @@ from typing import Optional
 
 from fastapi import Header, HTTPException
 
-
+# check the token, really signed in by google, hasnt expired, which user it belongs to
 def verify_token(token: str) -> dict:
     """Decodes and checks a Firebase ID token. Kept separate so tests can
     replace it without a Firebase project."""
     import firebase_config  # noqa: F401  (initialises the Admin SDK)
     from firebase_admin import auth as firebase_auth
 
-    return firebase_auth.verify_id_token(token)
+    return firebase_auth.verify_id_token(token) 
 
 
 def current_uid(authorization: Optional[str] = Header(default=None)) -> str:

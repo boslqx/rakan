@@ -22,31 +22,18 @@ FORCED_DELOAD_FLOOR = -0.175  # matches Bell et al. (2025) reactive deload
 # Scheduled (mesocycle) deload ughly 40-50%
 SCHEDULED_DELOAD_ADJUSTMENT = -0.425
 
-# Return-from-break reduction, applied when the user explicitly records a
-# skipped session (Phase 25 missed-day popup) and later returns to train
-# that muscle group again. Gated on elapsed calendar time, not occurrence
-# count — see DETRAINING_THRESHOLD_DAYS. Deliberately reuses the Bell et
-# al. (2025) reactive-deload magnitude for the long-break case: not a
-# precise detraining-loss estimate, but an already-validated conservative
-# reduction, repurposed as a re-engagement safety margin.
+# Return-from-break reduction, applied when the user explicitly records a skipped session and the muscle group has not been trained for a > 28 days
 RETURN_FROM_BREAK_ADJUSTMENT = -0.175  # matches FORCED_DELOAD_FLOOR
 
-# Short-term vs long-term detraining boundary. Below/at this many days
-# since a muscle group was last trained, strength and hypertrophy
-# adaptations are well retained and no reduction is warranted; past it,
-# the conservative RETURN_FROM_BREAK_ADJUSTMENT applies.
-#
+# Short-term vs long-term detraining boundary.
 # Encarnação, I.G.A., Viana, R.B., Soares, S.R.S., Freitas, E.D.S., de
 # Lira, C.A.B. and Ferreira-Junior, J.B. (2022) 'Effects of detraining on
 # muscle strength and hypertrophy induced by resistance training: a
 # systematic review', Muscles, 1(1), pp. 1-15. doi: 10.3390/muscles1010001.
-# — establishes/confirms the short-term (<=4 weeks) vs long-term (>4
-# weeks) boundary; pooled data shows strength retained even out to 16-24
-# weeks in some cases.
+
 # Mujika, I. and Padilla, S. (2000) 'Detraining: loss of training-induced
 # physiological and performance adaptations. Part I', Sports Medicine,
-# 30(2), pp. 79-87. — original source of the short/long-term boundary,
-# cited alongside the 2022 review as the foundational source it builds on.
+# 30(2), pp. 79-87. 
 DETRAINING_THRESHOLD_DAYS = 28
 
 
@@ -111,10 +98,7 @@ def resolve_adjustment(
             ),
         )
 
-    # Tier 0.5: return from break. Triggered by an explicit user choice
-    # (Phase 25 missed-day popup "Skip entirely"), not an occurrence
-    # streak. Whether a reduction applies at all is gated on elapsed
-    # calendar time since this muscle group was actually last trained.
+    # Tier 0.5: return from break.
     if trigger == "skip":
         short_term = (
             days_since_last_trained is not None

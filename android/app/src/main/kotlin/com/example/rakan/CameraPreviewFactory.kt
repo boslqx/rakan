@@ -8,7 +8,7 @@ import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
 // Flutter cannot natively render Android Views like PreviewView.
-// PlatformViewFactory registers a native Android View that Flutter
+// PlatformViewFactory registers a native Android View that Flutter can display as a widget
 class CameraPreviewFactory(
     private val previewViewProvider: () -> PreviewView?
 ) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {

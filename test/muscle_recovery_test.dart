@@ -75,4 +75,49 @@ void main() {
     );
     expect(docs, isEmpty);
   });
+
+  // D-29: real library exercises, so their secondary muscles are credited.
+  group('secondary muscle credit (D-29)', () {
+    Map<String, dynamic> libraryLog(String name, String group, int sets) =>
+        {...exLog(group, sets), 'exerciseName': name};
+
+    Map<String, Map<String, dynamic>> recovery(
+            String name, String group, int sets) =>
+        WorkoutLogService.computeRecoveryDocs(
+          sessions: [session(1, [libraryLog(name, group, sets)])],
+          since: since,
+          trackedGroups: const [],
+          now: now,
+        );
+
+    test('Dumbbell Hammer Curl: same-group secondaries add nothing to Arms',
+        () {
+      // Brachialis and Forearms both map to Arms, the primary group.
+      final docs = recovery('Dumbbell Hammer Curl', 'Arms', 3);
+      expect(docs['Arms']!['weightedSetsLast7Days'], 3);
+      expect(docs['Arms']!['fatigueScore'], 3 / 16);
+    });
+
+    test('Push-Up: other-group secondaries still get half credit', () {
+      final docs = recovery('Push-Up', 'Chest', 3);
+      expect(docs['Chest']!['weightedSetsLast7Days'], 3);
+      expect(docs['Arms']!['weightedSetsLast7Days'], 1.5); // Triceps
+      expect(docs['Shoulders']!['weightedSetsLast7Days'], 1.5); // Front Delts
+      expect(docs['Core']!['weightedSetsLast7Days'], 1.5);
+    });
+
+    test('Dumbbell Pullover: two secondaries in one group credit it once', () {
+      // Lats and Serratus Anterior both map to Back: 0.5 per set, not 1.0.
+      final docs = recovery('Dumbbell Pullover', 'Chest', 2);
+      expect(docs['Chest']!['weightedSetsLast7Days'], 2);
+      expect(docs['Back']!['weightedSetsLast7Days'], 1.0);
+    });
+
+    test('a log saved with the old lowercase group still drops it', () {
+      // Logs from before 4 Aug 2026 hold the backend's 'arms'.
+      final docs = recovery('Dumbbell Hammer Curl', 'arms', 3);
+      expect(docs['arms']!['weightedSetsLast7Days'], 3);
+      expect(docs.containsKey('Arms'), isFalse);
+    });
+  });
 }

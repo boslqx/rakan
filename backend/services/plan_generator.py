@@ -4,19 +4,14 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from data.exercises import get_exercises_for_equipment, filter_by_difficulty
 
-# Exercise-count bounds per session, by experience. The actual count is
-# chosen to fill the user's selected session length (see
-# _fill_to_duration) — these only stop a beginner getting 9 exercises or an
-# advanced lifter getting 2.
+# Exercise-count bounds per session, by experience
 EXERCISE_COUNT_BOUNDS = {
     "beginner": (3, 6),
     "intermediate": (3, 7),
     "advanced": (3, 8),
 }
 
-# The user's selected session length (onboarding SessionDuration enum),
-# in minutes. ~10 of those minutes are reserved for warm-up + cool-down;
-# the rest is filled with working sets.
+# The user's selected session length 
 SESSION_MINUTES = {
     "thirtyMin": 30,
     "fortyFiveMin": 45,
@@ -28,8 +23,7 @@ SECONDS_PER_WORKING_SET = 45  # time under load + setup, per set
 MAX_SETS_PER_EXERCISE = 5
 
 # Muscle priority order per goal. Used to order the day's target muscles
-# (higher priority muscles get the first exercise slots) and for the
-# injury-fallback muscle choice.
+# (higher priority muscles get the first exercise slots)
 GOAL_MUSCLE_PRIORITY = {
     "muscleGain":   ["chest", "back", "legs", "shoulders", "biceps", "triceps", "glutes", "abs"],
     "weightLoss":   ["legs", "glutes", "back", "chest", "abs", "shoulders", "biceps", "triceps"],
@@ -52,7 +46,6 @@ GOAL_PRESCRIPTION = {
 }
 
 # Day name templates based on number of workout days per week
-# Key = number of workout days selected by user
 DAY_SPLITS = {
     1: ["Full Body"],
     2: ["Upper Body", "Lower Body"],
@@ -63,10 +56,7 @@ DAY_SPLITS = {
     7: ["Chest", "Back", "Legs", "Shoulders", "Arms", "Full Body", "Active Recovery"],
 }
 
-# Which muscles each split day trains. "arms" is split into "biceps" and
-# "triceps" here: they belong to opposite movement patterns (pull vs push),
-# and treating them as one group put tricep dips / close-grip presses on
-# Pull days — training the same muscles as the Push day before it.
+# Which muscles each split day trains
 SPLIT_MUSCLES = {
     "Full Body":           ["chest", "back", "legs", "shoulders", "abs", "biceps", "triceps"],
     "Upper Body":          ["chest", "back", "shoulders", "biceps", "triceps"],
@@ -85,7 +75,6 @@ SPLIT_MUSCLES = {
 }
 
 # Keywords that identify a tricep (push) exercise inside the library's
-# single "arms" group. Anything else in "arms" is a curl (biceps).
 _TRICEP_KEYWORDS = ("tricep", "dip", "skull", "close-grip", "pushdown", "extension")
 
 
@@ -126,9 +115,6 @@ MUSCLE_GROUP_MAP = {
 }
 
 # Weekly maximum recoverable volume (working sets per week) per app muscle
-# group: the same table the app shows (kWeeklyMRVByMuscleGroup in
-# lib/features/workout/data/muscle_recovery_constants.dart). An injury
-# rebuild never takes a muscle past it (D-27); keep the two in step.
 WEEKLY_MAX_SETS = {
     "Chest": 20,
     "Back": 20,
