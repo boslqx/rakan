@@ -122,8 +122,9 @@ class _WorkoutDayDetailScreenState extends State<WorkoutDayDetailScreen> {
   bool get _canChangeThisDate => !_isPastThisWeek && !_isCompleted;
 
   /// A plan day can always be edited (it's every week); a one-time version
-  /// only until its date is over.
-  bool get _canEdit => !_oneTime || _canChangeThisDate;
+  /// until its workout is done — a missed one can still be adjusted, it
+  /// just can't be started.
+  bool get _canEdit => !_oneTime || (!_loadingStatus && !_isCompleted);
 
   /// A plan day whose day this week is over: its edits apply from next week.
   bool get _appliesFromNextWeek => !_oneTime && !_canChangeThisDate;

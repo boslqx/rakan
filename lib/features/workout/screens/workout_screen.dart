@@ -595,11 +595,21 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
   }
 
-  /// Opens a day's editor: this week's session while the day isn't over;
-  /// after that, the plan day itself, whose changes apply from next week.
-  Future<void> _openSlot(Map<String, dynamic> slot) => _isOver(slot)
-      ? _openDayDetail(slot, beforePlanChange: () => _keepThisWeek([slot]))
-      : _openDayDetail(_thisWeekOf(slot));
+  /// Opens a day's editor: this week's session while the day isn't over.
+  /// After that, a date with its own one-time content (a swap for this week
+  /// only, a rescheduled session) still opens that content — it's what was
+  /// on the day, and the plan day underneath may be a rest day. Otherwise
+  /// it opens the plan day itself, whose changes apply from next week.
+  Future<void> _openSlot(Map<String, dynamic> slot) {
+    final entry = _thisWeekOf(slot);
+    if (!_isOver(slot) || entry['isOneTime'] == true) {
+      return _openDayDetail(entry);
+    }
+    return _openDayDetail(
+      slot,
+      beforePlanChange: () => _keepThisWeek([slot]),
+    );
+  }
 
   static List<Map<String, dynamic>> _exercisesOf(Map<String, dynamic> day) =>
       (day['exercises'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -882,9 +892,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     final movedTo = isMissed ? _movedTo(date) : null;
     final isMoved = movedTo != null || missedStatus == 'rescheduled';
     final isMovedHere = ScheduleMatcher.sourceMissedDates(day).isNotEmpty;
-    // Skipped, moved and missed days are settled — only a day still to
-    // come, or one whose workout is done, opens (see _openSlot).
-    final canOpen = !isRest && (isDone || !isPast);
+    // Every workout day opens — a missed or passed one to view and edit
+    // (it just can't be started any more; see _openSlot).
+    final canOpen = !isRest;
 
     final card = Pressable(
       onTap: canOpen

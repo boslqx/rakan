@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../widgets/logo_particle_painter.dart';
 import 'workout_complete_screen.dart';
 
 class WorkoutTransitionScreen extends StatefulWidget {
@@ -38,126 +39,56 @@ class WorkoutTransitionScreen extends StatefulWidget {
       _WorkoutTransitionScreenState();
 }
 
+/// Timeline (one controller, 4.3s):
+///   0.0–0.4s  solid Rakan mark scales in + haptic
+///   0.4–0.8s  mark dissolves into ~5k dots
+///   0.8–1.9s  dots spread into two turning 3D panels
+///   1.9–2.4s  dots flatten into a square ring
+///   2.4–3.6s  ring rebuilds the mark, solid mark fades back in
+///   3.3–3.8s  "NICE WORK." slides up, subline fades in
+///   4.3s      navigate to WorkoutCompleteScreen (tap anywhere to skip)
 class _WorkoutTransitionScreenState extends State<WorkoutTransitionScreen>
-    with TickerProviderStateMixin {
-  // ── Animation controllers ────────────────────────────────────────────
+    with SingleTickerProviderStateMixin {
+  static const _totalSeconds = 4.3;
+  static const _logoAsset = 'assets/images/logo_mark.png';
 
-  // Controls the trophy icon scale pulse (grows in, then pulses)
-  late final AnimationController _trophyController;
-  late final Animation<double> _trophyScale;
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 4300),
+  )..addStatusListener((s) {
+      if (s == AnimationStatus.completed) _goNext();
+    });
 
-  // Controls the ring/glow expanding outward from the trophy
-  late final AnimationController _ringController;
-  late final Animation<double> _ringScale;
-  late final Animation<double> _ringOpacity;
-
-  // Controls "NICE WORK." text sliding up from below
-  late final AnimationController _textController;
-  late final Animation<Offset> _textSlide;
-  late final Animation<double> _textOpacity;
-
-  // Controls the sub-line text fading in after "NICE WORK."
-  late final AnimationController _sublineController;
-  late final Animation<double> _sublineOpacity;
+  LogoParticles? _particles;
+  bool _navigated = false;
 
   @override
   void initState() {
     super.initState();
-    _setupAnimations();
-    _startSequence();
+    _start();
   }
 
-  void _setupAnimations() {
-    // Trophy: scales from 0 → 1.15 → 1.0 (overshoot feel)
-    _trophyController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    _trophyScale = TweenSequence([
-      TweenSequenceItem(
-        tween: Tween(begin: 0.0, end: 1.15)
-            .chain(CurveTween(curve: Curves.easeOut)),
-        weight: 70,
-      ),
-      TweenSequenceItem(
-        tween: Tween(begin: 1.15, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeIn)),
-        weight: 30,
-      ),
-    ]).animate(_trophyController);
-
-    // Ring: expands from 1.0 → 2.5, fades from 0.6 → 0
-    // Gives the "energy burst" effect around the trophy
-    _ringController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-    _ringScale = Tween(begin: 1.0, end: 2.5).animate(
-      CurvedAnimation(parent: _ringController, curve: Curves.easeOut),
-    );
-    _ringOpacity = Tween(begin: 0.6, end: 0.0).animate(
-      CurvedAnimation(parent: _ringController, curve: Curves.easeOut),
-    );
-
-    // Text: slides up from 30px below, easeOut
-    _textController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _textSlide = Tween(
-      begin: const Offset(0, 0.4), // 40% of widget height downward
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _textController, curve: Curves.easeOut));
-    _textOpacity = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _textController, curve: Curves.easeOut),
-    );
-
-    // Subline: simple fade in
-    _sublineController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-    _sublineOpacity = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _sublineController, curve: Curves.easeIn),
-    );
-  }
-
-  /// Runs the animation sequence with deliberate delays between steps,
-  /// then navigates to WorkoutCompleteScreen.
-  ///
-  /// Timeline:
-  ///   0ms    → trophy scales in + haptic
-  ///   200ms  → ring burst
-  ///   400ms  → "NICE WORK." slides up
-  ///   800ms  → subline fades in
-  ///   2800ms → navigate to complete screen
-  Future<void> _startSequence() async {
-    // Trigger haptic immediately — physical feedback anchors the moment
+  Future<void> _start() async {
+    try {
+      final particles = await LogoParticles.load(_logoAsset);
+      if (!mounted) {
+        particles.image.dispose();
+        return;
+      }
+      setState(() => _particles = particles);
+    } catch (_) {
+      // If the logo can't be decoded, still show the text and move on.
+    }
+    if (!mounted) return;
     HapticFeedback.heavyImpact();
+    _controller.forward();
+  }
 
-    await Future.delayed(const Duration(milliseconds: 50));
-    if (!mounted) return;
-    _trophyController.forward();
-
-    await Future.delayed(const Duration(milliseconds: 200));
-    if (!mounted) return;
-    _ringController.forward();
-
-    await Future.delayed(const Duration(milliseconds: 400));
-    if (!mounted) return;
-    _textController.forward();
-
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-    _sublineController.forward();
-
-    // Wait for user to absorb the moment, then navigate
-    await Future.delayed(const Duration(milliseconds: 2800));
-    if (!mounted) return;
-
+  void _goNext() {
+    if (_navigated || !mounted) return;
+    _navigated = true;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        // Slightly longer than default for a premium feel
         transitionDuration: const Duration(milliseconds: 500),
         pageBuilder: (_, _, _) => WorkoutCompleteScreen(
           workoutName: widget.workoutName,
@@ -193,105 +124,52 @@ class _WorkoutTransitionScreenState extends State<WorkoutTransitionScreen>
 
   @override
   void dispose() {
-    _trophyController.dispose();
-    _ringController.dispose();
-    _textController.dispose();
-    _sublineController.dispose();
+    _controller.dispose();
+    _particles?.image.dispose();
     super.dispose();
   }
 
   // ── Build ────────────────────────────────────────────────────────────
 
+  static double _phase(double t, double a, double b) =>
+      ((t - a) / (b - a)).clamp(0.0, 1.0);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surface,
-      body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildTrophyWithRing(),
-              const SizedBox(height: 40),
-              _buildNiceWorkText(),
-              const SizedBox(height: 14),
-              _buildSubline(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTrophyWithRing() {
-    return SizedBox(
-      width: 160,
-      height: 160,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Expanding ring burst behind the trophy
-          AnimatedBuilder(
-            animation: _ringController,
-            builder: (_, _) => Transform.scale(
-              scale: _ringScale.value,
-              child: Opacity(
-                opacity: _ringOpacity.value,
-                child: Container(
-                  width: 110,
-                  height: 110,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: AppColors.primary,
-                      width: 2,
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _goNext,
+        child: SafeArea(
+          child: Center(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) {
+                final t = _controller.value * _totalSeconds;
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 200,
+                      height: 200,
+                      child: _particles == null
+                          ? null
+                          : CustomPaint(
+                              painter: LogoParticlePainter(
+                                particles: _particles!,
+                                seconds: t,
+                                color: AppColors.primary,
+                              ),
+                            ),
                     ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // Trophy icon — scales in with overshoot
-          AnimatedBuilder(
-            animation: _trophyController,
-            builder: (_, _) => Transform.scale(
-              scale: _trophyScale.value,
-              child: Container(
-                width: 110,
-                height: 110,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.primary.withValues(alpha: 0.12),
-                ),
-                child: const Icon(
-                  Icons.emoji_events_rounded,
-                  color: AppColors.primary,
-                  size: 52,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNiceWorkText() {
-    return AnimatedBuilder(
-      animation: _textController,
-      builder: (_, _) => SlideTransition(
-        position: _textSlide,
-        child: FadeTransition(
-          opacity: _textOpacity,
-          child: Text(
-            'NICE WORK.',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 48,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onSurface,
-              letterSpacing: -1,
-              height: 1,
+                    const SizedBox(height: 56),
+                    _buildNiceWorkText(t),
+                    const SizedBox(height: 14),
+                    _buildSubline(t),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -299,9 +177,28 @@ class _WorkoutTransitionScreenState extends State<WorkoutTransitionScreen>
     );
   }
 
-  Widget _buildSubline() {
+  Widget _buildNiceWorkText(double t) {
+    final p = Curves.easeOut.transform(_phase(t, 3.3, 3.8));
+    return Opacity(
+      opacity: p,
+      child: Transform.translate(
+        offset: Offset(0, 20 * (1 - p)),
+        child: Text(
+          'NICE WORK.',
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 48,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
+            letterSpacing: -1,
+            height: 1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubline(double t) {
     // Pick a motivational line based on avg RPE
-    // Low RPE = pushed harder message, high RPE = recovery message
     final String subline;
     if (widget.avgRpe >= 8) {
       subline = 'You left everything on the floor.';
@@ -311,8 +208,8 @@ class _WorkoutTransitionScreenState extends State<WorkoutTransitionScreen>
       subline = 'Every rep counts. Keep showing up.';
     }
 
-    return FadeTransition(
-      opacity: _sublineOpacity,
+    return Opacity(
+      opacity: Curves.easeIn.transform(_phase(t, 3.55, 3.95)),
       child: Text(
         subline,
         style: GoogleFonts.manrope(

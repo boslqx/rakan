@@ -92,31 +92,38 @@ class ExerciseThumbStrip extends StatelessWidget {
         final shown =
             exerciseNames.take(overflow ? fits - 1 : fits).toList();
 
-        return Row(
-          children: [
-            for (final name in shown) ...[
-              _thumb(context, name),
-              SizedBox(width: gap),
-            ],
-            if (overflow)
-              Container(
-                width: size,
-                height: size,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: overflowColor,
-                  borderRadius: BorderRadius.circular(size * 0.24),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                ),
-                child: Text(
-                  '+${exerciseNames.length - shown.length}',
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: size * 0.3,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.onSurface,
-                  ),
+        final tiles = <Widget>[
+          for (final name in shown) _thumb(context, name),
+          if (overflow)
+            Container(
+              width: size,
+              height: size,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: overflowColor,
+                borderRadius: BorderRadius.circular(size * 0.24),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: Text(
+                '+${exerciseNames.length - shown.length}',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: size * 0.3,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
                 ),
               ),
+            ),
+        ];
+
+        // Gaps go only between tiles. A trailing gap isn't counted by
+        // `fits`, so when the list exactly fills the row it overflowed by
+        // up to [gap] px — only on some screen widths / exercise counts.
+        return Row(
+          children: [
+            for (var i = 0; i < tiles.length; i++) ...[
+              if (i > 0) SizedBox(width: gap),
+              tiles[i],
+            ],
           ],
         );
       },
