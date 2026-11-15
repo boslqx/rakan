@@ -10,7 +10,10 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.google.mediapipe.framework.image.BitmapExtractor
 import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.framework.image.MPImage
+import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
@@ -40,6 +43,9 @@ class PoseDetectorHandler(
     // increase. Written on the main thread (setup), read on cameraExecutor.
     @Volatile private var lastTimestampMs: Long = -1
 
+    /** Who the user is among everyone in frame. Replaced on main, used on MediaPipe's thread. */
+    @Volatile private var tracker = TargetTracker()
+
     val previewView: PreviewView = PreviewView(context).apply {
         implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         scaleType = PreviewView.ScaleType.FILL_CENTER
@@ -62,6 +68,8 @@ class PoseDetectorHandler(
     private fun setupMediaPipe(): Boolean {
         // A new landmarker accepts any first timestamp.
         lastTimestampMs = -1
+        // Each stream (one per set) locks onto the user afresh.
+        tracker = TargetTracker()
         try {
             val baseOptions = BaseOptions.builder()
                 .setModelAssetPath("pose_landmarker.task")
@@ -70,12 +78,14 @@ class PoseDetectorHandler(
             val options = PoseLandmarkerOptions.builder()
                 .setBaseOptions(baseOptions)
                 .setRunningMode(RunningMode.LIVE_STREAM)
-                .setNumPoses(1)
+                // Several people, so TargetTracker — not MediaPipe — picks
+                // which one is the user (a busy gym has others in frame).
+                .setNumPoses(MAX_POSES)
                 .setMinPoseDetectionConfidence(0.5f)
                 .setMinPosePresenceConfidence(0.5f)
                 .setMinTrackingConfidence(0.5f)
-                .setResultListener { result: PoseLandmarkerResult, _ ->
-                    handlePoseResult(result)
+                .setResultListener { result: PoseLandmarkerResult, input: MPImage ->
+                    handlePoseResult(result, input)
                 }
                 .setErrorListener { error: RuntimeException ->
                     Log.e("PoseDetector", "MediaPipe error: ${error.message}")
@@ -93,13 +103,78 @@ class PoseDetectorHandler(
         }
     }
 
-    private fun handlePoseResult(result: PoseLandmarkerResult) {
-        if (result.landmarks().isEmpty()) {
-            sendEvent(mapOf("detected" to false))
-            return
+    private fun handlePoseResult(result: PoseLandmarkerResult, input: MPImage) {
+        val poses = result.landmarks()
+        val bitmap = try { BitmapExtractor.extract(input) } catch (e: Exception) { null }
+
+        val people = poses.mapIndexedNotNull { i, pose ->
+            val pts = pose.map {
+                TargetTracker.Pt(it.x(), it.y(), it.visibility().orElse(0f))
+            }
+            TargetTracker.describe(i, pts, frameWidth, frameHeight, bitmap?.let { torsoColour(it, pts) })
         }
 
-        val personLandmarks = result.landmarks()[0]
+        val wasLocked = tracker.isLocked
+        val outcome = tracker.update(people, frameWidth, frameHeight, result.timestampMs())
+        logTrackerChange(wasLocked, outcome, people.size)
+        when (outcome) {
+            TargetTracker.Outcome.NoOne -> sendEvent(mapOf("detected" to false))
+            // The user stepped out (or is blocked); others may be in frame
+            // but are ignored. Flutter pauses rep counting on this.
+            TargetTracker.Outcome.Lost ->
+                sendEvent(mapOf("detected" to false, "reason" to "target_lost"))
+            is TargetTracker.Outcome.Target -> sendPose(poses[outcome.index])
+        }
+    }
+
+    private var lastOutcomeKind: String? = null
+
+    /** Logs lock / lost / found only when they change — not every frame. */
+    private fun logTrackerChange(wasLocked: Boolean, outcome: TargetTracker.Outcome, seen: Int) {
+        val kind = when (outcome) {
+            TargetTracker.Outcome.NoOne -> "no_one"
+            TargetTracker.Outcome.Lost -> "lost"
+            is TargetTracker.Outcome.Target -> if (tracker.isLocked) "tracking" else "acquiring"
+        }
+        if (!wasLocked && tracker.isLocked) Log.d(TAG, "locked onto user ($seen in frame)")
+        if (kind != lastOutcomeKind) {
+            Log.d(TAG, "tracker: $kind ($seen in frame)")
+            lastOutcomeKind = kind
+        }
+    }
+
+    /**
+     * Mean colour of the middle of the torso (the shirt), RGB 0..1 — lets
+     * the tracker tell the user from a stranger of the same build. Landmarks
+     * are normalised to [bitmap], which is the unrotated camera frame.
+     */
+    private fun torsoColour(bitmap: Bitmap, lm: List<TargetTracker.Pt>): FloatArray? {
+        val ls = lm[11]; val rs = lm[12]; val lh = lm[23]; val rh = lm[24]
+        var r = 0f; var g = 0f; var b = 0f; var n = 0
+        val steps = 6
+        for (i in 0 until steps) {
+            // Inner 20–80% of the torso, away from arms and background.
+            val v = 0.2f + 0.6f * i / (steps - 1)
+            for (j in 0 until steps) {
+                val u = 0.2f + 0.6f * j / (steps - 1)
+                val topX = ls.x + (rs.x - ls.x) * u
+                val topY = ls.y + (rs.y - ls.y) * u
+                val botX = lh.x + (rh.x - lh.x) * u
+                val botY = lh.y + (rh.y - lh.y) * u
+                val px = ((topX + (botX - topX) * v) * bitmap.width).toInt()
+                val py = ((topY + (botY - topY) * v) * bitmap.height).toInt()
+                if (px !in 0 until bitmap.width || py !in 0 until bitmap.height) continue
+                val c = bitmap.getPixel(px, py)
+                r += ((c shr 16) and 0xFF) / 255f
+                g += ((c shr 8) and 0xFF) / 255f
+                b += (c and 0xFF) / 255f
+                n++
+            }
+        }
+        return if (n < 8) null else floatArrayOf(r / n, g / n, b / n)
+    }
+
+    private fun sendPose(personLandmarks: List<NormalizedLandmark>) {
         val landmarkList = personLandmarks.map { landmark ->
             mapOf(
                 "x" to landmark.x().toDouble(),
@@ -216,5 +291,11 @@ class PoseDetectorHandler(
         cameraProvider?.unbindAll()
         poseLandmarker?.close()
         Log.d("PoseDetector", "Stopped")
+    }
+
+    companion object {
+        /** People MediaPipe reports per frame; the tracker picks the user. */
+        private const val MAX_POSES = 3
+        private const val TAG = "PoseTracker"
     }
 }

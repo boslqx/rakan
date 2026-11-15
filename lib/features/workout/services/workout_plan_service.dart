@@ -89,40 +89,53 @@ class WorkoutPlanService {
     final days = <Map<String, dynamic>>[];
 
     for (final dayDoc in daysSnapshot.docs) {
-      final dayData = dayDoc.data();
+      days.add(
+        planDayFrom(
+          dayDoc.id,
+          dayDoc.data(),
+          await _exercisesOf(dayDoc.reference),
+        ),
+      );
+    }
 
-      final exercisesSnapshot = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('workoutPlans')
-          .doc(planId)
-          .collection('days')
-          .doc(dayDoc.id)
-          .collection('exercises')
-          .get();
+    return days;
+  }
 
-      final exercises = exercisesSnapshot.docs
-          .map((e) => {...e.data(), 'docId': e.id})
-          .toList();
+  /// A day's exercise documents, each with its doc ID as 'docId' — what
+  /// the detail screen edits, removes and reorders them by.
+  Future<List<Map<String, dynamic>>> _exercisesOf(
+    DocumentReference<Map<String, dynamic>> dayRef,
+  ) async {
+    final snapshot = await dayRef.collection('exercises').get();
+    return [for (final e in snapshot.docs) {...e.data(), 'docId': e.id}];
+  }
 
-      // Sort by 'order' if present. Exercises added before this field
-      // existed default to a large sort key, so they keep their original
-      // (arbitrary) relative order and simply appear after any explicitly
-      // ordered ones — nothing breaks for plans generated before reordering
-      // was supported.
-      exercises.sort((a, b) {
+  /// A plan day as the screens use it: its document's fields, its doc ID as
+  /// 'id', and its [exercises] (from the 'exercises' subcollection) under
+  /// 'exercises', in their saved order. Every place that hands a plan day
+  /// to a screen builds it here, so none can leave the exercises out.
+  @visibleForTesting
+  static Map<String, dynamic> planDayFrom(
+    String id,
+    Map<String, dynamic> data,
+    List<Map<String, dynamic>> exercises,
+  ) {
+    // Sort by 'order' if present. Exercises added before this field
+    // existed default to a large sort key, so they keep their original
+    // (arbitrary) relative order and simply appear after any explicitly
+    // ordered ones — nothing breaks for plans generated before reordering
+    // was supported.
+    final sorted = [...exercises]
+      ..sort((a, b) {
         final orderA = a['order'] as int? ?? 999999;
         final orderB = b['order'] as int? ?? 999999;
         return orderA.compareTo(orderB);
       });
 
-      // 'id' injected here for the same reason as on the plan map — the
-      // Schedule tab's edit feature needs each day's Firestore doc ID to
-      // call swapDays/cancelDay.
-      days.add({...dayData, 'id': dayDoc.id, 'exercises': exercises});
-    }
-
-    return days;
+    // 'id' injected here for the same reason as on the plan map — the
+    // Schedule tab's edit feature needs each day's Firestore doc ID to
+    // call swapDays/cancelDay.
+    return {...data, 'id': id, 'exercises': sorted};
   }
 
   /// Swaps the workout *content* (name, focus, duration, and full
@@ -261,6 +274,10 @@ class WorkoutPlanService {
   /// document shape as addExerciseToDay() (exerciseId as millis timestamp,
   /// order as index) — so WorkoutDayDetailScreen reads templated and
   /// manually-added exercises identically, no special-casing needed there.
+  ///
+  /// Returns the converted day exercises included, read back the same way
+  /// as the plan ([planDayFrom]): the Schedule tab opens the detail screen
+  /// with this map, and that screen shows the exercises it's given.
   Future<Map<String, dynamic>> convertRestDayToWorkout({
     required String uid,
     required String planId,
@@ -313,7 +330,7 @@ class WorkoutPlanService {
     await batch.commit();
 
     final snap = await dayRef.get();
-    return {...snap.data()!, 'id': snap.id};
+    return planDayFrom(snap.id, snap.data()!, await _exercisesOf(dayRef));
   }
 
   /// Adds a new exercise to a day at [order], and writes a fresh duration

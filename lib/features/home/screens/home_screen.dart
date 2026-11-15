@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../onboarding/services/user_profile_service.dart';
 import '../../social/screens/find_users_screen.dart';
+import '../../social/screens/user_profile_screen.dart';
+import '../../social/services/following_feed_service.dart';
 import '../../social/services/public_profile_service.dart';
 import '../../social/widgets/activity_log_card.dart';
 import '../../workout/data/exercise_data.dart';
@@ -44,6 +46,11 @@ class _HomeScreenState extends State<HomeScreen> {
   static const int _calendarLogScanLimit = 30;
   static const int _feedDisplayLimit = 5;
 
+  // Sessions from people the user follows. Null until the first load
+  // finishes; loaded alongside (not blocking) the rest of Home.
+  FollowingFeed? _followingFeed;
+  bool _followingFeedFailed = false;
+
   @override
   void initState() {
     super.initState();
@@ -60,6 +67,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadProfile() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
+
+    // Started first so it runs alongside the reads below; awaited at the
+    // end so pull-to-refresh keeps spinning until it's done too.
+    final followingFeedLoad = _loadFollowingFeed(uid);
 
     Map<String, dynamic>? profile;
     List<Map<String, dynamic>> allLogs = [];
@@ -117,7 +128,22 @@ class _HomeScreenState extends State<HomeScreen> {
           () => WeeklySummaryService().checkAndGenerateWeeklySummary(uid),
         );
     // Fire-and-forget; a no-op once old inline photos have been moved.
-    WorkoutLogService().migrateLegacyProgressPhotos(uid);
+    // Then, once per account on this phone, gives back the photo flags an
+    // older version of that migration wiped, and shows the photos on the
+    // logs already loaded (same map instances as _allLogs).
+    WorkoutLogService()
+        .migrateLegacyProgressPhotos(uid)
+        .then((_) => WorkoutLogService().repairProgressPhotoFlags(uid))
+        .then((repaired) {
+      if (repaired.isEmpty) return;
+      for (final log in allLogs) {
+        if (repaired.contains(log['logId'])) log['hasProgressPhoto'] = true;
+      }
+      if (mounted) setState(() {});
+    });
+    // Fire-and-forget, once per account on this phone: gives this user's
+    // older follower-feed copies their kg lifted and exact duration.
+    WorkoutLogService().backfillActivityFeedStats(uid);
 
     Map<String, dynamic>? todayDay;
     List<Map<String, dynamic>> planDays = [];
@@ -148,6 +174,43 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) await _checkForWeeklySummary();
       });
     }
+    await followingFeedLoad;
+  }
+
+  /// Loads the following feed. Never throws: a failure keeps whatever was
+  /// shown before and flags the section with a retry hint.
+  Future<void> _loadFollowingFeed([String? uid]) async {
+    uid ??= FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final feed = await FollowingFeedService().load(uid);
+      if (!mounted) return;
+      setState(() {
+        _followingFeed = feed;
+        _followingFeedFailed = false;
+      });
+    } catch (e, st) {
+      debugPrint('HomeScreen: following feed load failed for uid=$uid: $e');
+      debugPrint(st.toString());
+      if (mounted) setState(() => _followingFeedFailed = true);
+    }
+  }
+
+  /// Opens a followed user's profile; on return the feed is refreshed, in
+  /// case they were unfollowed there.
+  Future<void> _openUserProfile(String uid) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => UserProfileScreen(uid: uid)),
+    );
+    if (mounted) _loadFollowingFeed();
+  }
+
+  Future<void> _openFindUsers() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const FindUsersScreen()),
+    );
+    // They may have just followed someone.
+    if (mounted) _loadFollowingFeed();
   }
 
   Future<void> _checkForMissedDays() async {
@@ -611,6 +674,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
 
+                    // Following: sessions from people the user follows
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+                        child: _buildSectionLabel('FOLLOWING'),
+                      ),
+                    ),
+                    ..._buildFollowingFeedSlivers(),
+
                     // Bottom padding so last card isn't cut off
                     const SliverToBoxAdapter(
                       child: SizedBox(height: 32),
@@ -692,9 +764,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _buildStreakChip(_workoutStreak(today)),
         const SizedBox(width: 8),
         Pressable(
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const FindUsersScreen()),
-          ),
+          onTap: _openFindUsers,
           child: Container(
             width: 40,
             height: 40,
@@ -1551,6 +1621,144 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
     return streak;
+  }
+
+  // Following feed: a card per followed person's session, or a skeleton /
+  // empty / error state in its place.
+  List<Widget> _buildFollowingFeedSlivers() {
+    final feed = _followingFeed;
+
+    Widget boxed(Widget child) => SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+            child: child,
+          ),
+        );
+
+    if (feed == null) {
+      return [
+        boxed(_followingFeedFailed
+            ? _buildFeedMessage(
+                icon: Icons.cloud_off_rounded,
+                title: "Couldn't load your friends' sessions",
+                body: 'Pull down to try again.',
+              )
+            : const SkeletonBox(height: 180, radius: 20)),
+      ];
+    }
+
+    if (feed.followingCount == 0) {
+      return [
+        boxed(_buildFeedMessage(
+          icon: Icons.group_outlined,
+          title: 'Train together',
+          body: 'Follow friends to see their sessions,\nkg lifted and progress here.',
+          actionLabel: 'FIND PEOPLE',
+          onAction: _openFindUsers,
+        )),
+      ];
+    }
+
+    if (feed.items.isEmpty) {
+      return [
+        boxed(_buildFeedMessage(
+          icon: Icons.fitness_center_rounded,
+          title: 'No recent sessions',
+          body: "People you follow haven't logged a workout\nin the last "
+              '${FollowingFeedService.window.inDays} days.',
+        )),
+      ];
+    }
+
+    return [
+      SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final item = feed.items[index];
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+              child: ActivityLogCard(
+                // Keyed by owner + log so each card's like/comment state
+                // stays with its session when the list reorders.
+                key: ValueKey('${item.ownerUid}/${item.log['logId']}'),
+                log: item.log,
+                ownerUid: item.ownerUid,
+                authorName: item.displayName,
+                authorUsername: item.username,
+                authorPhotoBase64: item.photoBase64,
+                showAuthorHeader: true,
+                onAuthorTap: () => _openUserProfile(item.ownerUid),
+              ),
+            );
+          },
+          childCount: feed.items.length,
+        ),
+      ),
+    ];
+  }
+
+  Widget _buildFeedMessage({
+    required IconData icon,
+    required String title,
+    required String body,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          Icon(icon,
+              color: AppColors.onSurfaceVariant.withValues(alpha: 0.4), size: 32),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppColors.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            body,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.manrope(
+              fontSize: 13,
+              color: AppColors.onSurfaceVariant,
+              height: 1.5,
+            ),
+          ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: 16),
+            Pressable(
+              onTap: onAction,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  actionLabel,
+                  style: _labelStyle(
+                    fontSize: 11,
+                    letterSpacing: 1.5,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   // Section label

@@ -6,6 +6,7 @@ import '../models/onboarding_data.dart';
 import '../services/plan_service.dart';
 import '../../coach/services/injury_service.dart';
 import '../../../shared/widgets/main_shell.dart';
+import '../../workout/widgets/logo_particle_painter.dart';
 
 class PlanGenerationScreen extends StatefulWidget {
   final OnboardingData data;
@@ -37,30 +38,58 @@ class _PlanGenerationScreenState extends State<PlanGenerationScreen>
   bool _animationDone = false;
   String? _error;
 
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
+  // Rakan logo particle morph (same painter as the workout transition).
+  // One cycle is 4.2s: the logo scales in once (0-0.4s), then 0.4-3.6s
+  // dissolves -> 3D panels -> square ring -> logo, and 3.6-4.2s holds the
+  // solid mark. Later cycles loop from 0.4s so the scale-in never replays.
+  static const _logoAsset = 'assets/images/logo_mark.png';
+  static const double _cycleSeconds = 4.2;
+  late final AnimationController _logoController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 4200),
+  );
+  LogoParticles? _particles;
 
   @override
   void initState() {
     super.initState();
 
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
-
-    _pulseAnimation = Tween<double>(begin: 0.95, end: 1.05).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
+    _loadLogo();
 
     // Run animation and API call simultaneously
     _runAnimation();
     _callGeneratePlanApi();
   }
 
+  Future<void> _loadLogo() async {
+    try {
+      final particles = await LogoParticles.load(_logoAsset);
+      if (!mounted) {
+        particles.image.dispose();
+        return;
+      }
+      setState(() => _particles = particles);
+    } catch (e) {
+      debugPrint('Logo particles failed to load: $e');
+      return;
+    }
+    if (!mounted) return;
+    await _logoController.forward().orCancel.catchError((_) {});
+    if (!mounted) return;
+    _logoController.repeat(
+      min: ParticleTimeline.logoIn / _cycleSeconds,
+      max: 1.0,
+      period: Duration(
+        milliseconds:
+            ((_cycleSeconds - ParticleTimeline.logoIn) * 1000).round(),
+      ),
+    );
+  }
+
   @override
   void dispose() {
-    _pulseController.dispose();
+    _logoController.dispose();
+    _particles?.image.dispose();
     super.dispose();
   }
 
@@ -196,34 +225,22 @@ class _PlanGenerationScreenState extends State<PlanGenerationScreen>
             children: [
               const Spacer(flex: 2),
 
-              // Pulsing logo
-              ScaleTransition(
-                scale: _pulseAnimation,
-                child: Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.surfaceContainerLow,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.15),
-                        blurRadius: 40,
-                        spreadRadius: 10,
+              // Rakan logo particle morph
+              SizedBox(
+                width: 160,
+                height: 160,
+                child: _particles == null
+                    ? null
+                    : AnimatedBuilder(
+                        animation: _logoController,
+                        builder: (context, _) => CustomPaint(
+                          painter: LogoParticlePainter(
+                            particles: _particles!,
+                            seconds: _logoController.value * _cycleSeconds,
+                            color: AppColors.primary,
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      'R',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 48,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                ),
               ),
 
               const Spacer(),

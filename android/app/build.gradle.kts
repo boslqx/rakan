@@ -56,4 +56,7 @@ dependencies {
 
     // MediaPipe Pose Landmarker task
     implementation("com.google.mediapipe:tasks-vision:0.10.14")
+
+    // JVM unit tests (TargetTracker)
+    testImplementation("junit:junit:4.13.2")
 }

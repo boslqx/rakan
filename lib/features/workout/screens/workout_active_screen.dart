@@ -357,7 +357,10 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
 
     try {
       final completedAt = DateTime.now();
-      final durationMins = completedAt.difference(_startedAt).inMinutes;
+      // Seconds are stored too: whole minutes alone saved a sub-minute
+      // session as 0, which every card then showed as "0m".
+      final durationSecs = completedAt.difference(_startedAt).inSeconds;
+      final durationMins = (durationSecs / 60).round();
       const uuid = Uuid();
 
       final exerciseLogs = _exerciseStates.map((ex) {
@@ -436,6 +439,7 @@ class _WorkoutActiveScreenState extends State<WorkoutActiveScreen> {
         'startedAt': _startedAt.toIso8601String(),
         'completedAt': completedAt.toIso8601String(),
         'totalDurationMins': durationMins,
+        'totalDurationSecs': durationSecs,
         'totalVolume': _totalVolume,
         'totalSetsCompleted': completedSets,
         'totalSetsPlanned': totalSets,

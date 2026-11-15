@@ -136,7 +136,7 @@ class _PoseDetectionScreenState extends State<PoseDetectionScreen> {
             _landmarks = [];
           });
           if (!_countingDown && !_workoutComplete) {
-            _voice.fault(VoiceCoach.lostSightCue);
+            _voice.fault(VoiceCoach.lostCueFor(data['reason']));
           }
           return;
         }

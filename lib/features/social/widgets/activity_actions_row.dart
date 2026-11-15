@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../services/activity_interaction_service.dart';
 import '../../../shared/widgets/pressable.dart';
+import '../../../shared/utils/workout_stats_format.dart';
 
 /// Like/comment/share row appended below an ActivityLogCard. Owns its own
 /// like/comment-count state so the card itself stays a simple, stateless
@@ -97,11 +98,13 @@ class _ActivityActionsRowState extends State<ActivityActionsRow> {
 
   void _share() {
     final workoutName = widget.log['workoutName'] as String? ?? 'Workout';
-    final durationMins = widget.log['totalDurationMins'] as int? ?? 0;
-    final totalSets = widget.log['totalSetsCompleted'] as int?;
+    final duration = formatLogDuration(widget.log);
+    final volumeKg = (widget.log['totalVolume'] as num?)?.toDouble() ?? 0;
+    final totalSets = (widget.log['totalSetsCompleted'] as num?)?.toInt();
 
     final parts = <String>['Just completed "$workoutName" on Rakan 💪'];
-    if (durationMins > 0) parts.add('$durationMins min');
+    if (duration != '—') parts.add(duration);
+    if (volumeKg > 0) parts.add(formatLogVolume(widget.log));
     if (totalSets != null) parts.add('$totalSets sets');
 
     Share.share(parts.join(' • '));

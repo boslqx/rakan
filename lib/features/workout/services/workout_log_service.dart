@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../shared/utils/workout_stats_format.dart';
 import '../data/exercise_data.dart';
 import '../data/muscle_recovery_constants.dart';
 import 'schedule_matcher.dart';
@@ -51,6 +53,12 @@ class WorkoutLogService {
   CollectionReference<Map<String, dynamic>> _logs(String uid) =>
       _db.collection('users').doc(uid).collection('workoutLogs');
 
+  CollectionReference<Map<String, dynamic>> _feed(String uid) =>
+      _db.collection('users').doc(uid).collection('activityFeed');
+
+  /// Longest caption a session can carry.
+  static const int maxCaptionLength = 280;
+
   /// Saves a completed workout log to Firestore.
   ///
   /// Every document (the log, its exercise logs, the follower feed copy and
@@ -75,6 +83,7 @@ class WorkoutLogService {
       'startedAt': log['startedAt'],
       'completedAt': log['completedAt'],
       'totalDurationMins': log['totalDurationMins'],
+      'totalDurationSecs': log['totalDurationSecs'],
       'totalVolume': log['totalVolume'],
       'totalSetsCompleted': log['totalSetsCompleted'],
       'totalSetsPlanned': log['totalSetsPlanned'],
@@ -92,21 +101,12 @@ class WorkoutLogService {
       );
     }
 
-    // Thin denormalized copy for followers — deliberately excludes
-    // per-set weights/reps (totalVolume, exerciseLogs), only the same
-    // summary fields the Home feed card shows. See PublicProfileService /
-    // firestore.rules for why this lives in a separate subcollection
-    // instead of exposing workoutLogs itself to non-owners.
-    batch.set(
-      _db.collection('users').doc(uid).collection('activityFeed').doc(logId),
-      {
-        'workoutName': log['workoutName'],
-        'completedAt': log['completedAt'],
-        'totalDurationMins': log['totalDurationMins'],
-        'totalSetsCompleted': log['totalSetsCompleted'],
-        'prReached': log['prReached'] ?? false,
-      },
-    );
+    // Thin denormalized copy for followers — only the summary totals the
+    // feed card shows (including total kg lifted), never the per-set
+    // weights/reps in exerciseLogs. See firestore.rules for why this lives
+    // in a separate subcollection instead of exposing workoutLogs itself
+    // to non-owners.
+    batch.set(_feed(uid).doc(logId), _feedSummary(log));
 
     batch.set(
       _db.collection('users').doc(uid),
@@ -135,14 +135,86 @@ class WorkoutLogService {
     return confirmed;
   }
 
+  /// The follower-visible summary of a full `workoutLogs` doc, for its
+  /// `activityFeed` copy. Exact seconds fall back to startedAt→completedAt
+  /// for logs saved before they were stored. Deliberately leaves out the
+  /// photo-sharing flag and caption: those are only ever set by their own
+  /// explicit actions ([saveProgressPhoto], [setProgressPhotoShared],
+  /// [saveCaption]), so rebuilding a summary can never publish a photo.
+  static Map<String, dynamic> _feedSummary(Map<String, dynamic> log) {
+    final secs = logDurationSecs(log);
+    return {
+      'workoutName': log['workoutName'],
+      'completedAt': log['completedAt'],
+      'totalDurationMins': log['totalDurationMins'],
+      'totalDurationSecs': ?secs,
+      'totalVolume': (log['totalVolume'] as num?) ?? 0,
+      'totalSetsCompleted': log['totalSetsCompleted'],
+      'prReached': log['prReached'] ?? false,
+    };
+  }
+
+  static String _feedBackfillKey(String uid) => 'activityFeedStatsV1_$uid';
+
+  /// One-off repair of this user's own `activityFeed` copies saved before
+  /// they carried `totalVolume` and `totalDurationSecs` — followers saw
+  /// "—" for KG LIFTED and "0m" for any sub-minute session. Rebuilds the
+  /// summary from the owner-only `workoutLogs` source. Only the owner can
+  /// write their feed, so each account heals the next time its owner opens
+  /// the app; a local flag stops it re-reading the feed after that. Older
+  /// progress photos stay private (see [_feedSummary]).
+  /// Fire-and-forget: never throws.
+  Future<void> backfillActivityFeedStats(String uid) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_feedBackfillKey(uid)) ?? false) return;
+
+      final feed = await _feed(uid).get();
+      final stale = feed.docs.where((d) =>
+          !d.data().containsKey('totalVolume') ||
+          !d.data().containsKey('totalDurationSecs'));
+
+      final updates = <DocumentReference<Map<String, dynamic>>,
+          Map<String, dynamic>>{};
+      await Future.wait(stale.map((doc) async {
+        final source = await _logs(uid).doc(doc.id).get();
+        final log = source.data();
+        if (log == null) return; // source log deleted; nothing to copy
+        updates[doc.reference] = _feedSummary(log);
+      }));
+
+      final entries = updates.entries.toList();
+      const perBatch = 400; // under Firestore's 500-writes-per-batch limit
+      for (int i = 0; i < entries.length; i += perBatch) {
+        final batch = _db.batch();
+        for (final e in entries.skip(i).take(perBatch)) {
+          batch.set(e.key, e.value, SetOptions(merge: true));
+        }
+        await batch.commit();
+      }
+      await prefs.setBool(_feedBackfillKey(uid), true);
+      if (entries.isNotEmpty) {
+        debugPrint('Backfilled stats on ${entries.length} activityFeed doc(s)');
+      }
+    } catch (e) {
+      debugPrint('activityFeed stats backfill skipped: $e');
+    }
+  }
+
   /// Saves a progress photo for a log. Photos live in their own
   /// `progressPhotos/{logId}` doc rather than on the workout log: they are
   /// ~100 KB of base64 each, and every history query that reads workout
   /// logs would otherwise download every photo too.
+  ///
+  /// [shareWithFollowers] sets the feed copy's `hasProgressPhoto` flag,
+  /// which firestore.rules checks before letting anyone but the owner read
+  /// the photo. The full log keeps `hasProgressPhoto: true` either way (the
+  /// owner always sees it) plus `photoShared` for the owner's toggle.
   Future<void> saveProgressPhoto({
     required String uid,
     required String logId,
     required String photoBase64,
+    bool shareWithFollowers = false,
   }) async {
     final batch = _db.batch();
     batch.set(
@@ -150,7 +222,55 @@ class WorkoutLogService {
       {'photoBase64': photoBase64, 'logId': logId},
     );
     // Small flag so lists know a photo exists without downloading it.
-    batch.update(_logs(uid).doc(logId), {'hasProgressPhoto': true});
+    batch.update(_logs(uid).doc(logId),
+        {'hasProgressPhoto': true, 'photoShared': shareWithFollowers});
+    // Merge: the feed copy was written with the log just before this.
+    batch.set(_feed(uid).doc(logId), {'hasProgressPhoto': shareWithFollowers},
+        SetOptions(merge: true));
+    try {
+      await batch.commit().timeout(_saveAckTimeout);
+    } on TimeoutException {
+      // Queued locally while offline; Firestore syncs it later.
+    }
+  }
+
+  /// Shows or hides an existing progress photo from followers. Rewrites
+  /// the feed copy's summary from the log too, so a log saved before the
+  /// feed existed gets a complete card rather than a bare flag.
+  Future<void> setProgressPhotoShared({
+    required String uid,
+    required String logId,
+    required bool shared,
+  }) async {
+    final log = (await _logs(uid).doc(logId).get()).data();
+    if (log == null) return;
+    final batch = _db.batch();
+    batch.update(_logs(uid).doc(logId), {'photoShared': shared});
+    batch.set(_feed(uid).doc(logId),
+        {..._feedSummary(log), 'hasProgressPhoto': shared},
+        SetOptions(merge: true));
+    try {
+      await batch.commit().timeout(_saveAckTimeout);
+    } on TimeoutException {
+      // Queued locally while offline; Firestore syncs it later.
+    }
+  }
+
+  /// Sets (or, when blank, removes) a session's caption on both the log
+  /// and its follower-visible feed copy.
+  Future<void> saveCaption({
+    required String uid,
+    required String logId,
+    required String caption,
+  }) async {
+    var text = caption.trim();
+    if (text.length > maxCaptionLength) {
+      text = text.substring(0, maxCaptionLength);
+    }
+    final Object value = text.isEmpty ? FieldValue.delete() : text;
+    final batch = _db.batch();
+    batch.update(_logs(uid).doc(logId), {'caption': value});
+    batch.set(_feed(uid).doc(logId), {'caption': value}, SetOptions(merge: true));
     try {
       await batch.commit().timeout(_saveAckTimeout);
     } on TimeoutException {
@@ -165,8 +285,14 @@ class WorkoutLogService {
   /// Fire-and-forget: never throws.
   Future<void> migrateLegacyProgressPhotos(String uid) async {
     try {
+      // `isNull: false` is Firestore's "field != null". This used to be
+      // `isNotEqualTo: null`, which cloud_firestore silently drops (it only
+      // adds a condition for a non-null value), so the query matched EVERY
+      // log and set `hasProgressPhoto: false` on each one on every Home
+      // load — photos vanished from their owner's cards after a refresh.
+      // See [repairProgressPhotoFlags] for undoing that.
       final legacy = await _logs(uid)
-          .where('progressPhotoBase64', isNotEqualTo: null)
+          .where('progressPhotoBase64', isNull: false)
           .get();
       if (legacy.docs.isEmpty) return;
 
@@ -181,17 +307,71 @@ class WorkoutLogService {
           if (photo != null && photo.isNotEmpty) {
             batch.set(photos.doc(doc.id),
                 {'photoBase64': photo, 'logId': doc.id});
+            batch.update(doc.reference, {
+              'progressPhotoBase64': FieldValue.delete(),
+              'hasProgressPhoto': true,
+            });
+          } else {
+            // Empty leftover field: just drop it. Never clears the flag —
+            // the log may have a photo in progressPhotos already.
+            batch.update(
+                doc.reference, {'progressPhotoBase64': FieldValue.delete()});
           }
-          batch.update(doc.reference, {
-            'progressPhotoBase64': FieldValue.delete(),
-            'hasProgressPhoto': photo != null && photo.isNotEmpty,
-          });
         }
         await batch.commit();
       }
       debugPrint('Migrated ${legacy.docs.length} legacy progress photo(s)');
     } catch (e) {
       debugPrint('Progress photo migration skipped: $e');
+    }
+  }
+
+  static String _photoFlagRepairKey(String uid) =>
+      'progressPhotoFlagRepairV1_$uid';
+
+  /// One-off repair for logs whose `hasProgressPhoto` flag the broken
+  /// [migrateLegacyProgressPhotos] query wiped: every photo still in
+  /// `progressPhotos` gets its log's flag back. Touches only the owner's
+  /// own log — whether followers can see a photo (the activityFeed flag)
+  /// was never affected and isn't changed here. Reads the photo docs (and
+  /// so downloads each photo) once per account on this phone, then a
+  /// local flag skips it. Returns the ids it fixed so the caller can
+  /// update logs it already holds. Fire-and-forget: never throws.
+  Future<Set<String>> repairProgressPhotoFlags(String uid) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_photoFlagRepairKey(uid)) ?? false) return {};
+
+      final photos = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('progressPhotos')
+          .get();
+      final photoLogIds = photos.docs
+          .where((d) => (d.data()['photoBase64'] as String?)?.isNotEmpty ?? false)
+          .map((d) => d.id);
+      final logs =
+          await Future.wait(photoLogIds.map((id) => _logs(uid).doc(id).get()));
+      final broken = logs
+          .where((l) => l.exists && l.data()?['hasProgressPhoto'] != true)
+          .toList();
+
+      const perBatch = 400; // under Firestore's 500-writes-per-batch limit
+      for (int i = 0; i < broken.length; i += perBatch) {
+        final batch = _db.batch();
+        for (final log in broken.skip(i).take(perBatch)) {
+          batch.update(log.reference, {'hasProgressPhoto': true});
+        }
+        await batch.commit();
+      }
+      await prefs.setBool(_photoFlagRepairKey(uid), true);
+      if (broken.isNotEmpty) {
+        debugPrint('Restored hasProgressPhoto on ${broken.length} log(s)');
+      }
+      return broken.map((l) => l.id).toSet();
+    } catch (e) {
+      debugPrint('Progress photo flag repair skipped: $e');
+      return {};
     }
   }
 

@@ -79,6 +79,14 @@ class VoiceCoach {
   static const lostSightCue =
       "Can't see you — step back so your whole body is in frame";
 
+  /// Said when the camera lost the user it locked onto — others may still
+  /// be in frame, but their reps aren't counted.
+  static const lostTargetCue = 'Lost you — step back into your spot';
+
+  /// The cue for a native "detected: false" event's `reason`.
+  static String lostCueFor(Object? reason) =>
+      reason == 'target_lost' ? lostTargetCue : lostSightCue;
+
   /// A set's form verdicts in a sentence: "8 of 10 reps with good form."
   static String formSummary(List<bool> form) {
     final good = form.where((ok) => ok).length;

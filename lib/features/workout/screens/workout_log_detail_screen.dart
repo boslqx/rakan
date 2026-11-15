@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/progress_photo.dart';
 import '../services/workout_log_service.dart';
 import '../../../shared/widgets/pressable.dart';
+import '../../../shared/utils/workout_stats_format.dart';
 
 /// Read-only view of a single past workout
 class WorkoutLogDetailScreen extends StatefulWidget {
@@ -19,6 +20,47 @@ class WorkoutLogDetailScreen extends StatefulWidget {
 class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _exerciseLogs = [];
+
+  // Whether followers can see this log's progress photo. Photos saved
+  // before sharing existed have no flag and stay private until switched on.
+  late bool _photoShared = widget.log['photoShared'] == true;
+  bool _isUpdatingShare = false;
+
+  Future<void> _setPhotoShared(bool shared) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final logId = widget.log['logId'] as String?;
+    if (uid == null || logId == null) return;
+
+    setState(() {
+      _photoShared = shared;
+      _isUpdatingShare = true;
+    });
+    try {
+      await WorkoutLogService()
+          .setProgressPhotoShared(uid: uid, logId: logId, shared: shared);
+      // Keep the caller's cached copy of this log in step, so reopening it
+      // shows the new state without a reload (skipped if it's read-only).
+      try {
+        widget.log['photoShared'] = shared;
+      } on UnsupportedError catch (_) {}
+    } catch (e) {
+      debugPrint('Photo share update failed: $e');
+      if (mounted) {
+        setState(() => _photoShared = !shared);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Couldn't update who can see this photo. Try again.",
+              style: GoogleFonts.manrope(color: AppColors.onSurface),
+            ),
+            backgroundColor: AppColors.surfaceContainerHigh,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUpdatingShare = false);
+    }
+  }
 
   @override
   void initState() {
@@ -42,6 +84,53 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
       _exerciseLogs = logs;
       _isLoading = false;
     });
+  }
+
+  Widget _buildPhotoShareRow() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 6, 10, 6),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _photoShared ? Icons.group_rounded : Icons.lock_outline_rounded,
+            color: _photoShared ? AppColors.primary : AppColors.onSurfaceVariant,
+            size: 18,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _photoShared ? 'Followers can see this photo' : 'Only you can see this photo',
+              style: GoogleFonts.manrope(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.onSurface,
+              ),
+            ),
+          ),
+          _isUpdatingShare
+              ? const Padding(
+                  padding: EdgeInsets.all(14),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                )
+              : Switch(
+                  value: _photoShared,
+                  onChanged: _setPhotoShared,
+                  activeThumbColor: AppColors.primary,
+                ),
+        ],
+      ),
+    );
   }
 
   // Borg-scale-derived RPE colour zones, consistent with the rest of the
@@ -69,8 +158,7 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
     final log = widget.log;
     final workoutName = log['workoutName'] as String? ?? 'Workout';
     final completedAt = log['completedAt'] as String? ?? '';
-    final durationMins = log['totalDurationMins'] as int? ?? 0;
-    final totalVolume = (log['totalVolume'] as num?)?.toDouble() ?? 0;
+    final caption = (log['caption'] as String? ?? '').trim();
 
     final avgRpe = _exerciseLogs.isEmpty
         ? null
@@ -125,6 +213,17 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
                       color: AppColors.onSurface,
                     ),
                   ),
+                  if (caption.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      caption,
+                      style: GoogleFonts.manrope(
+                        fontSize: 15,
+                        height: 1.5,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
 
                   if (ProgressPhoto.hasPhoto(log)) ...[
@@ -134,6 +233,8 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
                       height: 220,
                       borderRadius: 20,
                     ),
+                    const SizedBox(height: 10),
+                    _buildPhotoShareRow(),
                     const SizedBox(height: 20),
                   ],
 
@@ -146,13 +247,8 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
                     ),
                     child: Row(
                       children: [
-                        Expanded(child: _statBlock('DURATION', '${durationMins}min')),
-                        Expanded(
-                          child: _statBlock(
-                            'KG LIFTED',
-                            totalVolume > 0 ? '${totalVolume.toStringAsFixed(0)}kg' : '—',
-                          ),
-                        ),
+                        Expanded(child: _statBlock('DURATION', formatLogDuration(log))),
+                        Expanded(child: _statBlock('KG LIFTED', formatLogVolume(log))),
                         Expanded(
                           child: _statBlock(
                             'AVG RPE',

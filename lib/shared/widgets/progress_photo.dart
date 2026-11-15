@@ -55,7 +55,10 @@ class _ProgressPhotoState extends State<ProgressPhoto> {
   @override
   void didUpdateWidget(covariant ProgressPhoto oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.log['logId'] != widget.log['logId']) _resolve();
+    if (oldWidget.log['logId'] != widget.log['logId'] ||
+        oldWidget.log['hasProgressPhoto'] != widget.log['hasProgressPhoto']) {
+      _resolve();
+    }
   }
 
   /// Sets state fields directly (no setState) for the synchronous part:

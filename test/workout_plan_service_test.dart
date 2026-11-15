@@ -103,4 +103,51 @@ void main() {
       expect(version['sourceMissedDates'], ['2024-01-08']);
     });
   });
+
+  group('planDayFrom', () {
+    // A rest day just converted from a template: the day document holds no
+    // exercises (they're a subcollection), so the map the detail screen opens
+    // with must bring them along — it was opening with an empty list.
+    test('a converted rest day carries its template exercises, in order, '
+        'with the doc IDs edits need', () {
+      final day = WorkoutPlanService.planDayFrom(
+        'sat',
+        {
+          'dayNumber': 6,
+          'dayName': 'Saturday',
+          'dayType': 'workout',
+          'workoutName': 'Chest Day',
+          'durationMinutes': 26,
+        },
+        [
+          {'docId': 'b', 'exerciseName': 'Incline Press', 'sets': 3, 'order': 1},
+          {'docId': 'a', 'exerciseName': 'Bench Press', 'sets': 3, 'order': 0},
+          {'docId': 'c', 'exerciseName': 'Chest Fly', 'sets': 3, 'order': 2},
+        ],
+      );
+
+      expect(day['id'], 'sat');
+      expect(day['workoutName'], 'Chest Day');
+      expect(day['durationMinutes'], 26);
+      final exercises = (day['exercises'] as List).cast<Map<String, dynamic>>();
+      expect([for (final e in exercises) e['exerciseName']],
+          ['Bench Press', 'Incline Press', 'Chest Fly']);
+      expect([for (final e in exercises) e['docId']], ['a', 'b', 'c']);
+    });
+
+    test('exercises saved before ordering existed come after ordered ones', () {
+      final day = WorkoutPlanService.planDayFrom('mon', {'dayType': 'workout'}, [
+        {'docId': 'old', 'exerciseName': 'Squat'},
+        {'docId': 'new', 'exerciseName': 'Lunge', 'order': 0},
+      ]);
+
+      expect([for (final e in day['exercises'] as List) e['docId']], ['new', 'old']);
+    });
+
+    test('an empty workout still has an exercise list', () {
+      final day = WorkoutPlanService.planDayFrom('sat', {'dayType': 'workout'}, []);
+
+      expect(day['exercises'], isEmpty);
+    });
+  });
 }

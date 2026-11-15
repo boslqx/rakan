@@ -97,6 +97,18 @@ service cloud.firestore {
       }
     }
 
+    // Progress photos (owner read/write comes from the users/{userId}/**
+    // rule above). Anyone who can see the session can also read its photo,
+    // but only while the owner has shared it: the activityFeed copy's
+    // hasProgressPhoto flag is set by the "show to followers" switch
+    // (WorkoutLogService.saveProgressPhoto / setProgressPhotoShared), so an
+    // unshared photo stays owner-only even to someone who knows its logId.
+    match /users/{uid}/progressPhotos/{logId} {
+      allow read: if isVerified()
+        && canViewActivity(database, uid)
+        && get(/databases/$(database)/documents/users/$(uid)/activityFeed/$(logId)).data.get('hasProgressPhoto', false) == true;
+    }
+
     // Follow graph. Doc id is "{followerUid}_{followingUid}". Only the
     // follower can create/delete their own follow (unfollow, or cancel a
     // pending request); only the target can delete it too (remove a

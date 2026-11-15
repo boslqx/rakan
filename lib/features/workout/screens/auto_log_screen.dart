@@ -228,7 +228,7 @@ class _AutoLogScreenState extends State<AutoLogScreen> {
 
         if (!detected) {
           _frame.value = _PoseFrame.none;
-          if (!_countingDown) _voice.fault(VoiceCoach.lostSightCue);
+          if (!_countingDown) _voice.fault(VoiceCoach.lostCueFor(data['reason']));
           return;
         }
 

@@ -54,12 +54,66 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
   bool _isUploadingPhoto = false;
   bool _photoSaved = false;
 
+  /// Whether followers can see the photo — on by default; flipping it
+  /// after the photo is saved updates the share flag straight away.
+  bool _sharePhoto = true;
+  bool _isUpdatingShare = false;
+
   final ImagePicker _picker = ImagePicker();
+
+  // ── Caption state ────────────────────────────────────────────────────
+  final TextEditingController _captionController = TextEditingController();
+
+  /// What's already been written, so leaving doesn't re-save it.
+  String _savedCaption = '';
 
   @override
   void initState() {
     super.initState();
     _runAdaptation();
+  }
+
+  @override
+  void dispose() {
+    // Covers leaving by the system back gesture, not just the button.
+    _saveCaptionIfChanged();
+    _captionController.dispose();
+    super.dispose();
+  }
+
+  /// Fire-and-forget: Firestore applies the write locally at once and
+  /// syncs it, so leaving the screen never waits on the network.
+  void _saveCaptionIfChanged() {
+    final text = _captionController.text.trim();
+    if (text == _savedCaption) return;
+    _savedCaption = text;
+    WorkoutLogService()
+        .saveCaption(uid: widget.uid, logId: widget.logId, caption: text)
+        .catchError((Object e) => debugPrint('Caption save failed: $e'));
+  }
+
+  Future<void> _setPhotoShared(bool shared) async {
+    // Before a photo is saved this is just the choice used when it is.
+    if (!_photoSaved) {
+      setState(() => _sharePhoto = shared);
+      return;
+    }
+    setState(() {
+      _sharePhoto = shared;
+      _isUpdatingShare = true;
+    });
+    try {
+      await WorkoutLogService().setProgressPhotoShared(
+        uid: widget.uid,
+        logId: widget.logId,
+        shared: shared,
+      );
+    } catch (e) {
+      debugPrint('Photo share update failed: $e');
+      if (mounted) setState(() => _sharePhoto = !shared);
+    } finally {
+      if (mounted) setState(() => _isUpdatingShare = false);
+    }
   }
 
   // ── Adaptation ───────────────────────────────────────────────────────
@@ -266,6 +320,7 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
         uid: widget.uid,
         logId: widget.logId,
         photoBase64: base64String,
+        shareWithFollowers: _sharePhoto,
       );
 
       if (!mounted) return;
@@ -597,7 +652,7 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'PROGRESS PHOTO',
+            'SHARE YOUR SESSION',
             style: GoogleFonts.manrope(
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -606,12 +661,119 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
             ),
           ),
           const SizedBox(height: 10),
+          _buildCaptionField(),
+          const SizedBox(height: 12),
 
           // If photo is selected, show preview; otherwise show add button
           if (_selectedPhoto != null)
             _buildPhotoPreview()
           else
             _buildAddPhotoButton(),
+          const SizedBox(height: 12),
+          _buildShareToggle(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCaptionField() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      child: TextField(
+        controller: _captionController,
+        maxLength: WorkoutLogService.maxCaptionLength,
+        minLines: 2,
+        maxLines: 5,
+        keyboardType: TextInputType.multiline,
+        textCapitalization: TextCapitalization.sentences,
+        onTapOutside: (_) => FocusScope.of(context).unfocus(),
+        style: GoogleFonts.manrope(
+          fontSize: 14,
+          height: 1.45,
+          color: AppColors.onSurface,
+        ),
+        decoration: InputDecoration(
+          hintText: 'How did it go? Add a caption…',
+          hintStyle: GoogleFonts.manrope(
+            fontSize: 14,
+            color: AppColors.onSurfaceVariant,
+          ),
+          border: InputBorder.none,
+          counterStyle: GoogleFonts.manrope(
+            fontSize: 10,
+            color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
+          ),
+          contentPadding: const EdgeInsets.fromLTRB(18, 14, 18, 4),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShareToggle() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _sharePhoto ? Icons.group_rounded : Icons.lock_outline_rounded,
+            color: _sharePhoto ? AppColors.primary : AppColors.onSurfaceVariant,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Show photo to followers',
+                  style: GoogleFonts.manrope(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _sharePhoto
+                      ? 'People who can see your activity see it with your caption'
+                      : 'Only you see the photo. Your caption is still shared',
+                  style: GoogleFonts.manrope(
+                    fontSize: 11,
+                    height: 1.35,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _isUpdatingShare
+              ? const Padding(
+                  padding: EdgeInsets.all(14),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                )
+              : Switch(
+                  value: _sharePhoto,
+                  onChanged: _isUploadingPhoto ? null : _setPhotoShared,
+                  activeThumbColor: AppColors.primary,
+                ),
         ],
       ),
     );
@@ -867,6 +1029,7 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
       child: ElevatedButton(
         onPressed: () {
+          _saveCaptionIfChanged();
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const MainShell()),
             (_) => false,
