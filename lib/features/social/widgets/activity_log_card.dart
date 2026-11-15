@@ -143,8 +143,7 @@ class ActivityLogCard extends StatelessWidget {
                 log: log,
                 ownerUid: ownerUid,
                 // Bigger where the photo is the post (the following feed).
-                height: showAuthorHeader ? 220 : 160,
-              ),
+                height: showAuthorHeader ? 220 : 160,              ),
             ],
 
             if (ownerUid != null && logId != null)

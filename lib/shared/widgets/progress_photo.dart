@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../features/workout/services/workout_log_service.dart';
 import '../utils/base64_image_cache.dart';
+import 'photo_frame.dart';
 
 /// A workout's progress photo.
 ///
@@ -15,6 +16,7 @@ import '../utils/base64_image_cache.dart';
 class ProgressPhoto extends StatefulWidget {
   final Map<String, dynamic> log;
   final String? ownerUid;
+  /// Height of the placeholder shown while the photo downloads.
   final double height;
   final double borderRadius;
 
@@ -105,20 +107,24 @@ class _ProgressPhotoState extends State<ProgressPhoto> {
   Widget build(BuildContext context) {
     if (_bytes == null && !_loading) return const SizedBox.shrink();
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(widget.borderRadius),
-      child: SizedBox(
-        width: double.infinity,
-        height: widget.height,
-        child: _bytes == null
-            ? Container(color: AppColors.surfaceContainerHigh)
-            : Image.memory(
-                _bytes!,
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
-      ),
+    if (_bytes == null) {
+      // Still downloading: hold a placeholder slot.
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+        child: Container(
+          width: double.infinity,
+          height: widget.height,
+          color: AppColors.surfaceContainerHigh,
+        ),
+      );
+    }
+
+    // Whole photo, never cropped, in a frame no taller than 4:5; tap to
+    // view full screen.
+    return PhotoFrame(
+      image: MemoryImage(_bytes!),
+      placeholderHeight: widget.height,
+      borderRadius: widget.borderRadius,
     );
   }
 }

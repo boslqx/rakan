@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Theme for image_cropper's native UCrop screen (profile picture crop). -->
+    <style name="UCropTheme" parent="@style/Theme.AppCompat.Light.NoActionBar" />
+</resources>

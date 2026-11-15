@@ -63,10 +63,7 @@ class AngleCalculator {
   ///    verticality) do care, so the frame is rotated upright here using the
   ///    same rotationDegrees CameraX reports. After this call, +y points
   ///    down and (0, -1) is real-world "up".
-  ///
-  /// Mirroring (front camera) is deliberately ignored: it flips left/right
-  /// but changes neither joint angles nor an angle measured from vertical.
-  /// Must be applied before any analyser sees the landmarks.
+  /// 
   static List<Landmark> toPixelSpace(
     List<Landmark> landmarks, {
     required int frameWidth,
@@ -131,10 +128,6 @@ class AngleCalculator {
   }
 
   /// Angle (0–180°) between the segment lower→upper and real-world vertical.
-  /// 0° = segment points straight up, 90° = horizontal.
-  /// Only meaningful on landmarks from [toPixelSpace] with the correct
-  /// rotationDegrees, because it relies on (0, -1) being "up".
-  ///
   /// Used for trunk lean (hip→shoulder) and shank verticality (ankle→knee).
   static double angleFromVertical(Landmark upper, Landmark lower) {
     final dx = upper.x - lower.x;
@@ -148,18 +141,9 @@ class AngleCalculator {
 }
 
 /// Every form threshold in one place, with where the number comes from.
-/// Full write-up with references: docs/POSTURE_THRESHOLDS.md.
-///
+
 /// DESIGN RULE used throughout: threshold = published reference value
-/// + a 10° MediaPipe measurement tolerance. 2D MediaPipe joint angles are
-/// not motion-capture accurate (Dill et al., 2023), so a rule that demands
-/// the exact textbook angle would mark genuinely good reps as wrong.
-/// For joints judged near FULL EXTENSION (~180°) the tolerance is doubled
-/// to 20°, because Dill et al. (2023) found estimation error grows as a
-/// joint approaches straight.
-/// Some values have no direct published number — those are marked
-/// "ENGINEERING ESTIMATE" and are exactly what the Objective 2 accuracy
-/// study must validate.
+/// + a 10° MediaPipe measurement tolerance. 
 class FormThresholds {
   /// Landmarks below this MediaPipe visibility score are treated as hidden.
   static const double minVisibility = 0.5;
@@ -167,7 +151,7 @@ class FormThresholds {
   /// The general measurement tolerance described above.
   static const double tolerance = 10.0;
 
-  // ---------------------------------------------------------------- SQUAT
+  // SQUAT
   // Inner (included) knee angle, hip-knee-ankle. Rojas-Jaramillo et al.
   // (2024): quarter squat 110–140°, half squat 80–100°, parallel squat
   // ≈60–70°, deep squat 40–45°. The same review (13 of 15 studies) found
@@ -190,7 +174,7 @@ class FormThresholds {
   /// wider than the measurement tolerance, so no extra margin is added.
   static const double squatTrunkLeanMax = 57.0;
 
-  // ----------------------------------------------------- LUNGE / SPLIT SQUAT
+  // LUNGE / SPLIT SQUAT
   // Front-knee inner angle. Farrokhi et al. (2008) measured 110.3° ± 5.9°
   // knee FLEXION (≈70° inner angle) at the bottom of a normal forward lunge;
   // the common coaching cue is a 90° front knee. Depth limit = 90° + 10°.
@@ -203,12 +187,12 @@ class FormThresholds {
   /// Limit = 20° + tolerance — flags lean beyond even that deliberate variant.
   static const double lungeTrunkLeanMax = 30.0;
 
-  // ------------------------------------------------------------ DEADLIFT
+  // DEADLIFT
   // Hip angle shoulder-hip-knee. Unchanged from the original implementation.
   static const double deadliftHingeMax = 100.0;
   static const double deadliftLockoutMin = 165.0;
 
-  // ---------------------------------------------------- ROMANIAN DEADLIFT
+  // ROMANIAN DEADLIFT
   /// Knee held at ≈15° flexion throughout (Physiopedia, Romanian deadlift).
   /// 15° + tolerance = 25° flexion → inner knee angle must stay ≥ 155°.
   static const double rdlKneeMin = 155.0;
@@ -222,7 +206,7 @@ class FormThresholds {
   static const double rdlDepthMax = 110.0;
   static const double rdlLockoutMin = 165.0;
 
-  // ------------------------------------------------- PUSH-UP / BENCH PRESS
+  //  PUSH-UP / BENCH PRESS
   /// ACSM / FitnessGram push-up standard: lower until the elbows reach 90°
   /// with the upper arms parallel to the floor. 90° + tolerance.
   static const double pushUpDepthMax = 100.0;
@@ -237,7 +221,7 @@ class FormThresholds {
   /// beyond 120° the movement has become a regular (declined) push-up.
   static const double pikeHipMax = 120.0;
 
-  // ---------------------------------------------------------- SHOULDER PRESS
+  //  SHOULDER PRESS
   static const double pressBottomMax = 100.0;
   static const double pressCountTopMin = 145.0;
 
@@ -249,7 +233,7 @@ class FormThresholds {
   /// a larger gap is reported as an uneven press.
   static const double pressAsymmetryMax = 20.0;
 
-  // --------------------------------------------------------------- CURLS
+  // CURLS
   /// Full contraction: the 40–160° range of motion used across published
   /// MediaPipe curl counters; 40° + tolerance. Unchanged value.
   static const double curlFlexedMax = 50.0;
@@ -270,9 +254,7 @@ class PostureResult {
   final double? keyAngle;
   final bool countRep;
 
-  /// The verdict on the rep this frame completed, judged once over the
-  /// whole rep. Only meaningful when [countRep] is true — [isCorrect] is
-  /// this frame's live form, which a fault can override on that same frame.
+  /// The verdict on the rep this frame completed
   final bool repCorrect;
 
   /// The message judging the rep this frame completed ("Rep 3: too shallow
@@ -313,9 +295,7 @@ bool _allVisible(List<Landmark> lm, List<int> idx) =>
 double _meanVisibility(List<Landmark> lm, List<int> idx) =>
     idx.map((i) => lm[i].visibility).reduce((a, b) => a + b) / idx.length;
 
-/// Picks the body side whose landmarks are all visible. In a side-on view
-/// the far limb is usually occluded, so analysers use the near side instead
-/// of refusing to analyse. If both sides qualify, the better-tracked one wins.
+/// Picks the body side whose landmarks are all visible. 
 _Side? _bestSide(List<Landmark> lm, List<int> left, List<int> right) {
   final l = _allVisible(lm, left);
   final r = _allVisible(lm, right);
@@ -355,16 +335,6 @@ class _RepSummary {
 }
 
 /// Hysteresis rep counter shared by every analyser.
-///
-/// A rep = leave the REST zone → reach the WORK zone → return to REST.
-/// It is order-independent: it only cares that the work zone was reached at
-/// some point before returning to rest, so a skipped intermediate frame never
-/// loses a rep (the original analysers' design, now in one place).
-///
-/// While a rep is in progress it records the primary angle's min/max and any
-/// secondary "peaks" (e.g. the worst trunk lean). When the rep completes these
-/// are returned as a [_RepSummary] so the rep can be judged ONCE, at its true
-/// extreme — not per frame.
 class _RepTracker {
   _RepTracker({
     required this.workAt,
@@ -448,11 +418,7 @@ class _RepTracker {
 
 String _fmt(double? v) => v?.toStringAsFixed(1) ?? 'null';
 
-/// Validation logging for the Objective 2 accuracy study. Format parsed by
-/// tools/posture_study/capture.py (6 fields):
-///   VALIDATION|exercise|rep|primaryAngle|secondaryMeasure|isCorrect
-/// The squat now also logs trunk lean as the secondary measure.
-/// Debug builds only: debugPrint is not stripped from release builds.
+/// Validation logging for the Objective 2 accuracy study
 void _logRep(String tag, int rep, double? primary, double? secondary, bool ok) {
   if (!kDebugMode) return;
   debugPrint('VALIDATION|$tag|$rep|${_fmt(primary)}|${_fmt(secondary)}|$ok');

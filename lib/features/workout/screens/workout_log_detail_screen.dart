@@ -230,8 +230,7 @@ class _WorkoutLogDetailScreenState extends State<WorkoutLogDetailScreen> {
                     ProgressPhoto(
                       log: log,
                       ownerUid: FirebaseAuth.instance.currentUser?.uid,
-                      height: 220,
-                      borderRadius: 20,
+                      height: 220,                      borderRadius: 20,
                     ),
                     const SizedBox(height: 10),
                     _buildPhotoShareRow(),

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 15+ forces edge-to-edge, which pushes UCrop's toolbar (X / tick)
+         under the status bar. Opt this screen out so the toolbar sits below it. -->
+    <style name="UCropTheme" parent="@style/Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
+</resources>

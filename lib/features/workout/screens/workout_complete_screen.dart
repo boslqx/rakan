@@ -11,6 +11,7 @@ import '../../../shared/widgets/main_shell.dart';
 import '../services/adapt_service.dart';
 import '../services/workout_log_service.dart';
 import '../../../shared/widgets/pressable.dart';
+import '../../../shared/widgets/photo_frame.dart';
 
 class WorkoutCompleteScreen extends StatefulWidget {
   final String workoutName;
@@ -833,14 +834,11 @@ class _WorkoutCompleteScreenState extends State<WorkoutCompleteScreen> {
   Widget _buildPhotoPreview() {
     return Stack(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Image.file(
-            _selectedPhoto!,
-            height: 200,
-            width: double.infinity,
-            fit: BoxFit.cover,
-          ),
+        // Whole photo, never cropped, in a frame no taller than 4:5 —
+        // the same look it gets on the feed. Tap to view full screen.
+        PhotoFrame(
+          image: FileImage(_selectedPhoto!),
+          borderRadius: 20,
         ),
         // Saved badge
         if (_photoSaved)
