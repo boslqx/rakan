@@ -27,10 +27,29 @@ class _PlanChangesSectionState extends State<PlanChangesSection> {
   @override
   void initState() {
     super.initState();
+    _historyFuture = _loadHistory();
+    WeeklySummaryService.summariesChanged.addListener(_reload);
+  }
+
+  @override
+  void dispose() {
+    WeeklySummaryService.summariesChanged.removeListener(_reload);
+    super.dispose();
+  }
+
+  Future<List<Map<String, dynamic>>> _loadHistory() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    _historyFuture = uid == null
+    return uid == null
         ? Future.value(<Map<String, dynamic>>[])
         : _service.getChangeHistory(uid);
+  }
+
+  /// A weekly run finished after this section was first built.
+  void _reload() {
+    if (!mounted) return;
+    setState(() {
+      _historyFuture = _loadHistory();
+    });
   }
 
   @override
@@ -45,6 +64,10 @@ class _PlanChangesSectionState extends State<PlanChangesSection> {
           );
         }
 
+        if (snapshot.hasError) {
+          debugPrint('PlanChangesSection: history load failed: ${snapshot.error}');
+          debugPrint(snapshot.stackTrace.toString());
+        }
         final weeks = snapshot.data ?? [];
         if (weeks.isEmpty) {
           return Padding(

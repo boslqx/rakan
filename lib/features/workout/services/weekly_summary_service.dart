@@ -23,6 +23,13 @@ class WeeklySummaryService {
   static const String _baseUrl = 'https://rakan-backend.onrender.com';
   static const Duration kSummaryInterval = Duration(days: 7);
 
+  /// Bumped after a weekly run writes a new summary. The run is started
+  /// fire-and-forget from Home, while Coach → Records → Plan Changes was
+  /// already built (MainShell's IndexedStack builds every tab at start) —
+  /// so that section listens and reloads instead of keeping the empty
+  /// list it read before the run finished.
+  static final ValueNotifier<int> summariesChanged = ValueNotifier(0);
+
   /// Checks whether at least 7 days have passed since the last weekly summary
   Future<void> checkAndGenerateWeeklySummary(String uid) async {
     try {
@@ -51,6 +58,10 @@ class WeeklySummaryService {
       await profileRef.update({
         'lastWeeklySummaryAt': now.toIso8601String(),
       });
+
+      summariesChanged.value++;
+      // The run may have changed sets × reps on the plan.
+      WorkoutPlanService.scheduleChanges.value++;
     } catch (e) {
       debugPrint('checkAndGenerateWeeklySummary failed for $uid: $e');
     }
